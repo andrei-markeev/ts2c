@@ -1,0 +1,9 @@
+node_modules
+*.avr
+*.elf
+*.c
+*.js
+*.js.map
+.vscode/.browse.*
+.vscode/c_cpp_properties.json
+tests/esp
