@@ -1,0 +1,12 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+	"editor.tabSize": 4,
+	"editor.insertSpaces": true,
+	"files.exclude": {
+		"**/*.js": {"when": "$(basename).ts"},
+		"**/*.elf": {"when": "$(basename).c"},
+		"**/*.avr": {"when": "$(basename).c"},
+		"**/*.js.map": true
+	}
+	
+}

@@ -18,10 +18,11 @@ export class Transpiler {
         this.memoryManager.insertGCVariablesCreationIfNecessary(this.emitter);
         this.transpileNode(sourceFile);
         this.memoryManager.insertDestructorsIfNecessary(sourceFile, this.emitter);
+        
         if (this.errors.length)
             return this.errors.join("\n");
         else
-            return this.emitter.finalize(this.typeHelper.userStructs);
+            return this.emitter.finalize();
     }
 
     private transpileNode(node: ts.Node) {

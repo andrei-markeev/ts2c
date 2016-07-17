@@ -93,7 +93,7 @@ export class Emitter {
     public emitPredefinedHeader(key: HeaderKey) {
         this.predefinedHeaders[key] = true;
     }
-    public finalize(userStructs: { [key: string]: string }): string {
+    public finalize(): string {
         var headers = '';
         if (this.predefinedHeaders[HeaderKey.stringh])
             headers += "#include <string.h>\n";
@@ -116,8 +116,6 @@ export class Emitter {
             headers += "enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n"
             headers += "struct js_var {\n    enum js_var_type type;\n    uint8_t bool;\n    int16_t number;\n    char *string;\n    void *obj;\n};\n";
         }
-        for (var s in userStructs)
-            headers += "struct " + s + " " + userStructs[s];
         headers += '\n';
 
         if (this.predefinedHeaders[HeaderKey.array])
