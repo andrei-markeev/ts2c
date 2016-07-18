@@ -9,7 +9,7 @@ export class Transpiler {
     private emitter: Emitter = new Emitter();
     private typeHelper: TypeHelper = new TypeHelper(this.emitter);
     private memoryManager: MemoryManager = new MemoryManager(this.typeHelper);
-    private printfTranspiler: PrintfTranspiler = new PrintfTranspiler(this.emitter, this.typeHelper, this.transpileNode.bind(this));
+    private printfTranspiler: PrintfTranspiler = new PrintfTranspiler(this.emitter, this.typeHelper, this.transpileNode.bind(this), this.addError.bind(this));
     private errors: string[] = [];
 
     public transpile(sourceFile: ts.SourceFile) {
@@ -137,7 +137,7 @@ export class Transpiler {
                 {
                     let forOfStatement = <ts.ForOfStatement>node;
                     if (forOfStatement.expression.kind != ts.SyntaxKind.Identifier) {
-                        this.errors.push("Unsupported type of expression as array in for of: " + forOfStatement.getText());
+                        this.addError("Unsupported type of expression as array in for of: " + forOfStatement.getText());
                         break;
                     }
 
@@ -171,7 +171,7 @@ export class Transpiler {
                 }
                 break;
             case ts.SyntaxKind.ForInStatement:
-                this.errors.push("For-in statement is not yet supported!");
+                this.addError("For-in statement is not yet supported!");
                 break;
             case ts.SyntaxKind.ReturnStatement:
                 {
@@ -325,7 +325,7 @@ export class Transpiler {
                         this.emitter.emit(")");
                     }
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.parent.kind != ts.SyntaxKind.ExpressionStatement)
-                        this.errors.push("Assignments inside expressions are not yet supported.");
+                        this.addError("Assignments inside expressions are not yet supported.");
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                         this.transpileObjectLiteralAssignment(<ts.Identifier>binExpr.left, leftType, <ts.ObjectLiteralExpression>binExpr.right);
                     }
@@ -359,7 +359,7 @@ export class Transpiler {
                                 this.emitter.emit("!");
                             break;
                         default:
-                            this.errors.push("Non-supported unary operator: " + ts.SyntaxKind[node.kind]);
+                            this.addError("Non-supported unary operator: " + ts.SyntaxKind[node.kind]);
                             error = true;
                     }
                     if (!operationReplaced && !error)
@@ -394,7 +394,7 @@ export class Transpiler {
             case ts.SyntaxKind.SemicolonToken:
                 break;
             default:
-                this.errors.push("Non-supported node: " + ts.SyntaxKind[node.kind]);
+                this.addError("Non-supported node: " + ts.SyntaxKind[node.kind]);
                 break;
         }
 
@@ -468,7 +468,7 @@ export class Transpiler {
             case ts.SyntaxKind.EqualsToken:
                 return " = ";
             default:
-                this.errors.push("Unsupported operator: " + token.getText()); 
+                this.addError("Unsupported operator: " + token.getText()); 
                 return "<unsupported operator>";
         }
     }
@@ -487,6 +487,10 @@ export class Transpiler {
             return '"' + tsString.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         }
         return tsString;
+    }
+
+    private addError(error: string) {
+        this.errors.push(error);
     }
 
 }

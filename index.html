@@ -1,0 +1,20 @@
+<html>
+    <head>
+        <script src="ts2c.bundle.js"></script>
+    </head>
+    <body>
+        <textarea cols="50" rows="3">console.log("Hello world!");</textarea>
+        <button onclick="transpile()">Transpile</button>
+        <pre></pre>
+        <script type="text/javascript">
+            function transpile()
+            {
+                var source = document.querySelector('textarea').value;
+                var transpiled = ts2c.transpile(source);
+                var output = document.querySelector("pre");
+                output.innerHTML = '';
+                output.appendChild(document.createTextNode(transpiled));
+            }
+        </script>
+    </body>
+</html>

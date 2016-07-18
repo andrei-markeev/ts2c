@@ -9,7 +9,12 @@ class PrintfVariable {
 }
 
 export class PrintfTranspiler {
-    constructor(private emitter: Emitter, private typeHelper: TypeHelper, private transpileNode: { (node: ts.Node): void }) { }
+    constructor(
+        private emitter: Emitter,
+        private typeHelper: TypeHelper,
+        private transpileNode: { (node: ts.Node): void },
+        private addError: { (error: string): void }
+    ) { }
 
     public transpile(printNode: ts.Node | PrintfVariable, newLine: boolean = true) {
         let cType: CType;
@@ -134,7 +139,7 @@ export class PrintfTranspiler {
             this.emitter.decreaseIndent();
             this.emitter.emit("}" + (newLine ? "\\n" : ""));
         } else {
-            throw new Error("ERROR: console.log for type " + cType + " is not supported!");
+            this.addError("ERROR: console.log for type " + cType + " is not supported!");
         }
 
     }

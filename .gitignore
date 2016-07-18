@@ -1,4 +1,5 @@
 node_modules
+ts2c.bundle.js
 *.avr
 *.elf
 *.c

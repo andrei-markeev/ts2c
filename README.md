@@ -20,7 +20,7 @@ int main() {
 }
 ```
  
-Work in progress: it works, but very small part of JS/TS syntax is currently supported.
+__**Work in progress:**__ it works, but very small part of JS/TS syntax is currently supported.
 
 
 Usage
@@ -31,4 +31,13 @@ Primary use case is creating solutions for microcontrollers, especially IoT and 
 Syntax:
 ```
 node ts2c.js <files to transpile>
+```
+
+In browser:
+```
+<script src="ts2c.bundle.js" />
+<script>
+    var cCode = ts2c.transpile("console.log('Hello world!')");
+    alert(cCode);
+</script>
 ```
