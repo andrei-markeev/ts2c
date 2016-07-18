@@ -163,8 +163,12 @@ export class TypeHelper {
                 let propAccess = <ts.PropertyAccessExpression>node.parent;
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binExpr = <ts.BinaryExpression>propAccess.parent;
-                    if (binExpr.left.pos == propAccess.pos)
+                    if (binExpr.left.pos == propAccess.pos) {
                         varInfo.propsAssigned = true;
+                        let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
+                        if (!(determinedType instanceof TypePromise))
+                            varData.addedProperties[propAccess.name.getText()] = determinedType;
+                    }
                 }
                 if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
                     varInfo.newElementsAdded = true;
