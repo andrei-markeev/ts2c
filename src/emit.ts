@@ -10,6 +10,7 @@ export enum HeaderKey {
     js_eq,
     array,
     array_pop,
+    gc_iterator
 }
 
 export enum EmitTarget {
@@ -38,6 +39,11 @@ export class Emitter {
         this.indentText = '';
         this.emitInternal(s, EmitTarget.header);
         this.indentText = savedIndent;
+    }
+    public emitOnceToHeader(s: string) {
+        if (this.transpiledCode[EmitTarget.header] && this.transpiledCode[EmitTarget.header].indexOf(s) > -1)
+            return;
+        this.emitToHeader(s);
     }
     public increaseIndent() {
         this.indentText += '    ';
@@ -148,6 +154,8 @@ uint8_t js_eq(struct js_var *a, struct js_var *b) {
     /* TODO: implement */
 }
 `;
+        if (this.predefinedHeaders[HeaderKey.gc_iterator])
+            headers += "int16_t _gc_i;\n";
 
         headers += "\n";
 

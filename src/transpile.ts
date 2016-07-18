@@ -15,7 +15,7 @@ export class Transpiler {
     public transpile(sourceFile: ts.SourceFile) {
         this.typeHelper.figureOutVariablesAndTypes(sourceFile);
         this.memoryManager.preprocess();
-        this.memoryManager.insertGCVariablesCreationIfNecessary(this.emitter);
+        this.memoryManager.insertGCVariablesCreationIfNecessary(null, this.emitter);
         this.transpileNode(sourceFile);
         this.memoryManager.insertDestructorsIfNecessary(sourceFile, this.emitter);
         
@@ -51,6 +51,7 @@ export class Transpiler {
                     this.emitter.emit('{\n');
                     this.emitter.increaseIndent();
                     this.emitter.beginFunctionBody();
+                    this.memoryManager.insertGCVariablesCreationIfNecessary(funcDecl, this.emitter);
                     funcDecl.body.statements.forEach(s => this.transpileNode(s));
                     if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
                         this.memoryManager.insertDestructorsIfNecessary(funcDecl, this.emitter);
@@ -408,7 +409,9 @@ export class Transpiler {
             this.emitter.emit('assert(' + varName.getText() + ' != NULL);\n');
             this.emitter.emitPredefinedHeader(HeaderKey.asserth);
             this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
-            this.memoryManager.insertGlobalPointerIfNecessary(varName, this.emitter);
+            let varInfo = this.typeHelper.getVariableInfo(varName);
+            this.memoryManager.insertGlobalPointerIfNecessary(varName, varInfo.declaration.pos, varInfo.name, this.emitter);
+
         }
         for (let prop of objLiteral.properties) {
             let propAssign = <ts.PropertyAssignment>prop;
@@ -430,7 +433,8 @@ export class Transpiler {
             this.emitter.emit("ARRAY_CREATE(" + varName.getText() + ", " + optimizedCap + ", " + arrType.capacity + ");\n");
             this.emitter.emitPredefinedHeader(HeaderKey.asserth);
             this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
-            this.memoryManager.insertGlobalPointerIfNecessary(varName, this.emitter);
+            
+            this.memoryManager.insertGlobalPointerIfNecessary(varName, varInfo.declaration.pos, varInfo.name + ".data", this.emitter);
         }
         for (let i = 0; i < arrLiteral.elements.length; i++) {
             this.emitter.emit(varName.getText());

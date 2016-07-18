@@ -70,8 +70,7 @@ export class TypeHelper {
         this.findVariablesRecursively(source);
         this.resolvePromisesAndFinalizeTypes();
 
-        for (var structName in this.userStructs)
-        {
+        for (var structName in this.userStructs) {
             this.emitter.emitToHeader("struct " + structName + " " + this.getStructureBodyString(this.userStructs[structName].properties));
         }
 
@@ -179,23 +178,32 @@ export class TypeHelper {
                 if (elemAccess.expression.pos == node.pos) {
                     varInfo.propsAssigned = true;
 
+                    let determinedType: CType | TypePromise = UniversalVarType;
+                    if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                        let binExpr = <ts.BinaryExpression>elemAccess.parent;
+                        if (binExpr.left.pos == elemAccess.pos)
+                            determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
+                    }
+
                     if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
 
                         let propName = elemAccess.argumentExpression.getText().slice(1, -1);
                         varData.addedProperties[propName] = varData.addedProperties[propName] || UniversalVarType;
-                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                            let binExpr = <ts.BinaryExpression>elemAccess.parent;
-                            if (binExpr.left.pos == elemAccess.pos) {
-                                let determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
-                                if (!(determinedType instanceof TypePromise))
-                                    varData.addedProperties[propName] = determinedType;
-                            }
-                        }
+                        if (!(determinedType instanceof TypePromise))
+                            varData.addedProperties[propName] = determinedType;
 
                     }
-                    else if (elemAccess.argumentExpression.kind != ts.SyntaxKind.NumericLiteral) {
-                        varInfo.isDict = true;
+                    else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
+                        if (!(determinedType instanceof TypePromise)) {
+                            for (let atKey in varData.assignmentTypes) {
+                                let at = varData.assignmentTypes[atKey];
+                                if (at instanceof ArrayType && at.elementType == UniversalVarType)
+                                    at.elementType = determinedType;
+                            }
+                        }
                     }
+                    else
+                        varInfo.isDict = true;
                 }
             }
         }
@@ -244,8 +252,7 @@ export class TypeHelper {
                         if (varType.elementType == UniversalVarType)
                             this.emitter.emitPredefinedHeader(HeaderKey.js_var);
                     } else if (varType instanceof StructType) {
-                        for (let addPropKey in this.variablesData[k].addedProperties)
-                        {
+                        for (let addPropKey in this.variablesData[k].addedProperties) {
                             varType.properties[addPropKey] = this.variablesData[k].addedProperties[addPropKey];
                         }
                     }
