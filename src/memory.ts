@@ -102,7 +102,7 @@ export class MemoryManager {
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     let call = <ts.CallExpression>ref.parent;
-                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == node.pos) {
+                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
                         console.log(varIdent.getText() + " -> Found function call!");
                         if (scope !== "main") {
                             let funcNode = this.findParentFunctionNode(call);
