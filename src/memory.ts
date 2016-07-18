@@ -3,10 +3,17 @@ import {GlobalContext} from './global';
 import {Emitter, HeaderKey} from './emit';
 import {TypeHelper, ArrayType, StructType} from './types';
 
-type VariableScopeInfo = { varPos: number, symbolId: number, declIdent: ts.Identifier, scopeId: number | "main" };
+type ScopeId = number | "main";
+type VariableScopeInfo = {
+    varPos: number;
+    symbolId: number;
+    declIdent: ts.Identifier;
+    scopeId: ScopeId;
+    simple: boolean
+};
 
 export class MemoryManager {
-    private scopes: { [scopeId: number]: VariableScopeInfo[] } = {};
+    private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
     private scopesOfVariables: { [varPos: number]: VariableScopeInfo } = {};
 
     constructor(private typeHelper: TypeHelper) { }
@@ -22,8 +29,8 @@ export class MemoryManager {
     }
 
     public insertGCVariablesCreationIfNecessary(funcDecl: ts.FunctionDeclaration, emitter: Emitter) {
-        var scopeId = funcDecl && funcDecl.pos + 1 || "main";
-        if (this.scopes[scopeId] && this.scopes[scopeId].length) {
+        var scopeId: ScopeId = funcDecl && funcDecl.pos + 1 || "main";
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple).length) {
             emitter.emitToHeader("ARRAY(void *) _gc_" + scopeId + ";\n");
             emitter.emit("ARRAY_CREATE(_gc_" + scopeId + ", 2, 0);\n");
             emitter.emitPredefinedHeader(HeaderKey.gc_iterator);
@@ -33,19 +40,29 @@ export class MemoryManager {
 
     public insertGlobalPointerIfNecessary(node: ts.Node, varPos: number, varString: string, emitter: Emitter) {
         let parentDecl = this.findParentFunctionNode(node);
-        let scopeId = parentDecl && parentDecl.pos + 1 || "main";
+        let scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
 
-        emitter.emit("ARRAY_PUSH(_gc_" + this.scopesOfVariables[varPos].scopeId + ", " + varString + ");\n");
-        emitter.emitPredefinedHeader(HeaderKey.array);
+        if (!this.scopesOfVariables[varPos].simple)
+            emitter.emit("ARRAY_PUSH(_gc_" + this.scopesOfVariables[varPos].scopeId + ", " + varString + ");\n");
     }
 
     public insertDestructorsIfNecessary(node: ts.Node, emitter: Emitter) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        if (this.scopes[scopeId] && this.scopes[scopeId].length) {
-            emitter.emit("for (_gc_i = 0; _gc_i < _gc_" + scopeId + ".size; _gc_i++)\n");
-            emitter.emit("    free(_gc_" + scopeId + ".data[_gc_i]);\n");
-            emitter.emit("free(_gc_" + scopeId + ".data);\n");
+        if (this.scopes[scopeId])
+        {
+            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple)) {
+                let varInfo = this.typeHelper.getVariableInfo(simpleVarScopeInfo.declIdent);
+                if (varInfo.type instanceof ArrayType)
+                    emitter.emit("free(" + varInfo.name + ".data);\n");
+                else
+                    emitter.emit("free(" + varInfo.name + ");\n");
+            }
+            if (this.scopes[scopeId].filter(v => !v.simple).length) {
+                emitter.emit("for (_gc_i = 0; _gc_i < _gc_" + scopeId + ".size; _gc_i++)\n");
+                emitter.emit("    free(_gc_" + scopeId + ".data[_gc_i]);\n");
+                emitter.emit("free(_gc_" + scopeId + ".data);\n");
+            }
         }
 
     }
@@ -56,6 +73,7 @@ export class MemoryManager {
         let varFuncNode = this.findParentFunctionNode(varIdent);
         let varPos = varIdent.pos;
         var scope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
+        var isSimple = true;
 
         // TODO:
         // - calls from multiple external functions (only one of them is processed currently)
@@ -71,24 +89,34 @@ export class MemoryManager {
             let returned = false;
             for (let ref of refs) {
                 let parentNode = this.findParentFunctionNode(ref);
-                if (!parentNode)
+                if (!parentNode) {
                     scope = "main";
+                    isSimple = false;
+                }
+
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                    let binaryExpr = <ts.BinaryExpression>ref.parent;
+                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.left.pos == node.pos)
+                        isSimple = false;
+                }
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     let call = <ts.CallExpression>ref.parent;
-                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.getText() == node.getText()) {
+                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == node.pos) {
                         console.log(varIdent.getText() + " -> Found function call!");
                         if (scope !== "main") {
                             let funcNode = this.findParentFunctionNode(call);
                             scope = funcNode && funcNode.pos + 1 || "main";
+                            isSimple = false;
                         }
-                        this.addIfFoundInAssignment(varIdent, node, call, queue);
+                        this.addIfFoundInAssignment(varIdent, call, queue);
                     } else {
                         let symbol = GlobalContext.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
                             if (call.expression.getText() != "console.log") {
                                 console.log(varIdent.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
                                 scope = "main";
+                                isSimple = false;
                             }
                         }
                         else {
@@ -97,6 +125,7 @@ export class MemoryManager {
                                 if (call.arguments[i].kind == ts.SyntaxKind.Identifier && call.arguments[i].getText() == node.getText()) {
                                     console.log(varIdent.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
                                     queue.push(<ts.Identifier>funcDecl.parameters[i].name);
+                                    isSimple = false;
                                 }
                             }
                         }
@@ -106,24 +135,25 @@ export class MemoryManager {
                     returned = true;
                     queue.push(parentNode.name);
                     console.log(varIdent.getText() + " -> Found variable returned from the function!");
+                    isSimple = false;
                 }
                 else
-                    this.addIfFoundInAssignment(varIdent, node, ref, queue);
+                    this.addIfFoundInAssignment(varIdent, ref, queue)
             }
 
         }
 
-        var scopeInfo = { varPos: varPos, varId: varId, declIdent: varIdent, scopeId: scope, symbolId: varId };
+        var scopeInfo = { varPos: varPos, varId: varId, declIdent: varIdent, scopeId: scope, symbolId: varId, simple: isSimple };
         this.scopes[scope] = this.scopes[scope] || [];
         this.scopes[scope].push(scopeInfo);
         this.scopesOfVariables[varPos] = scopeInfo;
 
     }
 
-    private addIfFoundInAssignment(varIdent: ts.Identifier, node: ts.Identifier, ref: ts.Node, queue: ts.Identifier[]): boolean {
+    private addIfFoundInAssignment(varIdent: ts.Identifier, ref: ts.Node, queue: ts.Identifier[]): boolean {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
             let varDecl = <ts.VariableDeclaration>ref.parent;
-            if (varDecl.initializer && varDecl.initializer.getText() == node.getText()) {
+            if (varDecl.initializer && varDecl.initializer.pos == ref.pos) {
                 queue.push(<ts.Identifier>varDecl.name);
                 console.log(varIdent.getText() + " -> Found initializer-assignment to variable " + varDecl.name.getText());
                 return true;
@@ -131,8 +161,7 @@ export class MemoryManager {
         }
         else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
             let binaryExpr = <ts.BinaryExpression>ref.parent;
-            if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment
-                && binaryExpr.right.getText() == node.getText()) {
+            if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.right.pos == ref.pos) {
                 // TODO: process non-identifier left hand side expressions
                 queue.push(<ts.Identifier>binaryExpr.left);
                 console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
