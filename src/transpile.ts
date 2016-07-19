@@ -100,10 +100,13 @@ export class Transpiler {
                         }
                     }
                     if (varDecl.initializer) {
-                        if (varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                        if (varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                             this.transpileObjectLiteralAssignment(varDecl.name.getText(), <ts.ObjectLiteralExpression>varDecl.initializer);
-                        else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                            this.transpileArrayLiteralAssignment(varDecl.name.getText(), <ts.ArrayLiteralExpression>varDecl.initializer);
+                        }
+                        else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+                            let varString = varInfo.newElementsAdded ? varInfo.name + ".data" : varInfo.name;
+                            this.transpileArrayLiteralAssignment(varString, <ts.ArrayLiteralExpression>varDecl.initializer);
+                        }
                         else {
                             this.emitter.emit(varDecl.name.getText());
                             this.emitter.emit(" = ");
@@ -162,8 +165,11 @@ export class Transpiler {
                             forInitializer = lastChild;
                     }
                     this.emitter.emit("for (");
-                    if (forInitializer)
+                    if (forInitializer) {
                         this.transpileNode(forInitializer);
+                        let t = this.emitter.defaultTarget;
+                        this.emitter.transpiledCode[t] = this.emitter.transpiledCode[t].replace(/;\n$/,''); 
+                    }
                     this.emitter.emit(";");
                     if (forStatement.condition)
                         this.transpileNode(forStatement.condition);
@@ -488,9 +494,8 @@ export class Transpiler {
             this.emitter.emit(propAssign.name.getText());
             this.emitter.emit(" = ");
             this.transpileNode(propAssign.initializer);
-            if (i < objLiteral.properties.length - 1)
-                this.emitter.emit(";\n");
-        }
+            this.emitter.emit(";\n");
+       }
     }
 
     private transpileArrayLiteralAssignment(varString: string, arrLiteral: ts.ArrayLiteralExpression) {
@@ -499,8 +504,7 @@ export class Transpiler {
             this.emitter.emit("[" + i + "]");
             this.emitter.emit(" = ");
             this.transpileNode(arrLiteral.elements[i]);
-            if (i < arrLiteral.elements.length - 1)
-                this.emitter.emit(";\n");
+            this.emitter.emit(";\n");
         }
     }
 

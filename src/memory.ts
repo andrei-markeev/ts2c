@@ -94,7 +94,7 @@ export class MemoryManager {
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binaryExpr = <ts.BinaryExpression>ref.parent;
-                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.left.pos == node.pos)
+                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.left.pos == ref.pos)
                         isSimple = false;
                 }
 

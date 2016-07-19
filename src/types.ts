@@ -407,8 +407,13 @@ export class TypeHelper {
             let propType = properties[propName];
             if (typeof propType === 'string')
                 userStructCode += '    ' + propType + ' ' + propName + ';\n';
-            else
-                userStructCode += '    ' + propType.text + ' ' + propName + ';\n';
+            else {
+                let propTypeText = propType.text;
+                if (propTypeText.indexOf("{var}") > -1)
+                    userStructCode += '    ' + propType.text.replace(/^static /,'').replace("{var}",propName) + ';\n';
+                else
+                    userStructCode += '    ' + propType.text + ' ' + propName + ';\n';
+            }
         }
         userStructCode += "};\n"
         return userStructCode;
