@@ -7,7 +7,7 @@ export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
 type PropertiesDictionary = { [propName: string]: CType };
 
-export class TypePromise {
+export class ElementTypePromise {
     public resolved: boolean = false;
     constructor(
         public ident: ts.Identifier,
@@ -53,7 +53,7 @@ export class VariableInfo {
 class VariableData {
     tsType: ts.Type;
     assignmentTypes: { [type: string]: CType } = {};
-    typePromises: TypePromise[] = [];
+    typePromises: ElementTypePromise[] = [];
     addedProperties: PropertiesDictionary = {};
 }
 
@@ -195,6 +195,16 @@ export class TypeHelper {
                     this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                         varInfo.propsAssigned = true;
+                    if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
+                        let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
+                        if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+                            let forOfInitializer = <ts.VariableDeclarationList>forOfStatement.initializer;
+                            if (forOfInitializer.declarations[0].pos == varDecl.pos
+                                && forOfStatement.expression.kind == ts.SyntaxKind.Identifier) {
+                                varData.typePromises.push(new ElementTypePromise(<ts.Identifier>forOfStatement.expression, null));
+                            }
+                        }
+                    }
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
@@ -212,7 +222,7 @@ export class TypeHelper {
                     if (binExpr.left.pos == propAccess.pos) {
                         varInfo.propsAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
-                        if (!(determinedType instanceof TypePromise))
+                        if (!(determinedType instanceof ElementTypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
                     }
                 }
@@ -225,7 +235,7 @@ export class TypeHelper {
                 if (elemAccess.expression.pos == node.pos) {
                     varInfo.propsAssigned = true;
 
-                    let determinedType: CType | TypePromise = UniversalVarType;
+                    let determinedType: CType | ElementTypePromise = UniversalVarType;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
                         if (binExpr.left.pos == elemAccess.pos)
@@ -236,12 +246,12 @@ export class TypeHelper {
 
                         let propName = elemAccess.argumentExpression.getText().slice(1, -1);
                         varData.addedProperties[propName] = varData.addedProperties[propName] || UniversalVarType;
-                        if (!(determinedType instanceof TypePromise))
+                        if (!(determinedType instanceof ElementTypePromise))
                             varData.addedProperties[propName] = determinedType;
 
                     }
                     else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
-                        if (!(determinedType instanceof TypePromise)) {
+                        if (!(determinedType instanceof ElementTypePromise)) {
                             for (let atKey in varData.assignmentTypes) {
                                 let at = varData.assignmentTypes[atKey];
                                 if (at instanceof ArrayType && at.elementType == UniversalVarType)
@@ -328,7 +338,7 @@ export class TypeHelper {
 
     private addTypeToVariable(varPos: number, left: ts.Identifier, right: ts.Node) {
         let determinedType = this.determineType(left, right);
-        if (determinedType instanceof TypePromise)
+        if (determinedType instanceof ElementTypePromise)
             this.variablesData[varPos].typePromises.push(determinedType);
         else if (determinedType instanceof ArrayType)
             this.variablesData[varPos].assignmentTypes[determinedType.text] = determinedType;
@@ -339,7 +349,7 @@ export class TypeHelper {
 
     }
 
-    private determineType(left: ts.Identifier, right: ts.Node): CType | TypePromise {
+    private determineType(left: ts.Identifier, right: ts.Node): CType | ElementTypePromise {
         let tsType = right ? GlobalContext.typeChecker.getTypeAtLocation(right) : GlobalContext.typeChecker.getTypeAtLocation(left);
         if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression)
             return this.generateStructure(tsType, left);
@@ -348,7 +358,7 @@ export class TypeHelper {
         else if (right && right.kind == ts.SyntaxKind.ElementAccessExpression) {
             let accessExpr = <ts.ElementAccessExpression>right;
             if (accessExpr.expression.kind == ts.SyntaxKind.Identifier)
-                return new TypePromise(<ts.Identifier>accessExpr.expression, accessExpr.argumentExpression);
+                return new ElementTypePromise(<ts.Identifier>accessExpr.expression, accessExpr.argumentExpression);
             else
                 return this.convertType(tsType, left);
         }

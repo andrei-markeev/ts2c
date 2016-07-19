@@ -171,16 +171,14 @@ export class Transpiler {
                     if (forStatement.incrementor)
                         this.transpileNode(forStatement.incrementor);
                     this.emitter.emit(")\n");
+                    this.emitter.emit("{\n");
+                    this.emitter.increaseIndent();
                     if (forStatement.statement.kind == ts.SyntaxKind.Block)
-                        this.transpileNode(forStatement.statement);
+                        (<ts.Block>forStatement.statement).statements.forEach(s => this.transpileNode(s));
                     else
-                    {
-                        this.emitter.emit("{\n");
-                        this.emitter.increaseIndent();
                         this.transpileNode(forStatement.statement);
-                        this.emitter.decreaseIndent();
-                        this.emitter.emit("}\n");
-                    }
+                    this.emitter.decreaseIndent();
+                    this.emitter.emit("}\n");
                 }
                 break;
             case ts.SyntaxKind.ForOfStatement:
@@ -199,18 +197,21 @@ export class Transpiler {
                             index++;
                         iteratorVarName += "_" + index;
                     }
-                    this.emitter.emitOnceToBeginningOfFunction("int16_t " + iteratorVarName);
+                    this.emitter.emitOnceToBeginningOfFunction("int16_t " + iteratorVarName + ";\n");
 
                     let arrayName = forOfStatement.expression.getText();
                     let arrayVarInfo = this.typeHelper.getVariableInfo(<ts.Identifier>forOfStatement.expression);
                     let arrayType = <ArrayType>arrayVarInfo.type;
                     let arraySize = arrayVarInfo.newElementsAdded ? arrayName + ".size" : arrayType.capacity + "";
+                    let arrayAccess = arrayVarInfo.newElementsAdded ? arrayName + ".data" : arrayName;
 
                     this.emitter.emit("for (" + iteratorVarName + " = 0; " + iteratorVarName + " < " + arraySize + "; " + iteratorVarName + "++)\n");
-                    if (forOfStatement.initializer)
-                        this.transpileNode(forOfStatement.initializer);
                     this.emitter.emit("{\n");
                     this.emitter.increaseIndent();
+                    
+                    let arrayIteratorVarDecl = (<ts.VariableDeclarationList>forOfStatement.initializer).declarations[0];
+                    this.transpileNode(arrayIteratorVarDecl);
+                    this.emitter.emit(arrayIteratorVarDecl.getText() + " = " + arrayAccess + "[" + iteratorVarName + "];\n");
                     if (forOfStatement.statement.kind == ts.SyntaxKind.Block)
                         (<ts.Block>forOfStatement.statement).statements.forEach(s => this.transpileNode(s));
                     else
