@@ -6,6 +6,7 @@ import * as ts from 'typescript';
 class PrintfVariable {
     name: string;
     type: CType;
+    scope: ts.Node;
 }
 
 export class PrintfTranspiler {
@@ -50,12 +51,33 @@ export class PrintfTranspiler {
         } else if (cType instanceof StructType) {
             let propKeysToDisplay = [];
             this.emitter.emit("printf(\"{ ");
-            for (let propKey in cType.properties) {
+            let propKeys = Object.keys(cType.properties);
+            for (let i=0; i<propKeys.length; i++) {
+                if (i>0)
+                    this.emitter.emit(", ");
+                let propKey = propKeys[i];
                 this.emitter.emit(propKey + ": ");
-                if (cType.properties[propKey] instanceof ArrayType)
-                    this.emitter.emit("[Array]");
-                else if (cType.properties[propKey] instanceof StructType)
-                    this.emitter.emit("[Object]");
+                let varName = (printNode instanceof PrintfVariable ? printNode.name : printNode.getText()) + "->" + propKey;
+                if (cType.properties[propKey] instanceof ArrayType) {
+                    this.emitter.emit("\");\n");
+                    let printfVar = new PrintfVariable();
+                    printfVar.name = varName;
+                    printfVar.type = cType.properties[propKey];
+                    printfVar.scope = printNode instanceof PrintfVariable ? printNode.scope : printNode;
+                    this.transpile(printfVar, false);
+                    this.emitter.emit(";\n");
+                    this.emitter.emit("printf(\"");
+                }
+                else if (cType.properties[propKey] instanceof StructType) {
+                    this.emitter.emit("\");\n");
+                    let printfVar = new PrintfVariable();
+                    printfVar.name = varName;
+                    printfVar.type = cType.properties[propKey];
+                    printfVar.scope = printNode instanceof PrintfVariable ? printNode.scope : printNode;
+                    this.transpile(printfVar, false);
+                    this.emitter.emit(";\n");
+                    this.emitter.emit("printf(\"");
+                }
                 else if (cType.properties[propKey] == "char *") {
                     this.emitter.emit("%s");
                     propKeysToDisplay.push(propKey);
@@ -70,7 +92,6 @@ export class PrintfTranspiler {
                 }
                 else
                     this.emitter.emit("[not supported]");
-                this.emitter.emit(", ");
             }
             this.emitter.emit("}" + CR + "\"");
             for (let propKey of propKeysToDisplay) {
@@ -81,8 +102,9 @@ export class PrintfTranspiler {
                     this.emitter.emit(" ? \"true" + CR + "\" : \"false" + CR + "\"");
             }
             this.emitter.emit(")");
-        } else if (cType instanceof ArrayType && !(printNode instanceof PrintfVariable) && printNode.kind == ts.SyntaxKind.Identifier) {
-            let symbols = GlobalContext.typeChecker.getSymbolsInScope(printNode.parent, ts.SymbolFlags.Variable);
+        } else if (cType instanceof ArrayType) {
+            let scope = printNode instanceof PrintfVariable ? printNode.scope : printNode.parent;
+            let symbols = GlobalContext.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable);
             let iteratorVarName = "i";
             if (symbols.filter(s => s.name == iteratorVarName).length > 0) {
                 let index = 1;
@@ -90,9 +112,10 @@ export class PrintfTranspiler {
                     index++;
                 iteratorVarName += "_" + index;
             }
-            let arrayName = printNode.getText();
-            let arrayVarInfo = this.typeHelper.getVariableInfo(<ts.Identifier>printNode);
-            let arraySize = arrayVarInfo.newElementsAdded ? arrayName + ".size" : cType.capacity + "";
+            let arrayName = printNode instanceof PrintfVariable ? printNode.name : printNode.getText();
+            let arrayVarInfo = printNode instanceof PrintfVariable ? null : this.typeHelper.getVariableInfo(printNode);
+            let newElementsAdded = arrayVarInfo && arrayVarInfo.newElementsAdded;
+            let arraySize = newElementsAdded ? arrayName + ".size" : cType.capacity + "";
 
             this.emitter.emitOnceToBeginningOfFunction("int16_t " + iteratorVarName + ";\n");
             this.emitter.emit("printf(\"[ \");\n");
@@ -101,8 +124,9 @@ export class PrintfTranspiler {
             this.emitter.emit("if (" + iteratorVarName + " != 0)\n")
             this.emitter.emit("    printf(\", \");\n");
             let printfVar = new PrintfVariable();
-            printfVar.name = arrayName + (arrayVarInfo.newElementsAdded ? ".data" : "") + "[" + iteratorVarName + "]";
+            printfVar.name = arrayName + (newElementsAdded ? ".data" : "") + "[" + iteratorVarName + "]";
             printfVar.type = cType.elementType;
+            printfVar.scope = scope;
             this.transpile(printfVar, false);
             this.emitter.emit(";\n");
             this.emitter.decreaseIndent();

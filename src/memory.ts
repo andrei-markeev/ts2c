@@ -89,10 +89,8 @@ export class MemoryManager {
             let returned = false;
             for (let ref of refs) {
                 let parentNode = this.findParentFunctionNode(ref);
-                if (!parentNode) {
+                if (!parentNode)
                     scope = "main";
-                    isSimple = false;
-                }
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binaryExpr = <ts.BinaryExpression>ref.parent;

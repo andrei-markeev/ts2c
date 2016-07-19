@@ -62,7 +62,7 @@ export class TypeHelper {
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
 
-    constructor(private emitter: Emitter) {
+    constructor(private emitter: Emitter, private convertString: { (s: string): string }) {
     }
 
     /** Performs initialization of variables array */
@@ -100,9 +100,9 @@ export class TypeHelper {
                     let propName = elemAccess.argumentExpression.getText().slice(1, -1);
                     let varInfo = new VariableInfo();
                     if (parentVar.isDict)
-                        varInfo.name = "DICT_GET(" + parentVar.name + ", {argumentExpression})";
+                        varInfo.name = "DICT_GET(" + parentVar.name + ", \"" + propName + "\")";
                     else
-                        varInfo.name = parentVar.name + "->{argumentExpression}";
+                        varInfo.name = parentVar.name + "->" + propName;
                     varInfo.type = parentVarType.properties[propName];
                     return varInfo;
                 }
@@ -117,7 +117,7 @@ export class TypeHelper {
                     let propName = propAccess.name.getText();
                     let varInfo = new VariableInfo();
                     if (parentVar.isDict)
-                        varInfo.name = "DICT_GET(" + parentVar.name + ", \"" + propName + "\")";
+                        varInfo.name = "DICT_GET(" + parentVar.name + ", " + this.convertString(propName) + ")";
                     else
                         varInfo.name = parentVar.name + "->" + propName;
                     varInfo.type = parentVarType.properties[propName];
@@ -243,7 +243,6 @@ export class TypeHelper {
                     }
 
                     if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-
                         let propName = elemAccess.argumentExpression.getText().slice(1, -1);
                         varData.addedProperties[propName] = varData.addedProperties[propName] || UniversalVarType;
                         if (!(determinedType instanceof ElementTypePromise))

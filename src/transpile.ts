@@ -7,7 +7,7 @@ import {PrintfTranspiler} from './printf';
 
 export class Transpiler {
     private emitter: Emitter = new Emitter();
-    private typeHelper: TypeHelper = new TypeHelper(this.emitter);
+    private typeHelper: TypeHelper = new TypeHelper(this.emitter, this.convertString.bind(this));
     private memoryManager: MemoryManager = new MemoryManager(this.typeHelper);
     private printfTranspiler: PrintfTranspiler = new PrintfTranspiler(this.emitter, this.typeHelper, this.transpileNode.bind(this), this.addError.bind(this));
     private errors: string[] = [];
@@ -66,7 +66,6 @@ export class Transpiler {
                     let varStatement = <ts.VariableStatement>node;
                     for (let varDecl of varStatement.declarationList.declarations) {
                         this.transpileNode(varDecl);
-                        this.emitter.emit(';\n');
                     }
                 }
                 break;
@@ -102,13 +101,14 @@ export class Transpiler {
                     }
                     if (varDecl.initializer) {
                         if (varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                            this.transpileObjectLiteralAssignment(<ts.Identifier>varDecl.name, <ts.ObjectLiteralExpression>varDecl.initializer);
+                            this.transpileObjectLiteralAssignment(varDecl.name.getText(), <ts.ObjectLiteralExpression>varDecl.initializer);
                         else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                            this.transpileArrayLiteralAssignment(<ts.Identifier>varDecl.name, <ts.ArrayLiteralExpression>varDecl.initializer);
+                            this.transpileArrayLiteralAssignment(varDecl.name.getText(), <ts.ArrayLiteralExpression>varDecl.initializer);
                         else {
                             this.emitter.emit(varDecl.name.getText());
                             this.emitter.emit(" = ");
                             this.transpileNode(varDecl.initializer);
+                            this.emitter.emit(";\n");
                         }
                     }
                 }
@@ -233,13 +233,13 @@ export class Transpiler {
             case ts.SyntaxKind.ReturnStatement:
                 {
                     this.memoryManager.insertDestructorsIfNecessary(node, this.emitter);
-                    this.emitter.emit('return');
+                    this.emitter.emit("return");
                     let expr = (<ts.ReturnStatement>node).expression;
                     if (expr) {
-                        this.emitter.emit(' ');
+                        this.emitter.emit(" ");
                         this.transpileNode(expr);
                     }
-                    this.emitter.emit(';\n');
+                    this.emitter.emit(";\n");
                 }
                 break;
             case ts.SyntaxKind.ExpressionStatement:
@@ -383,11 +383,19 @@ export class Transpiler {
                     }
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.parent.kind != ts.SyntaxKind.ExpressionStatement)
                         this.addError("Assignments inside expressions are not yet supported.");
-                    else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
-                        this.transpileObjectLiteralAssignment(<ts.Identifier>binExpr.left, <ts.ObjectLiteralExpression>binExpr.right);
+                    else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+                        let varInfo = this.typeHelper.getVariableInfo(binExpr.left);
+                        if (varInfo)
+                            this.transpileObjectLiteralAssignment(varInfo.name, <ts.ObjectLiteralExpression>binExpr.right);
+                        else
+                            this.addError("Only variable, element access or property access are supported as left hand side expression in assignment of ObjectLiteralExpression.");
                     }
-                    else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression) {
-                        this.transpileArrayLiteralAssignment(<ts.Identifier>binExpr.left, <ts.ArrayLiteralExpression>binExpr.right);
+                    else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+                        let varInfo = this.typeHelper.getVariableInfo(binExpr.left);
+                        if (varInfo) {
+                            this.transpileArrayLiteralAssignment(varInfo.name, <ts.ArrayLiteralExpression>binExpr.right);
+                        } else
+                            this.addError("Only variable, element access or property access are supported as left hand side expression in assignment of ArrayLiteralExpression.");
                     }
                     else {
                         this.transpileNode(binExpr.left);
@@ -473,10 +481,10 @@ export class Transpiler {
 
     }
 
-    private transpileObjectLiteralAssignment(varName: ts.Identifier, objLiteral: ts.ObjectLiteralExpression) {
+    private transpileObjectLiteralAssignment(varString: string, objLiteral: ts.ObjectLiteralExpression) {
         for (let i = 0; i < objLiteral.properties.length; i++) {
             let propAssign = <ts.PropertyAssignment>objLiteral.properties[i];
-            this.emitter.emit(varName.getText() + "->");
+            this.emitter.emit(varString + "->");
             this.emitter.emit(propAssign.name.getText());
             this.emitter.emit(" = ");
             this.transpileNode(propAssign.initializer);
@@ -485,14 +493,9 @@ export class Transpiler {
         }
     }
 
-    private transpileArrayLiteralAssignment(varName: ts.Identifier, arrLiteral: ts.ArrayLiteralExpression) {
-        let varInfo = this.typeHelper.getVariableInfo(varName);
-        if (!varInfo || !(varInfo.type instanceof ArrayType))
-            this.addError("Internal error: Variable " + varName.getText() + " is not array, but it is assigned array literal.");
+    private transpileArrayLiteralAssignment(varString: string, arrLiteral: ts.ArrayLiteralExpression) {
         for (let i = 0; i < arrLiteral.elements.length; i++) {
-            this.emitter.emit(varName.getText());
-            if (varInfo.newElementsAdded)
-                this.emitter.emit(".data");
+            this.emitter.emit(varString);
             this.emitter.emit("[" + i + "]");
             this.emitter.emit(" = ");
             this.transpileNode(arrLiteral.elements[i]);
