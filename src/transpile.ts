@@ -18,7 +18,7 @@ export class Transpiler {
         this.memoryManager.insertGCVariablesCreationIfNecessary(null, this.emitter);
         this.transpileNode(sourceFile);
         this.memoryManager.insertDestructorsIfNecessary(sourceFile, this.emitter);
-        
+
         if (this.errors.length)
             return this.errors.join("\n");
         else
@@ -65,25 +65,50 @@ export class Transpiler {
                 {
                     let varStatement = <ts.VariableStatement>node;
                     for (let varDecl of varStatement.declarationList.declarations) {
-                        let varInfo = this.typeHelper.getVariableInfo(<ts.Identifier>varDecl.name);
-                        let cType = varInfo && varInfo.type;
-                        let cTypeString = cType && this.typeHelper.getTypeString(cType) || "void *";
-                        if (cTypeString.indexOf('{var}') != -1)
-                            this.emitter.emitToBeginningOfFunction(cTypeString.replace('{var}', varDecl.name.getText()))
-                        else
-                            this.emitter.emitToBeginningOfFunction(cTypeString + " " + varDecl.name.getText());
-                        this.emitter.emitToBeginningOfFunction(";\n");
-                        if (varDecl.initializer) {
-                            if (varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                                this.transpileObjectLiteralAssignment(<ts.Identifier>varDecl.name, cType, <ts.ObjectLiteralExpression>varDecl.initializer);
-                            else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                                this.transpileArrayLiteralAssignment(<ts.Identifier>varDecl.name, <ts.ArrayLiteralExpression>varDecl.initializer);
-                            else {
-                                this.emitter.emit(varDecl.name.getText());
-                                this.emitter.emit(" = ");
-                                this.transpileNode(varDecl.initializer);
-                                this.emitter.emit(';\n');
-                            }
+                        this.transpileNode(varDecl);
+                        this.emitter.emit(';\n');
+                    }
+                }
+                break;
+            case ts.SyntaxKind.VariableDeclaration:
+                {
+                    let varDecl = <ts.VariableDeclaration>node;
+                    let varInfo = this.typeHelper.getVariableInfo(<ts.Identifier>varDecl.name);
+                    let cType = varInfo && varInfo.type;
+                    let cTypeString = cType && this.typeHelper.getTypeString(cType) || "void *";
+                    if (cTypeString.indexOf('{var}') != -1)
+                        this.emitter.emitToBeginningOfFunction(cTypeString.replace('{var}', varDecl.name.getText()))
+                    else
+                        this.emitter.emitToBeginningOfFunction(cTypeString + " " + varDecl.name.getText());
+                    this.emitter.emitToBeginningOfFunction(";\n");
+
+                    if (varInfo.requiresAllocation) {
+
+                        if (cType instanceof ArrayType) {
+                            let optimizedCap = Math.max(cType.capacity * 2, 4);
+                            this.emitter.emit("ARRAY_CREATE(" + varInfo.name + ", " + optimizedCap + ", " + cType.capacity + ");\n");
+                            this.emitter.emitPredefinedHeader(HeaderKey.asserth);
+                            this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
+                            this.memoryManager.insertGlobalPointerIfNecessary(varDecl, varInfo.declaration.pos, varInfo.name + ".data", this.emitter);
+                        } else {
+                            this.emitter.emit(varInfo.name);
+                            this.emitter.emit(" = ");
+                            this.emitter.emit('malloc(sizeof(*' + varInfo.name + '));\n');
+                            this.emitter.emit('assert(' + varInfo.name + ' != NULL);\n');
+                            this.emitter.emitPredefinedHeader(HeaderKey.asserth);
+                            this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
+                            this.memoryManager.insertGlobalPointerIfNecessary(varDecl, varInfo.declaration.pos, varInfo.name, this.emitter);
+                        }
+                    }
+                    if (varDecl.initializer) {
+                        if (varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                            this.transpileObjectLiteralAssignment(<ts.Identifier>varDecl.name, <ts.ObjectLiteralExpression>varDecl.initializer);
+                        else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            this.transpileArrayLiteralAssignment(<ts.Identifier>varDecl.name, <ts.ArrayLiteralExpression>varDecl.initializer);
+                        else {
+                            this.emitter.emit(varDecl.name.getText());
+                            this.emitter.emit(" = ");
+                            this.transpileNode(varDecl.initializer);
                         }
                     }
                 }
@@ -121,17 +146,41 @@ export class Transpiler {
             case ts.SyntaxKind.ForStatement:
                 {
                     let forStatement = <ts.ForStatement>node;
+                    // C89 does not support multiple initializers, so if there are more then one, let's put them outside of the loop
+                    let forInitializer: ts.Node = forStatement.initializer;
+                    if (forInitializer && forInitializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+                        var declList = <ts.VariableDeclarationList>forInitializer;
+                        declList.declarations.filter((v, i, a) => i < a.length - 1).forEach(v => {
+                            this.transpileNode(v);
+                        });
+                        let lastChild = declList.declarations[declList.declarations.length - 1];
+                        let lastChildVarInfo = this.typeHelper.getVariableInfo(<ts.Identifier>lastChild.name);
+                        if (lastChildVarInfo.requiresAllocation) {
+                            forInitializer = null;
+                            this.transpileNode(lastChild);
+                        } else
+                            forInitializer = lastChild;
+                    }
                     this.emitter.emit("for (");
-                    if (forStatement.initializer)
-                        this.transpileNode(forStatement.initializer);
+                    if (forInitializer)
+                        this.transpileNode(forInitializer);
                     this.emitter.emit(";");
                     if (forStatement.condition)
                         this.transpileNode(forStatement.condition);
                     this.emitter.emit(";");
                     if (forStatement.incrementor)
                         this.transpileNode(forStatement.incrementor);
-                    this.emitter.emit(")\n")
-                    this.transpileNode(forStatement.statement);
+                    this.emitter.emit(")\n");
+                    if (forStatement.statement.kind == ts.SyntaxKind.Block)
+                        this.transpileNode(forStatement.statement);
+                    else
+                    {
+                        this.emitter.emit("{\n");
+                        this.emitter.increaseIndent();
+                        this.transpileNode(forStatement.statement);
+                        this.emitter.decreaseIndent();
+                        this.emitter.emit("}\n");
+                    }
                 }
                 break;
             case ts.SyntaxKind.ForOfStatement:
@@ -173,6 +222,12 @@ export class Transpiler {
                 break;
             case ts.SyntaxKind.ForInStatement:
                 this.addError("For-in statement is not yet supported!");
+                break;
+            case ts.SyntaxKind.WhileStatement:
+                this.addError("While statement is not yet supported!");
+                break;
+            case ts.SyntaxKind.DoStatement:
+                this.addError("Do statement is not yet supported!");
                 break;
             case ts.SyntaxKind.ReturnStatement:
                 {
@@ -328,7 +383,7 @@ export class Transpiler {
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.parent.kind != ts.SyntaxKind.ExpressionStatement)
                         this.addError("Assignments inside expressions are not yet supported.");
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
-                        this.transpileObjectLiteralAssignment(<ts.Identifier>binExpr.left, leftType, <ts.ObjectLiteralExpression>binExpr.right);
+                        this.transpileObjectLiteralAssignment(<ts.Identifier>binExpr.left, <ts.ObjectLiteralExpression>binExpr.right);
                     }
                     else if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression) {
                         this.transpileArrayLiteralAssignment(<ts.Identifier>binExpr.left, <ts.ArrayLiteralExpression>binExpr.right);
@@ -367,6 +422,22 @@ export class Transpiler {
                         this.transpileNode(prefixUnaryExpr.operand);
                 }
                 break;
+            case ts.SyntaxKind.PostfixUnaryExpression:
+                {
+                    let postfixUnaryExpr = <ts.PostfixUnaryExpression>node;
+                    this.transpileNode(postfixUnaryExpr.operand);
+                    switch (postfixUnaryExpr.operator) {
+                        case ts.SyntaxKind.MinusMinusToken:
+                            this.emitter.emit("--");
+                            break;
+                        case ts.SyntaxKind.PlusPlusToken:
+                            this.emitter.emit("++");
+                            break;
+                        default:
+                            this.addError("Non-supported postfix unary operator: " + ts.SyntaxKind[node.kind]);
+                    }
+                }
+                break;
             case ts.SyntaxKind.TrueKeyword:
                 this.emitter.emit("TRUE");
                 this.emitter.emitPredefinedHeader(HeaderKey.bool);
@@ -401,41 +472,22 @@ export class Transpiler {
 
     }
 
-    private transpileObjectLiteralAssignment(varName: ts.Identifier, cType: CType, objLiteral: ts.ObjectLiteralExpression) {
-        if (cType instanceof StructType) {
-            this.emitter.emit(varName.getText());
-            this.emitter.emit(" = ");
-            this.emitter.emit('malloc(sizeof(*' + varName.getText() + '));\n');
-            this.emitter.emit('assert(' + varName.getText() + ' != NULL);\n');
-            this.emitter.emitPredefinedHeader(HeaderKey.asserth);
-            this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
-            let varInfo = this.typeHelper.getVariableInfo(varName);
-            this.memoryManager.insertGlobalPointerIfNecessary(varName, varInfo.declaration.pos, varInfo.name, this.emitter);
-
-        }
-        for (let prop of objLiteral.properties) {
-            let propAssign = <ts.PropertyAssignment>prop;
+    private transpileObjectLiteralAssignment(varName: ts.Identifier, objLiteral: ts.ObjectLiteralExpression) {
+        for (let i = 0; i < objLiteral.properties.length; i++) {
+            let propAssign = <ts.PropertyAssignment>objLiteral.properties[i];
             this.emitter.emit(varName.getText() + "->");
             this.emitter.emit(propAssign.name.getText());
             this.emitter.emit(" = ");
             this.transpileNode(propAssign.initializer);
-            this.emitter.emit(";\n");
+            if (i < objLiteral.properties.length - 1)
+                this.emitter.emit(";\n");
         }
     }
 
     private transpileArrayLiteralAssignment(varName: ts.Identifier, arrLiteral: ts.ArrayLiteralExpression) {
         let varInfo = this.typeHelper.getVariableInfo(varName);
         if (!varInfo || !(varInfo.type instanceof ArrayType))
-            throw new Error("Internal error: Variable " + varName.getText() + " is not array, but it is assigned array literal.");
-        let arrType = <ArrayType>varInfo.type;
-        if (varInfo.newElementsAdded) {
-            let optimizedCap = Math.max(arrType.capacity * 2, 4);
-            this.emitter.emit("ARRAY_CREATE(" + varName.getText() + ", " + optimizedCap + ", " + arrType.capacity + ");\n");
-            this.emitter.emitPredefinedHeader(HeaderKey.asserth);
-            this.emitter.emitPredefinedHeader(HeaderKey.stdlibh);
-            
-            this.memoryManager.insertGlobalPointerIfNecessary(varName, varInfo.declaration.pos, varInfo.name + ".data", this.emitter);
-        }
+            this.addError("Internal error: Variable " + varName.getText() + " is not array, but it is assigned array literal.");
         for (let i = 0; i < arrLiteral.elements.length; i++) {
             this.emitter.emit(varName.getText());
             if (varInfo.newElementsAdded)
@@ -443,7 +495,8 @@ export class Transpiler {
             this.emitter.emit("[" + i + "]");
             this.emitter.emit(" = ");
             this.transpileNode(arrLiteral.elements[i]);
-            this.emitter.emit(";\n");
+            if (i < arrLiteral.elements.length - 1)
+                this.emitter.emit(";\n");
         }
     }
 
@@ -472,7 +525,7 @@ export class Transpiler {
             case ts.SyntaxKind.EqualsToken:
                 return " = ";
             default:
-                this.addError("Unsupported operator: " + token.getText()); 
+                this.addError("Unsupported operator: " + token.getText());
                 return "<unsupported operator>";
         }
     }

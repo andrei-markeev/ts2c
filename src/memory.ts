@@ -42,7 +42,7 @@ export class MemoryManager {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
 
-        if (!this.scopesOfVariables[varPos].simple)
+        if (this.scopesOfVariables[varPos] && !this.scopesOfVariables[varPos].simple)
             emitter.emit("ARRAY_PUSH(_gc_" + this.scopesOfVariables[varPos].scopeId + ", " + varString + ");\n");
     }
 

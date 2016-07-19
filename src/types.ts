@@ -45,6 +45,8 @@ export class VariableInfo {
     propsAssigned: boolean;
     /** Determines that properties of an object are assigned with non-trivial values and thus object is dictionary */
     isDict: boolean;
+    /** Determines if the variable requires memory allocation */
+    requiresAllocation: boolean;
 }
 
 /** Internal class for storing temporary variable details */
@@ -78,12 +80,57 @@ export class TypeHelper {
     }
 
     /** Get information of variable specified by ts.Identifier */
-    public getVariableInfo(ident: ts.Identifier) {
-        var symbol = GlobalContext.typeChecker.getSymbolAtLocation(ident);
-        if (symbol != null)
-            return this.variables[symbol.valueDeclaration.pos];
-        else
-            return null;
+    public getVariableInfo(node: ts.Node): VariableInfo {
+        if (node.kind === ts.SyntaxKind.ElementAccessExpression) {
+            let elemAccess = <ts.ElementAccessExpression>node;
+            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(elemAccess.expression);
+            if (symbol != null) {
+                let parentVar = this.variables[symbol.valueDeclaration.pos];
+                let parentVarType = parentVar && parentVar.type;
+                if (parentVarType instanceof ArrayType) {
+                    let varInfo = new VariableInfo();
+                    if (parentVar.newElementsAdded)
+                        varInfo.name = parentVar.name + ".data[{argumentExpression}]";
+                    else
+                        varInfo.name = parentVar.name + ".[{argumentExpression}]";
+                    varInfo.type = parentVarType.elementType;
+                    return varInfo;
+                }
+                else if (parentVarType instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                    let propName = elemAccess.argumentExpression.getText().slice(1, -1);
+                    let varInfo = new VariableInfo();
+                    if (parentVar.isDict)
+                        varInfo.name = "DICT_GET(" + parentVar.name + ", {argumentExpression})";
+                    else
+                        varInfo.name = parentVar.name + "->{argumentExpression}";
+                    varInfo.type = parentVarType.properties[propName];
+                    return varInfo;
+                }
+            }
+        } else if (node.kind === ts.SyntaxKind.PropertyAccessExpression) {
+            let propAccess = <ts.PropertyAccessExpression>node;
+            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(propAccess.expression);
+            if (symbol != null) {
+                let parentVar = this.variables[symbol.valueDeclaration.pos];
+                let parentVarType = parentVar && parentVar.type;
+                if (parentVarType instanceof StructType) {
+                    let propName = propAccess.name.getText();
+                    let varInfo = new VariableInfo();
+                    if (parentVar.isDict)
+                        varInfo.name = "DICT_GET(" + parentVar.name + ", \"" + propName + "\")";
+                    else
+                        varInfo.name = parentVar.name + "->" + propName;
+                    varInfo.type = parentVarType.properties[propName];
+                    return varInfo;
+                }
+            }
+        } else {
+            let ident = <ts.Identifier>node;
+            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(ident);
+            if (symbol != null)
+                return this.variables[symbol.valueDeclaration.pos];
+        }
+        return null;
     }
 
     /** Get CType textual representation for inserting into the C code */
@@ -248,10 +295,12 @@ export class TypeHelper {
                 if (types.length == 1) {
                     let varType = this.variablesData[k].assignmentTypes[types[0]];
                     if (varType instanceof ArrayType && this.variables[k].newElementsAdded) {
+                        this.variables[k].requiresAllocation = true;
                         varType.text = "ARRAY(" + varType.elementType + ")";
                         if (varType.elementType == UniversalVarType)
                             this.emitter.emitPredefinedHeader(HeaderKey.js_var);
                     } else if (varType instanceof StructType) {
+                        this.variables[k].requiresAllocation = true;
                         for (let addPropKey in this.variablesData[k].addedProperties) {
                             varType.properties[addPropKey] = this.variablesData[k].addedProperties[addPropKey];
                         }
@@ -263,7 +312,8 @@ export class TypeHelper {
                 }
                 else {
                     this.emitter.emitPredefinedHeader(HeaderKey.js_var);
-                    this.variables[k].type = "struct jvar *";
+                    this.variables[k].requiresAllocation = true;
+                    this.variables[k].type = UniversalVarType;
                 }
             }
 

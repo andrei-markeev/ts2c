@@ -27,6 +27,7 @@ export class Emitter {
     predefinedHeaders: { [key: number]: boolean } = {};
     indentText: string = '    ';
     beginningOfFunctionIndentText: string = '    ';
+    beginningOfFunctionNextIndent: boolean = true;
     beginningOfFunctionOnceStrings: { [key: string]: boolean } = {};
     nextIndent: boolean = true;
     targetsStack: { target: EmitTarget, indent: string }[] = [];
@@ -36,9 +37,12 @@ export class Emitter {
     }
     public emitToHeader(s: string) {
         var savedIndent = this.indentText;
+        var savedNextIndent = this.nextIndent;
         this.indentText = '';
+        this.nextIndent = false;
         this.emitInternal(s, EmitTarget.header);
         this.indentText = savedIndent;
+        this.nextIndent = savedNextIndent;
     }
     public emitOnceToHeader(s: string) {
         if (this.transpiledCode[EmitTarget.header] && this.transpiledCode[EmitTarget.header].indexOf(s) > -1)
@@ -67,9 +71,12 @@ export class Emitter {
         }
 
         var savedIndent = this.indentText;
+        var savedNextIndent = this.nextIndent;
         this.indentText = this.beginningOfFunctionIndentText;
+        this.nextIndent = this.beginningOfFunctionNextIndent;
         this.emitInternal(s, EmitTarget.beginningOfFunction);
         this.indentText = savedIndent;
+        this.nextIndent = savedNextIndent;
     }
     public emitOnceToBeginningOfFunction(s: string) {
         if (this.beginningOfFunctionOnceStrings[s])

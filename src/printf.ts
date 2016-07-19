@@ -17,38 +17,36 @@ export class PrintfTranspiler {
     ) { }
 
     public transpile(printNode: ts.Node | PrintfVariable, newLine: boolean = true) {
+        let CR = newLine ? "\\n" : "";
         let cType: CType;
-        let varName: string;
         if (printNode instanceof PrintfVariable) {
             cType = printNode.type;
-            varName = printNode.name;
-        } else if (printNode.kind == ts.SyntaxKind.Identifier) {
-            let varInfo = this.typeHelper.getVariableInfo(<ts.Identifier>printNode);
+        } else if (printNode.kind == ts.SyntaxKind.Identifier
+            || printNode.kind == ts.SyntaxKind.PropertyAccessExpression
+            || printNode.kind == ts.SyntaxKind.ElementAccessExpression) {
+            let varInfo = this.typeHelper.getVariableInfo(printNode);
             cType = varInfo && varInfo.type || "void *";
-            varName = printNode.getText();
         } else {
             cType = this.typeHelper.convertType(GlobalContext.typeChecker.getTypeAtLocation(printNode));
         }
 
         if (cType == 'char *') {
-            if (!(printNode instanceof PrintfVariable) && printNode.kind == ts.SyntaxKind.StringLiteral)
-            {
-                this.emitter.emit("printf(\"" + printNode.getText().slice(1,-1) + (newLine ? "\\n" : "") + "\")");
+            if (!(printNode instanceof PrintfVariable) && printNode.kind == ts.SyntaxKind.StringLiteral) {
+                this.emitter.emit("printf(\"" + printNode.getText().slice(1, -1) + CR + "\")");
             }
-            else
-            {
-                this.emitter.emit("printf(\"%s" + (newLine ? "\\n" : "") + "\", ");
+            else {
+                this.emitter.emit("printf(\"%s" + CR + "\", ");
                 this.printfTranspilePrintNode(printNode);
                 this.emitter.emit(")");
             }
         } else if (cType == 'int16_t') {
-            this.emitter.emit("printf(\"%d" + (newLine ? "\\n" : "") + "\", ");
+            this.emitter.emit("printf(\"%d" + CR + "\", ");
             this.printfTranspilePrintNode(printNode);
             this.emitter.emit(")");
         } else if (cType == 'uint8_t') {
             this.emitter.emit("printf(");
             this.printfTranspilePrintNode(printNode);
-            this.emitter.emit(" ? \"true" + (newLine ? "\\n" : "") + "\" : \"false" + (newLine ? "\\n" : "") + "\")");
+            this.emitter.emit(" ? \"true" + CR + "\" : \"false" + CR + "\")");
         } else if (cType instanceof StructType) {
             let propKeysToDisplay = [];
             this.emitter.emit("printf(\"{ ");
@@ -74,13 +72,13 @@ export class PrintfTranspiler {
                     this.emitter.emit("[not supported]");
                 this.emitter.emit(", ");
             }
-            this.emitter.emit("}" + (newLine ? "\\n" : "") + "\"");
+            this.emitter.emit("}" + CR + "\"");
             for (let propKey of propKeysToDisplay) {
                 this.emitter.emit(", ");
                 this.printfTranspilePrintNode(printNode);
                 this.emitter.emit("->" + propKey);
                 if (cType.properties[propKey] == 'uint8_t')
-                    this.emitter.emit(" ? \"true" + (newLine ? "\\n" : "") + "\" : \"false" + (newLine ? "\\n" : "") + "\"");
+                    this.emitter.emit(" ? \"true" + CR + "\" : \"false" + CR + "\"");
             }
             this.emitter.emit(")");
         } else if (cType instanceof ArrayType && !(printNode instanceof PrintfVariable) && printNode.kind == ts.SyntaxKind.Identifier) {
@@ -109,7 +107,7 @@ export class PrintfTranspiler {
             this.emitter.emit(";\n");
             this.emitter.decreaseIndent();
             this.emitter.emit("}\n");
-            this.emitter.emit("printf(\" ]" + (newLine ? "\\n" : "") + "\")");
+            this.emitter.emit("printf(\" ]" + CR + "\")");
         } else if (cType == UniversalVarType) {
             this.emitter.emit("switch (");
             this.printfTranspilePrintNode(printNode);
@@ -137,7 +135,7 @@ export class PrintfTranspiler {
             // TODO: implement JS_VAR_ARRAY, JS_VAR_STRUCT & JS_VAR_DICT
 
             this.emitter.decreaseIndent();
-            this.emitter.emit("}" + (newLine ? "\\n" : ""));
+            this.emitter.emit("}" + CR);
         } else {
             this.addError("ERROR: console.log for type " + cType + " is not supported!");
         }
@@ -150,7 +148,10 @@ export class PrintfTranspiler {
         else if (printNode.kind == ts.SyntaxKind.Identifier)
             this.emitter.emit(printNode.getText());
         else if (printNode.kind == ts.SyntaxKind.StringLiteral
-                || printNode.kind == ts.SyntaxKind.NumericLiteral)
+            || printNode.kind == ts.SyntaxKind.NumericLiteral
+            || printNode.kind == ts.SyntaxKind.PropertyAccessExpression
+            || printNode.kind == ts.SyntaxKind.ElementAccessExpression
+            || printNode.kind == ts.SyntaxKind.CallExpression)
             this.transpileNode(printNode);
         else {
             this.emitter.emit("(");
