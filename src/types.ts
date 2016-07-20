@@ -40,7 +40,7 @@ export class VariableInfo {
     /** Where variable was declared */
     declaration: ts.VariableDeclaration;
     /** Determines if it was detected that new elements are added to array using array.push */
-    newElementsAdded: boolean;
+    isDynamicArray: boolean;
     /** Determines if it was detected that properties are assigned */
     propsAssigned: boolean;
     /** Determines that properties of an object are assigned with non-trivial values and thus object is dictionary */
@@ -89,7 +89,7 @@ export class TypeHelper {
                 let parentVarType = parentVar && parentVar.type;
                 if (parentVarType instanceof ArrayType) {
                     let varInfo = new VariableInfo();
-                    if (parentVar.newElementsAdded)
+                    if (parentVar.isDynamicArray)
                         varInfo.name = parentVar.name + ".data[{argumentExpression}]";
                     else
                         varInfo.name = parentVar.name + ".[{argumentExpression}]";
@@ -169,6 +169,32 @@ export class TypeHelper {
         return UniversalVarType;
     }
 
+    private iteratorVariables: { [scopeId: string]: string[] } = {};
+    private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
+    public addNewIteratorVariable(scope: ts.Node): string {
+        let parentFunc = scope;
+        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
+            parentFunc = parentFunc.parent;
+        }
+        let scopeId = parentFunc && parentFunc.pos || 'main';
+        let existingSymbolNames = GlobalContext.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
+        if (!this.iteratorVariables[scopeId])
+            this.iteratorVariables[scopeId] = [];
+        existingSymbolNames = existingSymbolNames.concat(this.iteratorVariables[scopeId]);
+        let i = 0;
+        while (i < this.iteratorVarNames.length && existingSymbolNames.indexOf(this.iteratorVarNames[i]) > -1)
+            i++;
+        let iteratorVarName;
+        if (i == this.iteratorVarNames.length) {
+            i = 2;
+            while (existingSymbolNames.indexOf("i_" + i) > -1)
+                i++;
+            return "i_" + i;
+        }
+        else
+            return this.iteratorVarNames[i];
+    }
+
 
     private findVariablesRecursively(node: ts.Node) {
         if (node.kind == ts.SyntaxKind.Identifier) {
@@ -227,7 +253,23 @@ export class TypeHelper {
                     }
                 }
                 if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
-                    varInfo.newElementsAdded = true;
+                    varInfo.isDynamicArray = true;
+                    let determinedType: CType | ElementTypePromise = UniversalVarType;
+                    if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                        let call = <ts.CallExpression>propAccess.parent;
+                        if (call.arguments.length == 1)
+                            determinedType = this.determineType(<ts.Identifier>propAccess.expression, call.arguments[0]);
+                    }
+                    if (!(determinedType instanceof ElementTypePromise)) {
+                        for (let atKey in varData.assignmentTypes) {
+                            let at = varData.assignmentTypes[atKey];
+                            if (at instanceof ArrayType && at.elementType == UniversalVarType)
+                                at.elementType = determinedType;
+                        }
+                    }
+                }
+                if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
+                    varInfo.isDynamicArray = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
@@ -303,9 +345,10 @@ export class TypeHelper {
                 let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != "void *" && t != UniversalVarType);
                 if (types.length == 1) {
                     let varType = this.variablesData[k].assignmentTypes[types[0]];
-                    if (varType instanceof ArrayType && this.variables[k].newElementsAdded) {
+                    if (varType instanceof ArrayType && this.variables[k].isDynamicArray) {
                         this.variables[k].requiresAllocation = true;
                         varType.text = "ARRAY(" + varType.elementType + ")";
+                        this.emitter.emitPredefinedHeader(HeaderKey.array);
                         if (varType.elementType == UniversalVarType)
                             this.emitter.emitPredefinedHeader(HeaderKey.js_var);
                     } else if (varType instanceof StructType) {
@@ -410,7 +453,7 @@ export class TypeHelper {
             else {
                 let propTypeText = propType.text;
                 if (propTypeText.indexOf("{var}") > -1)
-                    userStructCode += '    ' + propType.text.replace(/^static /,'').replace("{var}",propName) + ';\n';
+                    userStructCode += '    ' + propType.text.replace(/^static /, '').replace("{var}", propName) + ';\n';
                 else
                     userStructCode += '    ' + propType.text + ' ' + propName + ';\n';
             }

@@ -153,7 +153,7 @@ export class Emitter {
 }
 `;
         if (this.predefinedHeaders[HeaderKey.array_pop])
-            headers += "#define ARRAY_POP(a) (a.size != 0 && --a.size ? a.data[a.size] : 0)\n"; 
+            headers += "#define ARRAY_POP(a) (a.size != 0 ? a.data[--a.size] : 0)\n"; 
 
         if (this.predefinedHeaders[HeaderKey.js_eq])
             headers += `

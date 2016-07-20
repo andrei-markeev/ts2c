@@ -1,2 +1,2 @@
-{ hello: world}
-{ initial: property, added: property 2, added2: property 3}
+{ hello: "world" }
+{ initial: "property", added: "property 2", added2: "property 3" }

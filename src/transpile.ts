@@ -104,7 +104,7 @@ export class Transpiler {
                             this.transpileObjectLiteralAssignment(varDecl.name.getText(), <ts.ObjectLiteralExpression>varDecl.initializer);
                         }
                         else if (varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression) {
-                            let varString = varInfo.newElementsAdded ? varInfo.name + ".data" : varInfo.name;
+                            let varString = varInfo.isDynamicArray ? varInfo.name + ".data" : varInfo.name;
                             this.transpileArrayLiteralAssignment(varString, <ts.ArrayLiteralExpression>varDecl.initializer);
                         }
                         else {
@@ -195,21 +195,14 @@ export class Transpiler {
                         break;
                     }
 
-                    let symbols = GlobalContext.typeChecker.getSymbolsInScope(node, ts.SymbolFlags.Variable);
-                    let iteratorVarName = "i";
-                    if (symbols.filter(s => s.name == iteratorVarName).length > 0) {
-                        let index = 1;
-                        while (symbols.filter(s => s.name == iteratorVarName + "_" + index).length > 0)
-                            index++;
-                        iteratorVarName += "_" + index;
-                    }
+                    let iteratorVarName = this.typeHelper.addNewIteratorVariable(node);
                     this.emitter.emitOnceToBeginningOfFunction("int16_t " + iteratorVarName + ";\n");
 
                     let arrayName = forOfStatement.expression.getText();
                     let arrayVarInfo = this.typeHelper.getVariableInfo(<ts.Identifier>forOfStatement.expression);
                     let arrayType = <ArrayType>arrayVarInfo.type;
-                    let arraySize = arrayVarInfo.newElementsAdded ? arrayName + ".size" : arrayType.capacity + "";
-                    let arrayAccess = arrayVarInfo.newElementsAdded ? arrayName + ".data" : arrayName;
+                    let arraySize = arrayVarInfo.isDynamicArray ? arrayName + ".size" : arrayType.capacity + "";
+                    let arrayAccess = arrayVarInfo.isDynamicArray ? arrayName + ".data" : arrayName;
 
                     this.emitter.emit("for (" + iteratorVarName + " = 0; " + iteratorVarName + " < " + arraySize + "; " + iteratorVarName + "++)\n");
                     this.emitter.emit("{\n");
@@ -231,10 +224,35 @@ export class Transpiler {
                 this.addError("For-in statement is not yet supported!");
                 break;
             case ts.SyntaxKind.WhileStatement:
-                this.addError("While statement is not yet supported!");
+                {
+                    let whileStatement = <ts.WhileStatement>node;
+                    this.emitter.emit("while (");
+                    this.transpileNode(whileStatement.expression);
+                    this.emitter.emit(")");
+                    this.emitter.emit("{\n");
+                    this.emitter.increaseIndent();
+                    if (whileStatement.statement.kind == ts.SyntaxKind.Block)
+                        (<ts.Block>whileStatement.statement).statements.forEach(s => this.transpileNode(s));
+                    else
+                        this.transpileNode(whileStatement.statement);
+                    this.emitter.decreaseIndent();
+                    this.emitter.emit("}\n");
+                }
                 break;
             case ts.SyntaxKind.DoStatement:
-                this.addError("Do statement is not yet supported!");
+                {
+                    let doStatement = <ts.DoStatement>node;
+                    this.emitter.emit("do {\n");
+                    this.emitter.increaseIndent();
+                    if (doStatement.statement.kind == ts.SyntaxKind.Block)
+                        (<ts.Block>doStatement.statement).statements.forEach(s => this.transpileNode(s));
+                    else
+                        this.transpileNode(doStatement.statement);
+                    this.emitter.decreaseIndent();
+                    this.emitter.emit("} while (");
+                    this.transpileNode(doStatement.expression);
+                    this.emitter.emit(");\n");
+                }
                 break;
             case ts.SyntaxKind.ReturnStatement:
                 {
@@ -317,7 +335,7 @@ export class Transpiler {
                         let varInfo = this.typeHelper.getVariableInfo(<ts.Identifier>propAccess.expression);
                         let varType = varInfo && varInfo.type;
                         if (varType instanceof ArrayType) {
-                            if (varInfo.newElementsAdded) {
+                            if (varInfo.isDynamicArray) {
                                 this.emitter.emit(propAccess.expression.getText());
                                 this.emitter.emit(".");
                                 this.emitter.emit("size");
@@ -348,7 +366,7 @@ export class Transpiler {
                         let varInfo = this.typeHelper.getVariableInfo(<ts.Identifier>elemAccess.expression);
                         if (varInfo && varInfo.type instanceof ArrayType) {
                             this.emitter.emit(elemAccess.expression.getText());
-                            if (varInfo.newElementsAdded)
+                            if (varInfo.isDynamicArray)
                                 this.emitter.emit(".data");
                             this.emitter.emit("[");
                             this.transpileNode(elemAccess.argumentExpression);

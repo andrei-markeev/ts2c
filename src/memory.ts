@@ -22,7 +22,7 @@ export class MemoryManager {
 
         for (let k in this.typeHelper.variables) {
             let v = this.typeHelper.variables[k];
-            if (v.type instanceof ArrayType && v.newElementsAdded
+            if (v.type instanceof ArrayType && v.isDynamicArray
                 || v.type instanceof StructType && v.propsAssigned)
                 this.scheduleVariableDisposal(<ts.Identifier>this.typeHelper.variables[k].declaration.name);
         }
