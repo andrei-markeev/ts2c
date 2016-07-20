@@ -5,7 +5,7 @@
 	"files.exclude": {
 		"**/*.js": {"when": "$(basename).ts"},
 		"**/*.elf": {"when": "$(basename).c"},
-		"**/*.avr": {"when": "$(basename).c"},
+		"**/*.res": {"when": "$(basename).c"},
 		"**/*.js.map": true
 	}
 	
