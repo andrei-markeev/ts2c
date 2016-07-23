@@ -11,7 +11,7 @@ RES = $(TS:.ts=.res)
 	gcc $< -ansi -pedantic -Wall -o $@
 %.res: %.elf
 	./$< > $@
-	diff $@ $@.expect
+	diff $@.expect $@
 
 all: $(RES) $(ELF) $(C)
 

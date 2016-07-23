@@ -27,6 +27,7 @@ function processTemplate(template: string, args: any) {
         let conditionStartPos = ifPos;
         while (template[ifPos] != "}")
             ifPos++;
+
         let endIfPos = template.indexOf("{/if}", ifPos);
         let elseIfPos = template.indexOf("{#elseif ", ifPos);
         let elsePos = template.indexOf("{#else}", ifPos);
@@ -35,6 +36,8 @@ function processTemplate(template: string, args: any) {
             endIfBodyPos = elseIfPos;
         if (elsePos != -1 && elsePos < endIfBodyPos)
             endIfBodyPos = elsePos;
+        if (endIfBodyPos > 0 && template[endIfBodyPos-1] == '\n')
+            endIfBodyPos--;
             
         let posAfterIf = endIfPos + 5;
 

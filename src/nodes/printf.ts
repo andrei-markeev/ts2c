@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {CType, ArrayType, StructType, VariableInfo} from '../types';
 import {IScope} from '../program';
-import {CExpression, ExpressionProcessor} from './expressions';
+import {CExpression, CCallExpression, ExpressionProcessor} from './expressions';
 import {CVariable} from './variable';
 
 export class PrintfHelper {
@@ -16,6 +16,11 @@ export class PrintfHelper {
             emitCR: true
         }
         let type = varInfo && varInfo.type || scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(printNode));
+        if (printNode.kind == ts.SyntaxKind.CallExpression) {
+            let call = new CCallExpression(scope, <any>printNode);
+            if (call.type == 'array' && call.funcName == 'ARRAY_POP')
+                type = (<ArrayType>call.arrayVarInfo.type).elementType;
+        }
         return new CPrintf(scope, printNode, accessor, type, options);
     }
 }
@@ -32,25 +37,19 @@ interface PrintfOptions
 @CodeTemplate(`
 {#if isQuotedCString}
     printf("{propPrefix}\\"%s\\"{CR}", {accessor});
-{/if}
-{#if isCString}
+{#elseif isCString}
     printf("%s{CR}", {accessor});
-{/if}
-{#if isInteger}
+{#elseif isInteger}
     printf("{propPrefix}%d{CR}", {accessor});
-{/if}
-{#if isBoolean && !propPrefix}
+{#elseif isBoolean && !propPrefix}
     printf({accessor} ? "true{CR}" : "false{CR}");
-{/if}
-{#if isBoolean && propPrefix}
+{#elseif isBoolean && propPrefix}
     printf("{propPrefix}%s", {accessor} ? "true{CR}" : "false{CR}");
-{/if}
-{#if isStruct}
+{#elseif isStruct}
     printf("{propPrefix}{ ");
     {elementPrintfs {    printf(", ");\n    }=> {this}}
     printf(" }{CR}");
-{/if}
-{#if isArray}
+{#elseif isArray}
     printf("{propPrefix}[ ");
     for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
         if ({iteratorVarName} != 0)
@@ -58,7 +57,10 @@ interface PrintfOptions
         {elementPrintfs}
     }
     printf(" ]{CR}");
-{/if}`)
+{#else}
+    printf(/* Unsupported printf expression */);
+{/if}
+`)
 class CPrintf {
 
     public isQuotedCString: boolean = false;

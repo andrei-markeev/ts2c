@@ -4,6 +4,7 @@ import {CProgram, IScope} from '../program';
 import {ArrayType} from '../types';
 import {CFunction} from './function';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
+import {CAssignment} from './assignment';
 import {ExpressionProcessor, CExpression} from './expressions';
 
 @CodeTemplate(`
@@ -74,6 +75,30 @@ export class CWhileStatement
 }
 
 @CodeTemplate(`
+for ({init};{condition};{increment})
+{block}`)
+export class CForStatement
+{
+    public init: CExpression;
+    public condition: CExpression;
+    public increment: CExpression;
+    public block: CBlock;
+    constructor(scope: IScope, node: ts.ForStatement)
+    {
+        this.block = new CBlock(scope);
+        if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+            StatementProcessor.process(<any>{ kind: ts.SyntaxKind.VariableStatement, declarationList: node.initializer }, scope);
+            this.init = "";
+        }
+        else
+            this.init = ExpressionProcessor.get(scope, <ts.Expression>node.initializer);
+        this.condition = ExpressionProcessor.get(scope, node.condition);
+        this.increment = ExpressionProcessor.get(scope, node.incrementor);
+        StatementProcessor.process(node.statement, this.block);
+    }
+}
+
+@CodeTemplate(`
 {#if statements.length > 1 || variables.length > 0}
     {
         {variables => {this};\n}
@@ -122,8 +147,11 @@ export class StatementProcessor {
             case ts.SyntaxKind.WhileStatement:
                 StatementProcessor.pushStatements(scope, <any>new CWhileStatement(scope, <ts.WhileStatement>node));
                 break;
+            case ts.SyntaxKind.ForStatement:
+                StatementProcessor.pushStatements(scope, <any>new CForStatement(scope, <ts.ForStatement>node));
+                break;
             default:
-                scope.statements.push("/* Unsupported statement: " + node.getText() + " */");
+                scope.statements.push("/* Unsupported statement: " + node.getText().replace(/[\n\s]+/g,' ') + " */;\n");
         }
     }
     private static pushStatements(scope: IScope, resolvableValue: IResolvable) {
@@ -134,7 +162,7 @@ export class StatementProcessor {
                     scope.statements.push(line + '\n');
         }
         else {
-            scope.statements.push(result);
+            scope.statements.push(result + ";\n");
         }
     }
 }

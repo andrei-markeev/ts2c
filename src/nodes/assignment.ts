@@ -5,15 +5,15 @@ import {CElementAccess, CExpression, ExpressionProcessor} from './expressions';
 
 @CodeTemplate(`
 {#if !argumentExpression && !isObjLiteralAssignment && !isArrayLiteralAssignment}
-    {accessor} = {expression};
+    {accessor} = {expression};\n
 {#elseif argumentExpression && isStruct && !isObjLiteralAssignment && !isArrayLiteralAssignment}
-    {accessor}->{argumentExpression} = {expression};
+    {accessor}->{argumentExpression} = {expression};\n
 {#elseif argumentExpression && isDict && !isObjLiteralAssignment && !isArrayLiteralAssignment}
-    DICT_SET({accessor}, {argumentExpression}, {expression});
+    DICT_SET({accessor}, {argumentExpression}, {expression});\n
 {#elseif argumentExpression && isDynamicArray && !isObjLiteralAssignment && !isArrayLiteralAssignment}
-    {accessor}.data[{argumentExpression}] = {expression};
+    {accessor}.data[{argumentExpression}] = {expression};\n
 {#elseif argumentExpression && isStaticArray && !isObjLiteralAssignment && !isArrayLiteralAssignment}
-    {accessor}[{argumentExpression}] = {expression};
+    {accessor}[{argumentExpression}] = {expression};\n
 {#elseif isObjLiteralAssignment && isStruct}
     {objInitializers => {accessor}->{propName} = {expression};\n}
 {#elseif isObjLiteralAssignment && isDict}
@@ -23,7 +23,7 @@ import {CElementAccess, CExpression, ExpressionProcessor} from './expressions';
 {#elseif isArrayLiteralAssignment && isStaticArray}
     {arrInitializers => {accessor}[{index}] = {expression};\n}
 {#else}
-    /* Unsupported assignment */
+    /* Unsupported assignment */\n
 {/if}`
 )
 export class CAssignment {
