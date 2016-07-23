@@ -1,5 +1,4 @@
-import {GlobalContext} from './src/global';
-import {Transpiler} from './src/transpile';
+import {CProgram} from './src/program';
 import * as ts from 'typescript';
 
 declare function require(name: string);
@@ -9,9 +8,21 @@ declare var process: any;
 if (typeof window !== 'undefined')
     window["ts2c"] = {
         transpile(source: string): string {
-            GlobalContext.init(source);
-            let sourceFile = GlobalContext.program.getSourceFiles()[0];
-            return new Transpiler().transpile(sourceFile);
+            var sourceFile = ts.createSourceFile('source.ts', source, ts.ScriptTarget.ES5, true);
+            var compilerHost: ts.CompilerHost = {
+                getSourceFile: (fileName, target) => 'source.ts' ? sourceFile : null,
+                writeFile: (name, text, writeByteOrderMark) => { },
+                getDefaultLibFileName: () => { return "lib.d.ts"; },
+                useCaseSensitiveFileNames: () => { return false; },
+                getCanonicalFileName: fileName => fileName,
+                getCurrentDirectory: () => "",
+                getNewLine: () => "\n",
+                fileExists: fileName => fileName == 'source.ts',
+                readFile: fileName => fileName == 'source.ts' ? source : null,
+                directoryExists: dirName => dirName == "",
+            };
+            var program = ts.createProgram(['source.ts'], { noLib: true}, compilerHost);
+            return new CProgram(program)["resolve"]();
         }
     };
 
@@ -26,13 +37,10 @@ if (typeof window !== 'undefined')
             process.exit();
 
         var fileNames = process.argv.slice(2);
-        GlobalContext.init(fileNames);
+        var program = ts.createProgram(fileNames, { noLib: true });
 
-        for (var source of GlobalContext.program.getSourceFiles()) {
-            let transpiler = new Transpiler();
-            var cprogram = transpiler.transpile(source);
-            fs.writeFileSync(source.fileName.slice(0, -3) + '.c', cprogram);
-        }
+        var output = new CProgram(program)["resolve"]();
+        fs.writeFileSync(fileNames[0].slice(0, -3) + '.c', output);
 
         process.exit();
 

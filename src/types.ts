@@ -1,7 +1,4 @@
 import * as ts from 'typescript';
-import {GlobalContext} from './global';
-import {Emitter, HeaderKey} from './emit';
-
 
 export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
@@ -41,8 +38,6 @@ export class VariableInfo {
     declaration: ts.VariableDeclaration;
     /** Determines if it was detected that new elements are added to array using array.push */
     isDynamicArray: boolean;
-    /** Determines if it was detected that properties are assigned */
-    propsAssigned: boolean;
     /** Determines that properties of an object are assigned with non-trivial values and thus object is dictionary */
     isDict: boolean;
     /** Determines if the variable requires memory allocation */
@@ -55,6 +50,7 @@ class VariableData {
     assignmentTypes: { [type: string]: CType } = {};
     typePromises: ElementTypePromise[] = [];
     addedProperties: PropertiesDictionary = {};
+    objLiteralsAssigned: boolean = false;
 }
 
 export class TypeHelper {
@@ -62,20 +58,26 @@ export class TypeHelper {
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
 
-    constructor(private emitter: Emitter, private convertString: { (s: string): string }) {
+    constructor(private typeChecker: ts.TypeChecker) {
     }
 
     /** Performs initialization of variables array */
     /** Call this before using getVariableInfo */
-    public figureOutVariablesAndTypes(source: ts.SourceFile) {
+    public figureOutVariablesAndTypes(sources: ts.SourceFile[]) {
 
-        this.findVariablesRecursively(source);
+        for (let source of sources)
+            this.findVariablesRecursively(source);
         this.resolvePromisesAndFinalizeTypes();
 
-        for (var structName in this.userStructs) {
-            this.emitter.emitToHeader("struct " + structName + " " + this.getStructureBodyString(this.userStructs[structName].properties));
-        }
-
+        return Object.keys(this.userStructs).map(k => { return {
+            name: k,
+            properties: Object.keys(this.userStructs[k].properties)
+                            .map(pk => { return {
+                                name: pk,
+                                type: this.userStructs[k].properties[pk]
+                            }; })
+                            
+        }; });
 
     }
 
@@ -83,7 +85,7 @@ export class TypeHelper {
     public getVariableInfo(node: ts.Node): VariableInfo {
         if (node.kind === ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>node;
-            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(elemAccess.expression);
+            let symbol = this.typeChecker.getSymbolAtLocation(elemAccess.expression);
             if (symbol != null) {
                 let parentVar = this.variables[symbol.valueDeclaration.pos];
                 let parentVarType = parentVar && parentVar.type;
@@ -109,7 +111,7 @@ export class TypeHelper {
             }
         } else if (node.kind === ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
-            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(propAccess.expression);
+            let symbol = this.typeChecker.getSymbolAtLocation(propAccess.expression);
             if (symbol != null) {
                 let parentVar = this.variables[symbol.valueDeclaration.pos];
                 let parentVarType = parentVar && parentVar.type;
@@ -117,7 +119,7 @@ export class TypeHelper {
                     let propName = propAccess.name.getText();
                     let varInfo = new VariableInfo();
                     if (parentVar.isDict)
-                        varInfo.name = "DICT_GET(" + parentVar.name + ", " + this.convertString(propName) + ")";
+                        varInfo.name = "DICT_GET(" + parentVar.name + ", " + propName + ")";
                     else
                         varInfo.name = parentVar.name + "->" + propName;
                     varInfo.type = parentVarType.properties[propName];
@@ -126,21 +128,33 @@ export class TypeHelper {
             }
         } else {
             let ident = <ts.Identifier>node;
-            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(ident);
+            let symbol = this.typeChecker.getSymbolAtLocation(ident);
             if (symbol != null)
                 return this.variables[symbol.valueDeclaration.pos];
         }
         return null;
     }
 
-    /** Get CType textual representation for inserting into the C code */
-    public getTypeString(type: CType) {
-        if (type instanceof ArrayType)
-            return type.text;
-        else if (type instanceof StructType)
-            return type.text;
+    /** Get textual representation of type of the parameter for inserting into the C code */
+    public getTypeString(source: any) {
+        
+        if (source.flags != null && source.intrinsicName != null) // ts.Type
+            source = this.convertType(source)
+        else if (source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
+            source = this.convertType(source)
+        else if (source.kind != null && source.flags != null) // ts.Node
+            source = this.getVariableInfo(source).type;
+        else if (source.name != null && source.flags != null && source.valueDeclaration != null && source.declarations != null) //ts.Symbol
+            source = this.variables[source.valueDeclaration.pos].type;
+
+        if (source instanceof ArrayType)
+            return source.text;
+        else if (source instanceof StructType)
+            return source.text;
+        else if (typeof source === 'string')
+            return source;
         else
-            return type;
+            throw new Error("Unrecognized type source");
     }
 
     /** Convert ts.Type to CType */
@@ -151,10 +165,8 @@ export class TypeHelper {
 
         if (tsType.flags == ts.TypeFlags.String)
             return "char *";
-        if (tsType.flags == ts.TypeFlags.Number) {
-            this.emitter.emitPredefinedHeader(HeaderKey.int16_t);
+        if (tsType.flags == ts.TypeFlags.Number)
             return "int16_t";
-        }
         if (tsType.flags == ts.TypeFlags.Boolean)
             return "uint8_t";
 
@@ -165,7 +177,7 @@ export class TypeHelper {
         if (tsType.flags == ts.TypeFlags.Any)
             return "void *";
 
-        console.log("Non-standard type: " + GlobalContext.typeChecker.typeToString(tsType));
+        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
         return UniversalVarType;
     }
 
@@ -176,8 +188,8 @@ export class TypeHelper {
         while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
             parentFunc = parentFunc.parent;
         }
-        let scopeId = parentFunc && parentFunc.pos || 'main';
-        let existingSymbolNames = GlobalContext.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
+        let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
+        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.iteratorVariables[scopeId])
             this.iteratorVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.iteratorVariables[scopeId]);
@@ -189,16 +201,19 @@ export class TypeHelper {
             i = 2;
             while (existingSymbolNames.indexOf("i_" + i) > -1)
                 i++;
-            return "i_" + i;
+            iteratorVarName = "i_" + i;
         }
         else
-            return this.iteratorVarNames[i];
+            iteratorVarName = this.iteratorVarNames[i];
+        
+        this.iteratorVariables[scopeId].push(iteratorVarName);
+        return iteratorVarName;
     }
 
 
     private findVariablesRecursively(node: ts.Node) {
         if (node.kind == ts.SyntaxKind.Identifier) {
-            let symbol = GlobalContext.typeChecker.getSymbolAtLocation(node);
+            let symbol = this.typeChecker.getSymbolAtLocation(node);
             if (!symbol) {
                 return;
             }
@@ -217,10 +232,10 @@ export class TypeHelper {
             if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
                 let varDecl = <ts.VariableDeclaration>node.parent;
                 if (varDecl.name.getText() == node.getText()) {
-                    varData.tsType = GlobalContext.typeChecker.getTypeAtLocation(varDecl.name);
+                    varData.tsType = this.typeChecker.getTypeAtLocation(varDecl.name);
                     this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varInfo.propsAssigned = true;
+                        varData.objLiteralsAssigned = true;
                     if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                         let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
                         if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -238,7 +253,7 @@ export class TypeHelper {
                 if (binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.left.getText() == node.getText()) {
                     this.addTypeToVariable(varPos, <ts.Identifier>binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varInfo.propsAssigned = true;
+                        varData.objLiteralsAssigned = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -246,7 +261,7 @@ export class TypeHelper {
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binExpr = <ts.BinaryExpression>propAccess.parent;
                     if (binExpr.left.pos == propAccess.pos) {
-                        varInfo.propsAssigned = true;
+                        varData.objLiteralsAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
                         if (!(determinedType instanceof ElementTypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
@@ -275,8 +290,7 @@ export class TypeHelper {
             else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
                 let elemAccess = <ts.ElementAccessExpression>node.parent;
                 if (elemAccess.expression.pos == node.pos) {
-                    varInfo.propsAssigned = true;
-
+                    varData.objLiteralsAssigned = true;
                     let determinedType: CType | ElementTypePromise = UniversalVarType;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
@@ -348,11 +362,10 @@ export class TypeHelper {
                     if (varType instanceof ArrayType && this.variables[k].isDynamicArray) {
                         this.variables[k].requiresAllocation = true;
                         varType.text = "ARRAY(" + varType.elementType + ")";
-                        this.emitter.emitPredefinedHeader(HeaderKey.array);
-                        if (varType.elementType == UniversalVarType)
-                            this.emitter.emitPredefinedHeader(HeaderKey.js_var);
-                    } else if (varType instanceof StructType) {
+                    } else if (varType instanceof StructType && this.variablesData[k].objLiteralsAssigned) {
                         this.variables[k].requiresAllocation = true;
+                    }
+                    if (varType instanceof StructType) {
                         for (let addPropKey in this.variablesData[k].addedProperties) {
                             varType.properties[addPropKey] = this.variablesData[k].addedProperties[addPropKey];
                         }
@@ -363,7 +376,6 @@ export class TypeHelper {
                     this.variables[k].type = "void *";
                 }
                 else {
-                    this.emitter.emitPredefinedHeader(HeaderKey.js_var);
                     this.variables[k].requiresAllocation = true;
                     this.variables[k].type = UniversalVarType;
                 }
@@ -392,7 +404,7 @@ export class TypeHelper {
     }
 
     private determineType(left: ts.Identifier, right: ts.Node): CType | ElementTypePromise {
-        let tsType = right ? GlobalContext.typeChecker.getTypeAtLocation(right) : GlobalContext.typeChecker.getTypeAtLocation(left);
+        let tsType = right ? this.typeChecker.getTypeAtLocation(right) : this.typeChecker.getTypeAtLocation(left);
         if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression)
             return this.generateStructure(tsType, left);
         else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
@@ -423,7 +435,7 @@ export class TypeHelper {
         }
         let userStructInfo: PropertiesDictionary = {};
         for (let prop of tsType.getProperties()) {
-            let propTsType = GlobalContext.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
+            let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
             let propType = this.convertType(propTsType, <ts.Identifier>prop.valueDeclaration.name);
             userStructInfo[prop.name] = propType;
         }
@@ -465,7 +477,7 @@ export class TypeHelper {
     private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
         var elementType;
         if (arrLiteral.elements.length > 0)
-            elementType = this.convertType(GlobalContext.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
+            elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
         else
             elementType = UniversalVarType;
 

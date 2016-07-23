@@ -1,6 +1,4 @@
 import * as ts from 'typescript';
-import {GlobalContext} from './global';
-import {Emitter, HeaderKey} from './emit';
 import {TypeHelper, ArrayType, StructType} from './types';
 
 type ScopeId = number | "main";
@@ -16,55 +14,47 @@ export class MemoryManager {
     private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
     private scopesOfVariables: { [varPos: number]: VariableScopeInfo } = {};
 
-    constructor(private typeHelper: TypeHelper) { }
+    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
 
     public preprocess() {
 
         for (let k in this.typeHelper.variables) {
             let v = this.typeHelper.variables[k];
-            if (v.type instanceof ArrayType && v.isDynamicArray
-                || v.type instanceof StructType && v.propsAssigned)
-                this.scheduleVariableDisposal(<ts.Identifier>this.typeHelper.variables[k].declaration.name);
+            if (v.requiresAllocation)
+                this.scheduleVariableDisposal(<ts.Identifier>v.declaration.name);
         }
     }
 
-    public insertGCVariablesCreationIfNecessary(funcDecl: ts.FunctionDeclaration, emitter: Emitter) {
-        var scopeId: ScopeId = funcDecl && funcDecl.pos + 1 || "main";
+    public getGCVariableForScope(node: ts.Node) {
+        let parentDecl = this.findParentFunctionNode(node);
+        var scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple).length) {
-            emitter.emitToHeader("ARRAY(void *) _gc_" + scopeId + ";\n");
-            emitter.emit("ARRAY_CREATE(_gc_" + scopeId + ", 2, 0);\n");
-            emitter.emitPredefinedHeader(HeaderKey.gc_iterator);
-            emitter.emitPredefinedHeader(HeaderKey.array);
+            return "_gc_" + scopeId;
         }
+        return null;
     }
 
-    public insertGlobalPointerIfNecessary(node: ts.Node, varPos: number, varString: string, emitter: Emitter) {
+    public getGCVariableForVariable(node: ts.Node, varPos: number) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
 
         if (this.scopesOfVariables[varPos] && !this.scopesOfVariables[varPos].simple)
-            emitter.emit("ARRAY_PUSH(_gc_" + this.scopesOfVariables[varPos].scopeId + ", " + varString + ");\n");
+            return "_gc_" + this.scopesOfVariables[varPos].scopeId;
+        else
+            return null;
     }
 
-    public insertDestructorsIfNecessary(node: ts.Node, emitter: Emitter) {
+    public getDestructorsForScope(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
+        let destructors = [];
         if (this.scopes[scopeId])
         {
             for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple)) {
-                let varInfo = this.typeHelper.getVariableInfo(simpleVarScopeInfo.declIdent);
-                if (varInfo.type instanceof ArrayType)
-                    emitter.emit("free(" + varInfo.name + ".data);\n");
-                else
-                    emitter.emit("free(" + varInfo.name + ");\n");
-            }
-            if (this.scopes[scopeId].filter(v => !v.simple).length) {
-                emitter.emit("for (_gc_i = 0; _gc_i < _gc_" + scopeId + ".size; _gc_i++)\n");
-                emitter.emit("    free(_gc_" + scopeId + ".data[_gc_i]);\n");
-                emitter.emit("free(_gc_" + scopeId + ".data);\n");
+                destructors.push(simpleVarScopeInfo.declIdent);
             }
         }
-
+        return destructors;
     }
 
     public scheduleVariableDisposal(varIdent: ts.Identifier) {
@@ -109,7 +99,7 @@ export class MemoryManager {
                         }
                         this.addIfFoundInAssignment(varIdent, call, queue);
                     } else {
-                        let symbol = GlobalContext.typeChecker.getSymbolAtLocation(call.expression);
+                        let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
                             if (call.expression.getText() != "console.log") {
                                 console.log(varIdent.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
@@ -179,7 +169,7 @@ export class MemoryManager {
     }
 
     private getSymbolId(node: ts.Node) {
-        return GlobalContext.typeChecker.getSymbolAtLocation(node)["id"];
+        return this.typeChecker.getSymbolAtLocation(node)["id"];
     }
 
 }
