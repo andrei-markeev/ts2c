@@ -102,7 +102,8 @@ for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++
 {
     {init} = {arrayAccess}[{iteratorVarName}];
     {statements {    }=> {this}}
-}`)
+}
+`)
 export class CForOfStatement implements IScope
 {
     public init: CExpression;
@@ -146,12 +147,11 @@ export class CForOfStatement implements IScope
     }
 {/if}
 {#if statements.length == 1 && variables.length == 0}
-    {statements}
+        {statements}
 {/if}
 {#if statements.length == 0 && variables.length == 0}
-    /* no statements */;
-{/if}
-`)
+        /* no statements */;
+{/if}`)
 export class CBlock implements IScope
 {
     public variables: CVariable[] = [];
@@ -199,7 +199,7 @@ export class StatementProcessor {
     }
     private static pushStatements(scope: IScope, resolvableValue: IResolvable) {
         let result = resolvableValue.resolve();
-        if (result.search(/;\n$/) > -1) {
+        if (result.search(/[;}]\n$/) > -1) {
             for (let line of result.split('\n'))
                 if (line != '')
                     scope.statements.push(line + '\n');

@@ -59,12 +59,12 @@ export class CVariableDeclaration {
 }
 
 @CodeTemplate(`
-    {destructors {    }=> free({this});\n}
-    {#if gcVarName}
-        for (_gc_i = 0; _gc_i < {gcVarName}.size; _gc_i++)
+{destructors {    }=> free({this});\n}
+{#if gcVarName}
+    for (_gc_i = 0; _gc_i < {gcVarName}.size; _gc_i++)
             free({gcVarName}.data[_gc_i]);
         free({gcVarName}.data);
-    {/if}`
+{/if}`
 )
 export class CVariableDestructors {
     public gcVarName: string;

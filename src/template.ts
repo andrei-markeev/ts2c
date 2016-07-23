@@ -140,5 +140,5 @@ function processTemplate(template: string, args: any) {
     if (args["resolve"] && !replaced && template.indexOf("{this}") > -1) {
         template = template.replace("{this}", args["resolve"]());
     }
-    return template.replace(/^[\n\s]*/,'').replace(/\n\s*\n[\n\s]*\n/g, '\n\n');
+    return template.replace(/^[\n]*/,'').replace(/\n\s*\n[\n\s]*\n/g, '\n\n');
 }
