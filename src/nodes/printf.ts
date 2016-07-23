@@ -2,17 +2,15 @@ import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {CType, ArrayType, StructType, VariableInfo} from '../types';
 import {IScope} from '../program';
-import {CExpression, CCallExpression, ExpressionProcessor} from './expressions';
+import {CExpression, CCallExpression, ExpressionHelper} from './expressions';
 import {CVariable} from './variable';
 
 export class PrintfHelper {
-    public static createPrintf(scope: IScope, printNode: ts.Expression) {
+    public static create(scope: IScope, printNode: ts.Expression) {
         let varInfo = scope.root.typeHelper.getVariableInfo(printNode);
-        let nodeExpression = ExpressionProcessor.get(scope, printNode);
+        let nodeExpression = ExpressionHelper.create(scope, printNode);
         let accessor = nodeExpression["resolve"] ? nodeExpression["resolve"]() : nodeExpression;
         let options = {
-            isDynamicArray: varInfo && varInfo.isDynamicArray,
-            isDict: varInfo && varInfo.isDict,
             emitCR: true
         }
         let type = varInfo && varInfo.type || scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(printNode));
@@ -28,8 +26,6 @@ export class PrintfHelper {
 interface PrintfOptions
 {
     emitCR?: boolean;
-    isDynamicArray?: boolean;
-    isDict?: boolean;
     quotedString?: boolean;
     propName?: string; 
 }
@@ -93,14 +89,14 @@ class CPrintf {
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, "int16_t"));
             scope.root.headerFlags.int16_t = true;
-            this.arraySize = options.isDynamicArray ? accessor + ".size" : varType.capacity + "";
-            let elementAccessor = accessor + (options.isDynamicArray ? ".data" : "") + "[" + this.iteratorVarName + "]";
+            this.arraySize = varType.isDynamicArray ? accessor + ".size" : varType.capacity + "";
+            let elementAccessor = accessor + (varType.isDynamicArray ? ".data" : "") + "[" + this.iteratorVarName + "]";
             this.elementPrintfs = [new CPrintf(scope, printNode, elementAccessor, varType.elementType, { quotedString: true })];
         }
         else if (varType instanceof StructType) {
             this.isStruct = true;
             for (let k in varType.properties) {
-                let propAccessor = options.isDict ? "DICT_GET(" + accessor + ", \"" + k + "\")" : accessor + "->" + k;
+                let propAccessor = varType.isDict ? "DICT_GET(" + accessor + ", \"" + k + "\")" : accessor + "->" + k;
                 this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], { quotedString: true, propName: k }));
             }
         }

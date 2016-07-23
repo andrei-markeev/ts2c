@@ -38,7 +38,7 @@ export class CFunction implements IScope {
 
         this.gcVarName = root.memoryManager.getGCVariableForScope(funcDecl);
         if (this.gcVarName)
-            root.variables.push(new CVariable(this, this.gcVarName, new ArrayType("ARRAY(void *)", "void *", 0)));
+            root.variables.push(new CVariable(this, this.gcVarName, new ArrayType("ARRAY(void *)", "void *", 0, true)));
 
         funcDecl.body.statements.forEach(s => StatementProcessor.process(s, this));
 

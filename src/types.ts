@@ -16,14 +16,16 @@ export class ArrayType {
     constructor(
         public text: string,
         public elementType: CType,
-        public capacity: number
+        public capacity: number,
+        public isDynamicArray: boolean
     ) { }
 }
 
 export class StructType {
     constructor(
         public text: string,
-        public properties: PropertiesDictionary
+        public properties: PropertiesDictionary,
+        public isDict: boolean
     ) { }
 }
 
@@ -36,10 +38,6 @@ export class VariableInfo {
     references: ts.Node[] = [];
     /** Where variable was declared */
     declaration: ts.VariableDeclaration;
-    /** Determines if it was detected that new elements are added to array using array.push */
-    isDynamicArray: boolean;
-    /** Determines that properties of an object are assigned with non-trivial values and thus object is dictionary */
-    isDict: boolean;
     /** Determines if the variable requires memory allocation */
     requiresAllocation: boolean;
 }
@@ -50,7 +48,9 @@ class VariableData {
     assignmentTypes: { [type: string]: CType } = {};
     typePromises: ElementTypePromise[] = [];
     addedProperties: PropertiesDictionary = {};
-    objLiteralsAssigned: boolean = false;
+    propertiesAssigned: boolean = false;
+    isDynamicArray: boolean;
+    isDict: boolean;
 }
 
 export class TypeHelper {
@@ -235,7 +235,7 @@ export class TypeHelper {
                     varData.tsType = this.typeChecker.getTypeAtLocation(varDecl.name);
                     this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.objLiteralsAssigned = true;
+                        varData.propertiesAssigned = true;
                     if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                         let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
                         if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -253,7 +253,7 @@ export class TypeHelper {
                 if (binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.left.getText() == node.getText()) {
                     this.addTypeToVariable(varPos, <ts.Identifier>binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.objLiteralsAssigned = true;
+                        varData.propertiesAssigned = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -261,14 +261,14 @@ export class TypeHelper {
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binExpr = <ts.BinaryExpression>propAccess.parent;
                     if (binExpr.left.pos == propAccess.pos) {
-                        varData.objLiteralsAssigned = true;
+                        varData.propertiesAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
                         if (!(determinedType instanceof ElementTypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
                     }
                 }
                 if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
-                    varInfo.isDynamicArray = true;
+                    varData.isDynamicArray = true;
                     let determinedType: CType | ElementTypePromise = UniversalVarType;
                     if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                         let call = <ts.CallExpression>propAccess.parent;
@@ -284,18 +284,21 @@ export class TypeHelper {
                     }
                 }
                 if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
-                    varInfo.isDynamicArray = true;
+                    varData.isDynamicArray = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
                 let elemAccess = <ts.ElementAccessExpression>node.parent;
                 if (elemAccess.expression.pos == node.pos) {
-                    varData.objLiteralsAssigned = true;
                     let determinedType: CType | ElementTypePromise = UniversalVarType;
+                    let isLeftHandSide = false;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
-                        if (binExpr.left.pos == elemAccess.pos)
+                        if (binExpr.left.pos == elemAccess.pos) {
+                            varData.propertiesAssigned = true;
                             determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
+                            isLeftHandSide = true;
+                        }
                     }
 
                     if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
@@ -314,8 +317,8 @@ export class TypeHelper {
                             }
                         }
                     }
-                    else
-                        varInfo.isDict = true;
+                    else if (isLeftHandSide)
+                        varData.isDict = true;
                 }
             }
         }
@@ -359,16 +362,18 @@ export class TypeHelper {
                 let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != "void *" && t != UniversalVarType);
                 if (types.length == 1) {
                     let varType = this.variablesData[k].assignmentTypes[types[0]];
-                    if (varType instanceof ArrayType && this.variables[k].isDynamicArray) {
+                    if (varType instanceof ArrayType && this.variablesData[k].isDynamicArray) {
                         this.variables[k].requiresAllocation = true;
                         varType.text = "ARRAY(" + varType.elementType + ")";
-                    } else if (varType instanceof StructType && this.variablesData[k].objLiteralsAssigned) {
+                        varType.isDynamicArray = true;
+                    } else if (varType instanceof StructType && this.variablesData[k].propertiesAssigned) {
                         this.variables[k].requiresAllocation = true;
                     }
                     if (varType instanceof StructType) {
                         for (let addPropKey in this.variablesData[k].addedProperties) {
                             varType.properties[addPropKey] = this.variablesData[k].addedProperties[addPropKey];
                         }
+                        varType.isDict = this.variablesData[k].isDict;
                     }
                     this.variables[k].type = varType;
                 }
@@ -452,7 +457,7 @@ export class TypeHelper {
         }
 
         if (!found)
-            this.userStructs[structName] = new StructType('struct ' + structName + ' *', userStructInfo);
+            this.userStructs[structName] = new StructType('struct ' + structName + ' *', userStructInfo, false);
         return this.userStructs[structName];
     }
 
@@ -482,7 +487,7 @@ export class TypeHelper {
             elementType = UniversalVarType;
 
         var cap = arrLiteral.elements.length;
-        return new ArrayType("static " + this.getTypeString(elementType) + " {var}[" + cap + "]", elementType, cap);
+        return new ArrayType("static " + this.getTypeString(elementType) + " {var}[" + cap + "]", elementType, cap, false);
     }
 
 }

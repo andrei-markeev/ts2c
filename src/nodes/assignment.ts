@@ -1,77 +1,71 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
-import {CElementAccess, CExpression, ExpressionProcessor} from './expressions';
+import {CType, ArrayType, StructType} from '../types';
+import {CElementAccess, CExpression, ExpressionHelper} from './expressions';
+
+export class AssignmentHelper {
+    public static create(scope: IScope, left: ts.Node, right: ts.Expression) {
+        let accessor = new CElementAccess(scope, left);
+        let varType = scope.root.typeHelper.getVariableInfo(left).type;
+        return new CAssignment(scope, accessor, null, varType, right);
+    }
+}
 
 @CodeTemplate(`
-{#if !argumentExpression && !isObjLiteralAssignment && !isArrayLiteralAssignment}
+{#if isObjLiteralAssignment}
+    {objInitializers}
+{#elseif isArrayLiteralAssignment}
+    {arrInitializers}
+{#elseif argumentExpression == null}
     {accessor} = {expression};\n
-{#elseif argumentExpression && isStruct && !isObjLiteralAssignment && !isArrayLiteralAssignment}
+{#elseif isStruct}
     {accessor}->{argumentExpression} = {expression};\n
-{#elseif argumentExpression && isDict && !isObjLiteralAssignment && !isArrayLiteralAssignment}
+{#elseif isDict}
     DICT_SET({accessor}, {argumentExpression}, {expression});\n
-{#elseif argumentExpression && isDynamicArray && !isObjLiteralAssignment && !isArrayLiteralAssignment}
+{#elseif isDynamicArray}
     {accessor}.data[{argumentExpression}] = {expression};\n
-{#elseif argumentExpression && isStaticArray && !isObjLiteralAssignment && !isArrayLiteralAssignment}
+{#elseif isStaticArray}
     {accessor}[{argumentExpression}] = {expression};\n
-{#elseif isObjLiteralAssignment && isStruct}
-    {objInitializers => {accessor}->{propName} = {expression};\n}
-{#elseif isObjLiteralAssignment && isDict}
-    {objInitializers => DICT_SET({accessor}, {propName}, {expression});\n}
-{#elseif isArrayLiteralAssignment && isDynamicArray}
-    {arrInitializers => {accessor}.data[{index}] = {expression};\n}
-{#elseif isArrayLiteralAssignment && isStaticArray}
-    {arrInitializers => {accessor}[{index}] = {expression};\n}
 {#else}
-    /* Unsupported assignment */\n
+    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n
 {/if}`
 )
 export class CAssignment {
     public isObjLiteralAssignment: boolean = false;
-    public objInitializers: {accessor: CElementAccess | string, propName: string, expression: CExpression}[];
+    public objInitializers: CAssignment[];
     public isArrayLiteralAssignment: boolean = false;
     public arrayLiteralSize: number;
-    public arrInitializers: {accessor: CElementAccess | string, index: number, expression: CExpression}[];
-    public accessor: CElementAccess | string;
-    public argumentExpression: CExpression;
+    public arrInitializers: CAssignment[];
     public isSimpleVar: boolean;
     public isDynamicArray: boolean = false;
     public isStaticArray: boolean = false;
     public isStruct: boolean = false;
     public isDict: boolean = false;
     public expression: CExpression;
-    constructor(scope: IScope, left: ts.Node, right: ts.Expression) {
-        let wrappedAccessor = new CElementAccess(scope, left);
-        this.accessor = wrappedAccessor.elementAccess;
-        this.argumentExpression = wrappedAccessor.argumentExpression;
-        this.isSimpleVar = wrappedAccessor.isSimpleVar;
-        this.isDynamicArray = wrappedAccessor.isDynamicArray;
-        this.isStaticArray = wrappedAccessor.isStaticArray;
-        this.isDict = wrappedAccessor.isDict;
-        this.isStruct = wrappedAccessor.isStruct;
+    public nodeText: string;
+    constructor(scope: IScope, public accessor: CElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression) {
+
+        this.isSimpleVar = typeof type === 'string';
+        this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
+        this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
+        this.isDict = type instanceof StructType && type.isDict;
+        this.isStruct = type instanceof StructType && !type.isDict;
+        this.nodeText = right.getText();
 
         if (right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
             this.isObjLiteralAssignment = true;
             let objLiteral = <ts.ObjectLiteralExpression>right;
             this.objInitializers = objLiteral.properties
                 .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
-                .map(p => { return {
-                    accessor: wrappedAccessor,
-                    propName: p.name.kind == ts.SyntaxKind.Identifier && p.name.getText()
-                              || p.name.kind == ts.SyntaxKind.StringLiteral && p.name.getText().slice(1,-1)
-                              || "/* unsupported property name expression " + p.name.getText() + " */",
-                    expression: ExpressionProcessor.get(scope, (<ts.PropertyAssignment>p).initializer) 
-                } });
+                .map(p => <ts.PropertyAssignment>p)
+                .map(p => new CAssignment(scope, this.accessor, p.name.getText(), type, p.initializer));
         } else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression) {
             this.isArrayLiteralAssignment = true;
             let arrLiteral = <ts.ArrayLiteralExpression>right;
             this.arrayLiteralSize = arrLiteral.elements.length;
-            this.arrInitializers = arrLiteral.elements.map((e, i) => { return {
-                accessor: wrappedAccessor,
-                index: i,
-                expression: ExpressionProcessor.get(scope, e)
-            } })
+            this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, this.accessor, ""+i, type, e))
         } else
-            this.expression = ExpressionProcessor.get(scope, right);
+            this.expression = ExpressionHelper.create(scope, right);
     }
 }

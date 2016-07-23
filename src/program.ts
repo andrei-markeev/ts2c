@@ -137,14 +137,14 @@ export class CProgram implements IScope {
         this.userStructs = structs.map(s => {
             return {
                 name: s.name,
-                properties: s.properties.map(p => new CVariable(this, p.name, p.type))
+                properties: s.properties.map(p => new CVariable(this, p.name, p.type, true))
             };
         });
         this.memoryManager.preprocess();
 
         this.gcVarName = this.memoryManager.getGCVariableForScope(null);
         if (this.gcVarName)
-            this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("ARRAY(void *)", "void *", 0)));
+            this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("ARRAY(void *)", "void *", 0, true)));
 
         tsProgram.getSourceFiles().forEach(source =>
             source.statements.forEach(s => StatementProcessor.process(s, this))

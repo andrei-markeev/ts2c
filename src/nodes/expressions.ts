@@ -1,12 +1,14 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
-import {VariableInfo, ArrayType, StructType} from '../types';
-import {CAssignment} from './assignment';
+import {VariableInfo, CType, ArrayType, StructType} from '../types';
+import {AssignmentHelper} from './assignment';
 import {PrintfHelper} from './printf';
 
-export class ExpressionProcessor {
-    public static get(scope: IScope, node: ts.Expression): CExpression {
+export class ExpressionHelper {
+    public static create(scope: IScope, node: ts.Expression): CExpression {
+        if (typeof node === 'string')
+            return node;
         switch (node.kind) {
             case ts.SyntaxKind.ElementAccessExpression:
             case ts.SyntaxKind.PropertyAccessExpression:
@@ -16,7 +18,7 @@ export class ExpressionProcessor {
             case ts.SyntaxKind.BinaryExpression:
                 let binaryExpr = <ts.BinaryExpression>node;
                 if (binaryExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken)
-                    return new CAssignment(scope, binaryExpr.left, binaryExpr.right);
+                    return AssignmentHelper.create(scope, binaryExpr.left, binaryExpr.right);
                 else
                     return new CBinaryExpression(scope, binaryExpr);
             case ts.SyntaxKind.StringLiteral:
@@ -58,13 +60,13 @@ export class CCallExpression {
     constructor(scope: IScope, call: ts.CallExpression) {
         this.type = "call";
         this.funcName = call.expression.getText();
-        this.arguments = call.arguments.map(a => ExpressionProcessor.get(scope, a));
+        this.arguments = call.arguments.map(a => ExpressionHelper.create(scope, a));
         this.arrayVarName = null;
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
             if (this.funcName == "console.log") {
                 this.type = "printf";
-                this.printfCalls = call.arguments.map(a => PrintfHelper.createPrintf(scope, a));
+                this.printfCalls = call.arguments.map(a => PrintfHelper.create(scope, a));
                 scope.root.headerFlags.printf = true;
             }
             if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
@@ -106,8 +108,12 @@ class CBinaryExpression {
         operatorMap[ts.SyntaxKind.LessThanEqualsToken] = '<=';
         operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
         operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
-        this.left = ExpressionProcessor.get(scope, node.left);
-        this.right = ExpressionProcessor.get(scope, node.right);
+        operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
+        operatorMap[ts.SyntaxKind.SlashToken] = '/';
+        operatorMap[ts.SyntaxKind.PlusToken] = '+';
+        operatorMap[ts.SyntaxKind.MinusToken] = '-';
+        this.left = ExpressionHelper.create(scope, node.left);
+        this.right = ExpressionHelper.create(scope, node.right);
         this.operator = operatorMap[node.operatorToken.kind];
         this.nodeText = node.getText();
     }
@@ -133,7 +139,7 @@ class CUnaryExpression {
         operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
         operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
         operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
-        this.operand = ExpressionProcessor.get(scope, node.operand);
+        this.operand = ExpressionHelper.create(scope, node.operand);
         this.operator = operatorMap[node.operator];
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
@@ -154,7 +160,7 @@ class CUnaryExpression {
 {#elseif isDict}
     DICT_GET({elementAccess}, {argumentExpression})
 {#else}
-    /* Unsupported left hand side expression */
+    /* Unsupported left hand side expression {nodeText} */
 {/if}`)
 export class CElementAccess {
     public isSimpleVar: boolean;
@@ -163,10 +169,10 @@ export class CElementAccess {
     public isStruct: boolean = false;
     public isDict: boolean = false;
     public elementAccess: CElementAccess | string;
-    public argumentExpression: CExpression;
+    public argumentExpression: CExpression = null;
     public nodeText: string;
     constructor(scope: IScope, node: ts.Node) {
-        let varInfo = null;
+        let varInfo: VariableInfo = null;
 
         if (node.kind == ts.SyntaxKind.Identifier) {
             varInfo = scope.root.typeHelper.getVariableInfo(node);
@@ -191,17 +197,17 @@ export class CElementAccess {
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     this.argumentExpression = ident;
                 else
-                    this.argumentExpression = ExpressionProcessor.get(scope, elemAccess.argumentExpression);
+                    this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
             } else
-                this.argumentExpression = ExpressionProcessor.get(scope, elemAccess.argumentExpression);
+                this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
         }
 
-        let varType = varInfo && varInfo.type;
-        this.isSimpleVar = typeof varType === 'string';
-        this.isDynamicArray = varInfo.isDynamicArray;
-        this.isStaticArray = varType instanceof ArrayType && !varInfo.isDynamicArray;
-        this.isDict = varInfo.isDict;
-        this.isStruct = varType instanceof StructType && !varInfo.isDict;
+        let type = varInfo && varInfo.type;
+        this.isSimpleVar = typeof type === 'string';
+        this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
+        this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
+        this.isDict = type instanceof StructType && type.isDict;
+        this.isStruct = type instanceof StructType && !type.isDict;
         this.nodeText = node.getText();
 
     }

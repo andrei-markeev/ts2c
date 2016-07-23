@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType} from '../types';
-import {CAssignment} from './assignment';
+import {AssignmentHelper, CAssignment} from './assignment';
 
 @CodeTemplate(`
 {#if needAllocateArray}
@@ -36,18 +36,18 @@ export class CVariableDeclaration {
         let varType = varInfo.type;
         scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
         this.varName = varInfo.name;
-        this.needAllocateArray = varInfo.isDynamicArray && varInfo.requiresAllocation;
-        this.needAllocate = !varInfo.isDynamicArray && varInfo.requiresAllocation;
+        this.needAllocateArray = varType instanceof ArrayType && varInfo.requiresAllocation;
+        this.needAllocate = !(varType instanceof ArrayType) && varInfo.requiresAllocation;
         this.gcVarName = scope.root.memoryManager.getGCVariableForVariable(varDecl, varDecl.pos);
-        this.isStruct = varType instanceof StructType && !varInfo.isDict;
-        this.isDict = varInfo.isDict;
+        this.isStruct = varType instanceof StructType && !varType.isDict;
+        this.isDict = varType instanceof StructType && varType.isDict;
         this.isArray = varType instanceof ArrayType;
         if (varType instanceof ArrayType) {
             this.initialCapacity = Math.max(varType.capacity * 2, 4);
             this.size = varType.capacity;
         }
         if (varDecl.initializer)
-            this.initializer = new CAssignment(scope, varDecl.name, varDecl.initializer);
+            this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
         
         if (this.needAllocate || this.needAllocateArray)
             scope.root.headerFlags.malloc = true;
@@ -80,12 +80,15 @@ export class CVariableDestructors {
 
 export class CVariable {
     private varString: string;
-    constructor(scope: IScope, name: string, private typeSource) {
+    constructor(scope: IScope, name: string, private typeSource, insideStruct = false) {
         let typeString = scope.root.typeHelper.getTypeString(typeSource);
         if (typeString.indexOf('{var}') > -1)
             this.varString = typeString.replace('{var}', name);
         else
             this.varString = typeString + " " + name;
+        
+        if (insideStruct)
+            this.varString = this.varString.replace(/^static /,'');
     }
     resolve() {
         return this.varString;
