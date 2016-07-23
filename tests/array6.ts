@@ -3,7 +3,6 @@ array1.push("Hello");
 console.log(array1);
 
 var array2 = [];
-array2.push(10+20);
-array2.push(30*2);
-array2.push(9);
+for (let i=0;i<5;i++)
+    array2.push(10*i);
 console.log(array2);

@@ -91,20 +91,12 @@ export class TypeHelper {
                 let parentVarType = parentVar && parentVar.type;
                 if (parentVarType instanceof ArrayType) {
                     let varInfo = new VariableInfo();
-                    if (parentVar.isDynamicArray)
-                        varInfo.name = parentVar.name + ".data[{argumentExpression}]";
-                    else
-                        varInfo.name = parentVar.name + ".[{argumentExpression}]";
                     varInfo.type = parentVarType.elementType;
                     return varInfo;
                 }
                 else if (parentVarType instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                     let propName = elemAccess.argumentExpression.getText().slice(1, -1);
                     let varInfo = new VariableInfo();
-                    if (parentVar.isDict)
-                        varInfo.name = "DICT_GET(" + parentVar.name + ", \"" + propName + "\")";
-                    else
-                        varInfo.name = parentVar.name + "->" + propName;
                     varInfo.type = parentVarType.properties[propName];
                     return varInfo;
                 }
@@ -118,7 +110,7 @@ export class TypeHelper {
                 if (parentVarType instanceof StructType) {
                     let propName = propAccess.name.getText();
                     let varInfo = new VariableInfo();
-                    if (parentVar.isDict)
+                    if (parentVarType.isDict)
                         varInfo.name = "DICT_GET(" + parentVar.name + ", " + propName + ")";
                     else
                         varInfo.name = parentVar.name + "->" + propName;
@@ -181,7 +173,7 @@ export class TypeHelper {
         return UniversalVarType;
     }
 
-    private iteratorVariables: { [scopeId: string]: string[] } = {};
+    private temporaryVariables: { [scopeId: string]: string[] } = {};
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
     public addNewIteratorVariable(scope: ts.Node): string {
         let parentFunc = scope;
@@ -190,9 +182,9 @@ export class TypeHelper {
         }
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
         let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
-        if (!this.iteratorVariables[scopeId])
-            this.iteratorVariables[scopeId] = [];
-        existingSymbolNames = existingSymbolNames.concat(this.iteratorVariables[scopeId]);
+        if (!this.temporaryVariables[scopeId])
+            this.temporaryVariables[scopeId] = [];
+        existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
         let i = 0;
         while (i < this.iteratorVarNames.length && existingSymbolNames.indexOf(this.iteratorVarNames[i]) > -1)
             i++;
@@ -206,10 +198,31 @@ export class TypeHelper {
         else
             iteratorVarName = this.iteratorVarNames[i];
         
-        this.iteratorVariables[scopeId].push(iteratorVarName);
+        this.temporaryVariables[scopeId].push(iteratorVarName);
         return iteratorVarName;
     }
 
+    public addNewTemporaryVariable(scope: ts.Node, proposedName: string): string {
+        let parentFunc = scope;
+        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
+            parentFunc = parentFunc.parent;
+        }
+        let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
+        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
+        if (!this.temporaryVariables[scopeId])
+            this.temporaryVariables[scopeId] = [];
+        existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
+        if (existingSymbolNames.indexOf(proposedName) > -1)
+        {
+            let i = 2;
+            while (existingSymbolNames.indexOf(proposedName + "_" + i) > -1)
+                i++;
+            proposedName = proposedName + "_" + i;
+        }
+        
+        this.temporaryVariables[scopeId].push(proposedName);
+        return proposedName;
+    }
 
     private findVariablesRecursively(node: ts.Node) {
         if (node.kind == ts.SyntaxKind.Identifier) {
@@ -364,7 +377,9 @@ export class TypeHelper {
                     let varType = this.variablesData[k].assignmentTypes[types[0]];
                     if (varType instanceof ArrayType && this.variablesData[k].isDynamicArray) {
                         this.variables[k].requiresAllocation = true;
-                        varType.text = "ARRAY(" + varType.elementType + ")";
+                        let elementTypeText = this.getTypeString(varType.elementType);
+                        elementTypeText = elementTypeText.replace(/^static /,'').replace(/\{var\}\[\d+]$/,'*');
+                        varType.text = "ARRAY(" + elementTypeText + ")";
                         varType.isDynamicArray = true;
                     } else if (varType instanceof StructType && this.variablesData[k].propertiesAssigned) {
                         this.variables[k].requiresAllocation = true;

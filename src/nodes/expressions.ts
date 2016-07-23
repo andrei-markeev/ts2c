@@ -2,8 +2,9 @@ import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
 import {VariableInfo, CType, ArrayType, StructType} from '../types';
-import {AssignmentHelper} from './assignment';
+import {AssignmentHelper, CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
+import {CVariable} from './variable';
 
 export class ExpressionHelper {
     public static create(scope: IScope, node: ts.Expression): CExpression {
@@ -21,6 +22,8 @@ export class ExpressionHelper {
                     return AssignmentHelper.create(scope, binaryExpr.left, binaryExpr.right);
                 else
                     return new CBinaryExpression(scope, binaryExpr);
+            case ts.SyntaxKind.ArrayLiteralExpression:
+                return ArrayLiteralHelper.create(scope, <any>node);
             case ts.SyntaxKind.StringLiteral:
                 return new CString(node.getText());
             case ts.SyntaxKind.NumericLiteral:
@@ -143,6 +146,29 @@ class CUnaryExpression {
         this.operator = operatorMap[node.operator];
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
+    }
+}
+
+
+class ArrayLiteralHelper {
+    public static create(scope: IScope, node: ts.ArrayLiteralExpression)
+    {
+        if (node.elements.length == 0) {
+            return "/* Empty array is not supported inside expressions */";
+        }
+        
+        let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+        let tsType = scope.root.typeChecker.getTypeAtLocation(node);
+        let elementType = scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(node.elements[0]));
+        let typeText = "static " + scope.root.typeHelper.getTypeString(elementType) + " {var}[" + node.elements.length + "]";
+        let type = new ArrayType(typeText, elementType, node.elements.length, false);
+        scope.variables.push(new CVariable(scope, varName, type, false));
+        for (let i=0;i<node.elements.length;i++)
+        {
+            let assignment = new CAssignment(scope, varName, i+"", type, node.elements[i])
+            scope.statements.push(assignment);
+        }
+        return varName;
     }
 }
 
