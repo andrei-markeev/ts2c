@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
-import {VariableInfo, CType, ArrayType, StructType} from '../types';
+import {CType, ArrayType, StructType, UniversalVarType, PointerVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
 import {CVariable} from './variable';
@@ -33,7 +33,7 @@ export class ExpressionHelper {
             case ts.SyntaxKind.PostfixUnaryExpression:
                 return new CUnaryExpression(scope, <any>node);
             case ts.SyntaxKind.ConditionalExpression:
-
+                return new CTernaryExpression(scope, <any>node); 
             default:
                 return "/* unsupported expression " + node.getText() + " */";
         }
@@ -156,6 +156,18 @@ class CUnaryExpression {
     }
 }
 
+@CodeTemplate(`{condition} ? {whenTrue} : {whenFalse}`)
+class CTernaryExpression {
+    public condition: CExpression;
+    public whenTrue: CExpression; 
+    public whenFalse: CExpression; 
+    constructor(scope: IScope, node: ts.ConditionalExpression)
+    {
+        this.condition = ExpressionHelper.create(scope, node.condition);
+        this.whenTrue = ExpressionHelper.create(scope, node.whenTrue);
+        this.whenFalse = ExpressionHelper.create(scope, node.whenFalse);
+    }
+}
 
 class ArrayLiteralHelper {
     public static create(scope: IScope, node: ts.ArrayLiteralExpression)
@@ -198,7 +210,8 @@ class ArrayLiteralHelper {
     DICT_GET({elementAccess}, {argumentExpression})
 {#else}
     /* Unsupported left hand side expression {nodeText} */
-{/if}`)
+{/if}`
+)
 export class CElementAccess {
     public isSimpleVar: boolean;
     public isDynamicArray: boolean = false;
@@ -240,7 +253,7 @@ export class CElementAccess {
                 this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
         }
 
-        this.isSimpleVar = typeof type === 'string';
+        this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity+"";

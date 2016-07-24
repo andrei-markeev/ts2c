@@ -2,6 +2,7 @@ import * as ts from 'typescript';
 
 export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
+export const PointerVarType = "void *";
 type PropertiesDictionary = { [propName: string]: CType };
 
 class TypePromise {
@@ -68,6 +69,8 @@ class VariableData {
     assignmentTypes: { [type: string]: CType } = {};
     typePromises: TypePromise[] = [];
     addedProperties: PropertiesDictionary = {};
+    parameterIndex: number;
+    parameterFuncDeclPos: number;
     propertiesAssigned: boolean = false;
     isDynamicArray: boolean;
     isDict: boolean;
@@ -77,6 +80,7 @@ export class TypeHelper {
     private userStructs: { [name: string]: StructType } = {};
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
+    private functionCallsData: { [funcDeclPos: number]: (CType | TypePromise)[] } = {};
 
     constructor(private typeChecker: ts.TypeChecker) {
     }
@@ -214,10 +218,7 @@ export class TypeHelper {
     private temporaryVariables: { [scopeId: string]: string[] } = {};
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
     public addNewIteratorVariable(scope: ts.Node): string {
-        let parentFunc = scope;
-        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
-            parentFunc = parentFunc.parent;
-        }
+        let parentFunc = this.findParentFunction(scope);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
         let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.temporaryVariables[scopeId])
@@ -241,10 +242,7 @@ export class TypeHelper {
     }
 
     public addNewTemporaryVariable(scope: ts.Node, proposedName: string): string {
-        let parentFunc = scope;
-        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
-            parentFunc = parentFunc.parent;
-        }
+        let parentFunc = this.findParentFunction(scope);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
         let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.temporaryVariables[scopeId])
@@ -262,6 +260,24 @@ export class TypeHelper {
     }
 
     private findVariablesRecursively(node: ts.Node) {
+        if (node.kind == ts.SyntaxKind.CallExpression)
+        {
+            let call = <ts.CallExpression>node;
+            if (call.expression.kind == ts.SyntaxKind.Identifier) {
+                let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
+                if (funcSymbol != null) {
+                    let funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
+                    for (let i=0;i<call.arguments.length;i++)
+                    {
+                        let determinedType = this.determineType(null, call.arguments[i]);
+                        let callData = this.functionCallsData[funcDeclPos] || [];
+                        this.functionCallsData[funcDeclPos] = callData;
+                        if (!callData[i] || callData[i] == UniversalVarType || callData[i] instanceof TypePromise)
+                            callData[i] = determinedType;
+                    }
+                }
+            }
+        }
         if (node.kind == ts.SyntaxKind.Identifier) {
             let symbol = this.typeChecker.getSymbolAtLocation(node);
             if (!symbol) {
@@ -274,6 +290,7 @@ export class TypeHelper {
                 this.variablesData[varPos] = new VariableData();
                 this.variables[varPos].name = node.getText();
                 this.variables[varPos].declaration = <ts.VariableDeclaration>symbol.declarations[0];
+                this.variablesData[varPos].tsType = this.typeChecker.getTypeAtLocation(node);
             }
             let varInfo = this.variables[varPos];
             let varData = this.variablesData[varPos];
@@ -282,7 +299,6 @@ export class TypeHelper {
             if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
                 let varDecl = <ts.VariableDeclaration>node.parent;
                 if (varDecl.name.getText() == node.getText()) {
-                    varData.tsType = this.typeChecker.getTypeAtLocation(varDecl.name);
                     this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                         varData.propertiesAssigned = true;
@@ -296,6 +312,19 @@ export class TypeHelper {
                                 varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
                             }
                         }
+                    }
+                }
+            }
+            else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
+                let funcDecl = <ts.FunctionDeclaration>node.parent.parent;
+                for (let i=0;i<funcDecl.parameters.length;i++)
+                {
+                    if (funcDecl.parameters[i].pos == node.pos) {
+                        let param = funcDecl.parameters[i]; 
+                        varData.parameterIndex = i;
+                        varData.parameterFuncDeclPos = funcDecl.pos + 1;
+                        this.addTypeToVariable(varPos, <ts.Identifier>node, param.initializer);
+                        break;
                     }
                 }
             }
@@ -410,6 +439,21 @@ export class TypeHelper {
 
     private resolvePromisesAndFinalizeTypes() {
         
+        for (let k in this.variablesData)
+        {
+            let funcDeclPos = this.variablesData[+k].parameterFuncDeclPos;
+            let paramIndex = this.variablesData[+k].parameterIndex;
+            if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
+                let type = this.functionCallsData[funcDeclPos][paramIndex];
+                let finalType = !(type instanceof TypePromise) && type;
+                
+                if (type instanceof TypePromise)
+                    finalType = this.getCType(type.associatedNode) || finalType;
+
+                this.variablesData[k].assignmentTypes[this.getTypeString(finalType)] = finalType;
+            }
+        }
+
         let somePromisesAreResolved: boolean;
 
         do {
@@ -594,6 +638,15 @@ export class TypeHelper {
 
         var cap = arrLiteral.elements.length;
         return new ArrayType(elementType, cap, false);
+    }
+
+    private findParentFunction(node: ts.Node)
+    {
+        let parentFunc = node;
+        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
+            parentFunc = parentFunc.parent;
+        }
+        return parentFunc;
     }
 
 }
