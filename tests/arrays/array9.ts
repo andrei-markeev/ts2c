@@ -7,4 +7,5 @@ function tail(arr, pos, max) {
     return tail(arr, pos, max);
 }
 
-console.log(tail([10, 20, 60, 30, 20, 60], 0, 0));
+var res = tail([10, 20, 60, 30, 20, 60], 0, 0);
+console.log(res);

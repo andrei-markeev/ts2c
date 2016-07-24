@@ -1,4 +1,4 @@
-TS = $(sort $(wildcard *.ts))
+TS = $(sort $(wildcard *.ts) $(wildcard */*.ts))
 C = $(TS:.ts=.c)
 ELF = $(TS:.ts=.elf)
 RES = $(TS:.ts=.res)

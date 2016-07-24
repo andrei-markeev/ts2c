@@ -120,7 +120,7 @@ class HeaderFlags {
 
 {functions => {this}\n}
 
-int main() {
+int main(void) {
     {#if gcVarName}
         ARRAY_CREATE({gcVarName}, 2, 0);
     {/if}
