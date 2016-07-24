@@ -25,19 +25,26 @@ class HeaderFlags {
     array_pop: boolean = false;
     gc_iterator: boolean = false;
     dict: boolean = false;
+    str_int16_t_cmp: boolean = false;
+    atoi: boolean = false;
 }
 
 
 @CodeTemplate(`
-{#if headerFlags.strings}
+{#if headerFlags.strings || headerFlags.str_int16_t_cmp}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc}
+{#if headerFlags.malloc || headerFlags.atoi}
     #include <stdlib.h>
+{/if}
+{#if headerFlags.malloc}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf}
     #include <stdio.h>
+{/if}
+{#if headerFlags.str_int16_t_cmp}
+    #include <limits.h>
 {/if}
 
 {#if headerFlags.bool}
@@ -47,7 +54,7 @@ class HeaderFlags {
 {#if headerFlags.bool || headerFlags.js_var}
     typedef unsigned char uint8_t;
 {/if}
-{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array}
+{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}
     typedef int int16_t;
 {/if}
 
@@ -90,6 +97,15 @@ class HeaderFlags {
 {#if headerFlags.dict}
     #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */
     #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
+{/if}
+
+{#if headerFlags.str_int16_t_cmp}
+    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+    int str_int16_t_cmp(char *str, int16_t num) {
+        char numstr[STR_INT16_T_BUFLEN];
+        sprintf(numstr, "%d", num);
+        return strcmp(str, numstr);
+    }
 {/if}
 
 {#if headerFlags.gc_iterator}

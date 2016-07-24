@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, UniversalVarType, PointerVarType} from '../types';
+import {CType, ArrayType, StructType, StringVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
 import {CVariable} from './variable';
@@ -33,7 +33,7 @@ export class ExpressionHelper {
             case ts.SyntaxKind.PostfixUnaryExpression:
                 return new CUnaryExpression(scope, <any>node);
             case ts.SyntaxKind.ConditionalExpression:
-                return new CTernaryExpression(scope, <any>node); 
+                return new CTernaryExpression(scope, <any>node);
             default:
                 return "/* unsupported expression " + node.getText() + " */";
         }
@@ -101,30 +101,72 @@ export class CCallExpression {
 @CodeTemplate(`
 {#if operator}
     {left} {operator} {right}
+{#elseif replacedWithCall}
+    {call}({left}, {right}){callCondition}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`
 )
 class CBinaryExpression {
     public nodeText: string;
-    public operator: ts.SyntaxKind;
+    public operator: string;
+    public replacedWithCall: boolean = false;
+    public call: string;
+    public callCondition: string;
     public left: CExpression;
     public right: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
-        let operatorMap = {};
-        operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
-        operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
-        operatorMap[ts.SyntaxKind.LessThanToken] = '<';
-        operatorMap[ts.SyntaxKind.LessThanEqualsToken] = '<=';
-        operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
-        operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
-        operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
-        operatorMap[ts.SyntaxKind.SlashToken] = '/';
-        operatorMap[ts.SyntaxKind.PlusToken] = '+';
-        operatorMap[ts.SyntaxKind.MinusToken] = '-';
+        let operatorMap: { [token: number]: string } = {};
+        let callReplaceMap: { [token: number]: [string, string] } = {};
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        let left = node.left;
+        let right = node.right;
+        if (leftType == NumberVarType && rightType == NumberVarType) {
+            operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
+            operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
+            operatorMap[ts.SyntaxKind.LessThanToken] = '<';
+            operatorMap[ts.SyntaxKind.LessThanEqualsToken] = '<=';
+            operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
+            operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
+            operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
+            operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
+            operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
+            operatorMap[ts.SyntaxKind.SlashToken] = '/';
+            operatorMap[ts.SyntaxKind.PlusToken] = '+';
+            operatorMap[ts.SyntaxKind.MinusToken] = '-';
+        }
+        else if (leftType == StringVarType && rightType == StringVarType) {
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['strcmp', ' != 0'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['strcmp', ' == 0'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['strcmp', ' == 0'];
+
+            if (callReplaceMap[node.operatorToken.kind])
+                scope.root.headerFlags.strings = true;
+        }
+        else if (leftType == NumberVarType && rightType == StringVarType
+            || leftType == StringVarType && rightType == NumberVarType) {
+            if (leftType == NumberVarType) {
+                right = node.left;
+                left = node.right;
+            }
+
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['str_int16_t_cmp', ' != 0'];
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
+
+            if (callReplaceMap[node.operatorToken.kind])
+                scope.root.headerFlags.str_int16_t_cmp = true;
+        }
+        this.operator = operatorMap[node.operatorToken.kind];
+        if (callReplaceMap[node.operatorToken.kind]) {
+            this.replacedWithCall = true;
+            [this.call, this.callCondition] = callReplaceMap[node.operatorToken.kind];
+        }
         this.left = ExpressionHelper.create(scope, node.left);
         this.right = ExpressionHelper.create(scope, node.right);
-        this.operator = operatorMap[node.operatorToken.kind];
         this.nodeText = node.getText();
     }
 }
@@ -135,22 +177,38 @@ class CBinaryExpression {
     {operand}{operator}
 {#elseif !isPostfix && operator}
     {operator}{operand}
+{#elseif replacedWithCall}
+    {call}({operand}){callCondition}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`
 )
 class CUnaryExpression {
     public nodeText: string;
-    public operator: ts.SyntaxKind;
+    public operator: string;
     public operand: CExpression;
     public isPostfix: boolean;
+    public replacedWithCall: boolean = false;
+    public call: string;
+    public callCondition: string;
     constructor(scope: IScope, node: ts.PostfixUnaryExpression | ts.PrefixUnaryExpression) {
-        let operatorMap = {};
-        operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
-        operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
-        operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
-        this.operand = ExpressionHelper.create(scope, node.operand);
+        let operatorMap: { [token: number]: string } = {};
+        let callReplaceMap: { [token: number]: [string, string] } = {};
+        let type = scope.root.typeHelper.getCType(node.operand);
+        if (type == NumberVarType) {
+            operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
+            operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
+            operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
+            callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi",""];
+            if (callReplaceMap[node.operator])
+                scope.root.headerFlags.atoi = true;
+        }
         this.operator = operatorMap[node.operator];
+        if (callReplaceMap[node.operator]) {
+            this.replacedWithCall = true;
+            [this.call, this.callCondition] = callReplaceMap[node.operator];
+        }
+        this.operand = ExpressionHelper.create(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
     }
@@ -159,10 +217,9 @@ class CUnaryExpression {
 @CodeTemplate(`{condition} ? {whenTrue} : {whenFalse}`)
 class CTernaryExpression {
     public condition: CExpression;
-    public whenTrue: CExpression; 
-    public whenFalse: CExpression; 
-    constructor(scope: IScope, node: ts.ConditionalExpression)
-    {
+    public whenTrue: CExpression;
+    public whenFalse: CExpression;
+    constructor(scope: IScope, node: ts.ConditionalExpression) {
         this.condition = ExpressionHelper.create(scope, node.condition);
         this.whenTrue = ExpressionHelper.create(scope, node.whenTrue);
         this.whenFalse = ExpressionHelper.create(scope, node.whenFalse);
@@ -170,12 +227,11 @@ class CTernaryExpression {
 }
 
 class ArrayLiteralHelper {
-    public static create(scope: IScope, node: ts.ArrayLiteralExpression)
-    {
+    public static create(scope: IScope, node: ts.ArrayLiteralExpression) {
         if (node.elements.length == 0) {
             return "/* Empty array is not supported inside expressions */";
         }
-        
+
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         let tsType = scope.root.typeChecker.getTypeAtLocation(node);
         let elementType = scope.root.typeHelper.getCType(node.elements[0]);
@@ -184,9 +240,8 @@ class ArrayLiteralHelper {
         scope.variables.push(new CVariable(scope, varName, type, false));
 
         scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
-        for (let i=0;i<node.elements.length;i++)
-        {
-            let assignment = new CAssignment(scope, varName, i+"", type, node.elements[i])
+        for (let i = 0; i < node.elements.length; i++) {
+            let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])
             scope.statements.push(assignment);
         }
         return "((void *)" + varName + ")";
@@ -256,7 +311,7 @@ export class CElementAccess {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
-        this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity+"";
+        this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity + "";
         this.isDict = type instanceof StructType && type.isDict;
         this.isStruct = type instanceof StructType && !type.isDict;
         this.nodeText = node.getText();

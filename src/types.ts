@@ -3,6 +3,9 @@ import * as ts from 'typescript';
 export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
 export const PointerVarType = "void *";
+export const StringVarType = "char *";
+export const NumberVarType = "int16_t";
+export const BooleanVarType = "uint8_t";
 type PropertiesDictionary = { [propName: string]: CType };
 
 class TypePromise {
@@ -25,7 +28,7 @@ export class ArrayType {
             elementTypeText = elementType.getText();
         } else {
             if (elementType.isDict)
-                elementTypeText = "void *";
+                elementTypeText = PointerVarType;
             else
                 elementTypeText = elementType.text;
         }
@@ -112,12 +115,12 @@ export class TypeHelper {
     public getCType(node: ts.Node): CType {
         switch (node.kind) {
             case ts.SyntaxKind.NumericLiteral:
-                return "int16_t";
+                return NumberVarType;
             case ts.SyntaxKind.TrueKeyword:
             case ts.SyntaxKind.FalseKeyword:
-                return "int8_t";
+                return BooleanVarType;
             case ts.SyntaxKind.StringLiteral:
-                return "char *";
+                return StringVarType;
             case ts.SyntaxKind.Identifier:
                 {
                     let varInfo = this.getVariableInfo(<ts.Identifier>node);
@@ -139,6 +142,8 @@ export class TypeHelper {
                     let parentObjectType = this.getCType(propAccess.expression);
                     if (parentObjectType instanceof StructType)
                         return parentObjectType.properties[propAccess.name.getText()];
+                    else if (parentObjectType instanceof ArrayType && propAccess.name.getText() == "length")
+                        return NumberVarType;
                     return null;
                 }
             case ts.SyntaxKind.CallExpression:
@@ -155,6 +160,12 @@ export class TypeHelper {
                     return null;
                 }
             default:
+                {
+                    let tsType = this.typeChecker.getTypeAtLocation(node);
+                    let type = tsType && this.convertType(tsType);
+                    if (type != UniversalVarType && type != PointerVarType)
+                        return type;
+                }
                 return null;
         }
     }
@@ -198,18 +209,18 @@ export class TypeHelper {
             return "void";
 
         if (tsType.flags == ts.TypeFlags.String)
-            return "char *";
+            return StringVarType;
         if (tsType.flags == ts.TypeFlags.Number)
-            return "int16_t";
+            return NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean)
-            return "uint8_t";
+            return BooleanVarType;
 
         if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
             return this.generateStructure(tsType, ident);
         }
 
         if (tsType.flags == ts.TypeFlags.Any)
-            return "void *";
+            return PointerVarType;
 
         console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
         return UniversalVarType;
@@ -462,7 +473,7 @@ export class TypeHelper {
 
             for (let k of Object.keys(this.variables).map(k => +k)) {
 
-                let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != "void *" && t != UniversalVarType);
+                let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != PointerVarType && t != UniversalVarType);
                 if (types.length == 1) {
                     let varType = this.variablesData[k].assignmentTypes[types[0]];
                     if (varType instanceof ArrayType) {
@@ -483,7 +494,7 @@ export class TypeHelper {
                     this.variables[k].type = varType;
                 }
                 else if (types.length == 0) {
-                    this.variables[k].type = "void *";
+                    this.variables[k].type = PointerVarType;
                 }
                 else {
                     this.variables[k].requiresAllocation = true;
