@@ -88,8 +88,8 @@ class CPrintf {
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, "int16_t"));
             scope.root.headerFlags.int16_t = true;
-            this.arraySize = varType.isDynamicArray ? accessor + ".size" : varType.capacity + "";
-            let elementAccessor = accessor + (varType.isDynamicArray ? ".data" : "") + "[" + this.iteratorVarName + "]";
+            this.arraySize = varType.isDynamicArray ? accessor + "->size" : varType.capacity + "";
+            let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
             let opts = { quotedString: true, indent: this.INDENT + "    " };
             this.elementPrintfs = [
                 new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)

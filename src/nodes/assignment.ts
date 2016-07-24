@@ -24,7 +24,7 @@ export class AssignmentHelper {
 {#elseif isDict}
     DICT_SET({accessor}, {argumentExpression}, {expression});\n
 {#elseif isDynamicArray}
-    {accessor}.data[{argumentExpression}] = {expression};\n
+    {accessor}->data[{argumentExpression}] = {expression};\n
 {#elseif isStaticArray}
     {accessor}[{argumentExpression}] = {expression};\n
 {#else}

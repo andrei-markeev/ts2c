@@ -7,13 +7,12 @@ import {AssignmentHelper, CAssignment} from './assignment';
 @CodeTemplate(`
 {#if needAllocateArray}
     ARRAY_CREATE({varName}, {initialCapacity}, {size});
-{/if}
-{#if needAllocate}
+{#elseif needAllocate}
     {varName} = malloc(sizeof(*{varName}));
     assert({varName} != NULL);
 {/if}
 {#if gcVarName && needAllocateArray}
-    ARRAY_PUSH({gcVarName}, {varName}.data);
+    ARRAY_PUSH({gcVarName}, {varName}->data);
 {/if}
 {#if gcVarName && needAllocate}
     ARRAY_PUSH({gcVarName}, {varName});
@@ -37,7 +36,7 @@ export class CVariableDeclaration {
         scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
         this.varName = varInfo.name;
         this.needAllocateArray = varType instanceof ArrayType && varInfo.requiresAllocation;
-        this.needAllocate = !(varType instanceof ArrayType) && varInfo.requiresAllocation;
+        this.needAllocate = varInfo.requiresAllocation;
         this.gcVarName = scope.root.memoryManager.getGCVariableForVariable(varDecl, varDecl.pos);
         this.isStruct = varType instanceof StructType && !varType.isDict;
         this.isDict = varType instanceof StructType && varType.isDict;
@@ -61,9 +60,9 @@ export class CVariableDeclaration {
 @CodeTemplate(`
 {destructors {    }=> free({this});\n}
 {#if gcVarName}
-    for (_gc_i = 0; _gc_i < {gcVarName}.size; _gc_i++)
-            free({gcVarName}.data[_gc_i]);
-        free({gcVarName}.data);
+    for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)
+            free({gcVarName}->data[_gc_i]);
+        free({gcVarName}->data);
 {/if}`
 )
 export class CVariableDestructors {
@@ -71,9 +70,14 @@ export class CVariableDestructors {
     public destructors: string[];
     constructor(scope: IScope, node: ts.Node) {
         this.gcVarName = scope.root.memoryManager.getGCVariableForScope(node);
-        this.destructors = scope.root.memoryManager.getDestructorsForScope(node)
+        this.destructors = [];
+        scope.root.memoryManager.getDestructorsForScope(node)
             .map(d => scope.root.typeHelper.getVariableInfo(d))
-            .map(dv => (dv.type instanceof ArrayType) ? dv.name + ".data" : dv.name)
+            .forEach(dv => {
+                if (dv.type instanceof ArrayType)
+                    this.destructors.push(dv.name + "->data");
+                this.destructors.push(dv.name);
+            })
     }
 }
 

@@ -105,6 +105,13 @@ export class TypeHelper {
 
     public getCType(node: ts.Node): CType {
         switch (node.kind) {
+            case ts.SyntaxKind.NumericLiteral:
+                return "int16_t";
+            case ts.SyntaxKind.TrueKeyword:
+            case ts.SyntaxKind.FalseKeyword:
+                return "int8_t";
+            case ts.SyntaxKind.StringLiteral:
+                return "char *";
             case ts.SyntaxKind.Identifier:
                 {
                     let varInfo = this.getVariableInfo(<ts.Identifier>node);

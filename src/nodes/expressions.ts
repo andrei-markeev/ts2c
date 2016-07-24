@@ -50,7 +50,7 @@ export interface CExpression { }
     {funcName}({arrayAccess}{arguments => , {this}})
 {/if}
 {#if type == "array_size"}
-    {arrayAccess}.size
+    {arrayAccess}->size
 {/if}
 {#if type == "printf"}
     {printfCalls}
@@ -166,7 +166,7 @@ class ArrayLiteralHelper {
         
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         let tsType = scope.root.typeChecker.getTypeAtLocation(node);
-        let elementType = scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(node.elements[0]));
+        let elementType = scope.root.typeHelper.getCType(node.elements[0]);
         let arrSize = node.elements.length;
         let type = new ArrayType(elementType, node.elements.length, true);
         scope.variables.push(new CVariable(scope, varName, type, false));
@@ -185,9 +185,9 @@ class ArrayLiteralHelper {
 {#if isSimpleVar || argumentExpression == null}
     {elementAccess}
 {#elseif isDynamicArray && argumentExpression == 'length'}
-    {elementAccess}.size
+    {elementAccess}->size
 {#elseif isDynamicArray}
-    {elementAccess}.data[{argumentExpression}]
+    {elementAccess}->data[{argumentExpression}]
 {#elseif isStaticArray}
     {elementAccess}[{argumentExpression}]
 {#elseif isStruct}

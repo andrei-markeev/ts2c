@@ -99,9 +99,9 @@ export class CForStatement
 
 @CodeTemplate(`
 {#if isDynamicArray}
-    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}.size; {iteratorVarName}++)
+    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)
     {
-        {init} = {arrayAccess}.data[{iteratorVarName}];
+        {init} = {arrayAccess}->data[{iteratorVarName}];
         {statements {    }=> {this}}
     }
 {#else}

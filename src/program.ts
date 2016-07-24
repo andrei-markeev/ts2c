@@ -67,26 +67,29 @@ class HeaderFlags {
         int16_t size;\\
         int16_t capacity;\\
         T *data;\\
+    } *
+    #define ARRAY_CREATE(array, init_capacity, init_size) {\\
+        array = malloc(sizeof(*array)); \\
+        array->data = malloc(init_capacity * sizeof(*array->data)); \\
+        assert(array->data != NULL); \\
+        array->capacity = init_capacity; \\
+        array->size = init_size; \\
     }
-    #define ARRAY_CREATE(array, init_capacity, init_size) \\
-        array.data = malloc(init_capacity * sizeof(*array.data)); \\
-        assert(array.data != NULL); \\
-        array.capacity = init_capacity; \\
-        array.size = init_size;
-    #define ARRAY_PUSH(array, item) \\
-        if (array.size == array.capacity) {  \\
-            array.capacity *= 2;  \\
-            array.data = realloc(array.data, array.capacity * sizeof(*array.data)); \\
+    #define ARRAY_PUSH(array, item) {\\
+        if (array->size == array->capacity) {  \\
+            array->capacity *= 2;  \\
+            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\
         }  \\
-        array.data[array.size++] = item;
+        array->data[array->size++] = item; \\
+    }
 {/if}
 {#if headerFlags.array_pop}
-	#define ARRAY_POP(a) (a.size != 0 ? a.data[--a.size] : 0)
+	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 {/if}
 
 {#if headerFlags.dict}
-    #define DICT_GET(dict, prop) dict_not_supported
-    #define DICT_SET(dict, prop, value) dict_not_supported
+    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */
+    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
 {/if}
 
 {#if headerFlags.gc_iterator}
