@@ -26,7 +26,9 @@ interface PrintfOptions
 }
 
 @CodeTemplate(`
-{#if isQuotedCString}
+{#if isStringLiteral}
+    printf("{accessor}{CR}");
+{#elseif isQuotedCString}
     printf("{propPrefix}\\"%s\\"{CR}", {accessor});
 {#elseif isCString}
     printf("%s{CR}", {accessor});
@@ -54,6 +56,7 @@ interface PrintfOptions
 `)
 class CPrintf {
 
+    public isStringLiteral: boolean = false;
     public isQuotedCString: boolean = false;
     public isCString: boolean = false;
     public isInteger: boolean = false;
@@ -69,10 +72,14 @@ class CPrintf {
     public INDENT: string = '';
 
     constructor(scope: IScope, printNode: ts.Node, public accessor: string, varType: CType, options: PrintfOptions) {
+        this.isStringLiteral = varType == 'char *' && printNode.kind == ts.SyntaxKind.StringLiteral;
         this.isQuotedCString = varType == 'char *' && options.quotedString;
         this.isCString = varType == 'char *' && !options.quotedString;
         this.isInteger = varType == 'int16_t';
         this.isBoolean = varType == 'uint8_t';
+
+        if (this.isStringLiteral)
+            this.accessor = this.accessor.slice(1,-1);
 
         if (options.emitCR)
             this.CR = "\\n";

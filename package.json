@@ -1,0 +1,28 @@
+{
+  "name": "ts2c",
+  "version": "1.0.0",
+  "description": "TypeScript/JavaScript to C transpiler",
+  "main": "ts2c.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "typescript": "^1.8.10"
+  },
+  "devDependencies": {
+    "browserify": "^13.0.1",
+    "browserify-shim": "^3.8.12"
+  },
+  "browserify": {
+    "transform": [ "browserify-shim" ]
+  },
+  "browserify-shim": {
+    "typescript": "global:ts"
+  },
+  "scripts": {
+    "build": "browserify ts2c.js -x typescript > ts2c.bundle.js",
+    "test": "cd tests && make -B"
+  },
+  "author": "Andrei Markeev",
+  "license": "ISC"
+}

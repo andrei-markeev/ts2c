@@ -461,7 +461,8 @@ export class TypeHelper {
                 if (type instanceof TypePromise)
                     finalType = this.getCType(type.associatedNode) || finalType;
 
-                this.variablesData[k].assignmentTypes[this.getTypeString(finalType)] = finalType;
+                if (finalType)
+                    this.variablesData[k].assignmentTypes[this.getTypeString(finalType)] = finalType;
             }
         }
 
