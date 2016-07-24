@@ -7,7 +7,7 @@ import {CElementAccess, CExpression, ExpressionHelper} from './expressions';
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression) {
         let accessor = new CElementAccess(scope, left);
-        let varType = scope.root.typeHelper.getVariableInfo(left).type;
+        let varType = scope.root.typeHelper.getCType(left);
         return new CAssignment(scope, accessor, null, varType, right);
     }
 }

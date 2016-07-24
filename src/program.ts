@@ -68,19 +68,17 @@ class HeaderFlags {
         int16_t capacity;\\
         T *data;\\
     }
-    #define ARRAY_CREATE(array, init_capacity, init_size) { \\
+    #define ARRAY_CREATE(array, init_capacity, init_size) \\
         array.data = malloc(init_capacity * sizeof(*array.data)); \\
         assert(array.data != NULL); \\
         array.capacity = init_capacity; \\
-        array.size = init_size; \\
-    }
-    #define ARRAY_PUSH(array, item) {\\
+        array.size = init_size;
+    #define ARRAY_PUSH(array, item) \\
         if (array.size == array.capacity) {  \\
             array.capacity *= 2;  \\
             array.data = realloc(array.data, array.capacity * sizeof(*array.data)); \\
         }  \\
-        array.data[array.size++] = item; \\
-    }
+        array.data[array.size++] = item;
 {/if}
 {#if headerFlags.array_pop}
 	#define ARRAY_POP(a) (a.size != 0 ? a.data[--a.size] : 0)
@@ -144,7 +142,7 @@ export class CProgram implements IScope {
 
         this.gcVarName = this.memoryManager.getGCVariableForScope(null);
         if (this.gcVarName)
-            this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("ARRAY(void *)", "void *", 0, true)));
+            this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("void *", 0, true)));
 
         tsProgram.getSourceFiles().forEach(source =>
             source.statements.forEach(s => StatementProcessor.process(s, this))

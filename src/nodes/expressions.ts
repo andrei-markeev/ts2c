@@ -47,7 +47,10 @@ export interface CExpression { }
     {funcName}({arguments {, }=> {this}})
 {/if}
 {#if type == "array"}
-    {funcName}({arrayVarName}{arguments => , {this}})
+    {funcName}({arrayAccess}{arguments => , {this}})
+{/if}
+{#if type == "array_size"}
+    {arrayAccess}.size
 {/if}
 {#if type == "printf"}
     {printfCalls}
@@ -56,15 +59,13 @@ export interface CExpression { }
 export class CCallExpression {
     public type: string;
     public funcName: string;
-    public arrayVarName: string;
-    public arrayVarInfo: VariableInfo;
+    public arrayAccess: CElementAccess;
     public arguments: CExpression[];
     public printfCalls: any[];
     constructor(scope: IScope, call: ts.CallExpression) {
         this.type = "call";
         this.funcName = call.expression.getText();
         this.arguments = call.arguments.map(a => ExpressionHelper.create(scope, a));
-        this.arrayVarName = null;
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
             if (this.funcName == "console.log") {
@@ -73,17 +74,23 @@ export class CCallExpression {
                 scope.root.headerFlags.printf = true;
             }
             if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
-                this.type = "array";
-                this.funcName = "ARRAY_PUSH";
-                this.arrayVarInfo = scope.root.typeHelper.getVariableInfo(propAccess.expression);
-                this.arrayVarName = this.arrayVarInfo.name;
+                if (call.parent.kind == ts.SyntaxKind.ExpressionStatement) {
+                    this.type = "array";
+                    this.funcName = "ARRAY_PUSH";
+                    this.arrayAccess = new CElementAccess(scope, propAccess.expression);
+                } else {
+                    // ARRAY_PUSH cannot be used as expression directly, so
+                    // let's make it a separate statement, and replace it's occurence in expression
+                    // with array size
+                    this.type = "array_size";
+                    scope.statements.push(new CCallExpression(scope, call));
+                }
                 scope.root.headerFlags.array = true;
             }
             if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
                 this.type = "array";
                 this.funcName = "ARRAY_POP";
-                this.arrayVarInfo = scope.root.typeHelper.getVariableInfo(propAccess.expression);
-                this.arrayVarName = this.arrayVarInfo.name;
+                this.arrayAccess = new CElementAccess(scope, propAccess.expression);
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_pop = true;
             }
@@ -160,9 +167,11 @@ class ArrayLiteralHelper {
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         let tsType = scope.root.typeChecker.getTypeAtLocation(node);
         let elementType = scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(node.elements[0]));
-        let typeText = "static " + scope.root.typeHelper.getTypeString(elementType) + " {var}[" + node.elements.length + "]";
-        let type = new ArrayType(typeText, elementType, node.elements.length, false);
+        let arrSize = node.elements.length;
+        let type = new ArrayType(elementType, node.elements.length, true);
         scope.variables.push(new CVariable(scope, varName, type, false));
+
+        scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
         for (let i=0;i<node.elements.length;i++)
         {
             let assignment = new CAssignment(scope, varName, i+"", type, node.elements[i])
@@ -198,14 +207,14 @@ export class CElementAccess {
     public argumentExpression: CExpression = null;
     public nodeText: string;
     constructor(scope: IScope, node: ts.Node) {
-        let varInfo: VariableInfo = null;
+        let type: CType = null;
 
         if (node.kind == ts.SyntaxKind.Identifier) {
-            varInfo = scope.root.typeHelper.getVariableInfo(node);
+            type = scope.root.typeHelper.getCType(node);
             this.elementAccess = node.getText();
         } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
-            varInfo = scope.root.typeHelper.getVariableInfo(propAccess.expression);
+            type = scope.root.typeHelper.getCType(propAccess.expression);
             if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
                 this.elementAccess = propAccess.expression.getText();
             else
@@ -213,7 +222,7 @@ export class CElementAccess {
             this.argumentExpression = propAccess.name.getText();
         } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>node;
-            varInfo = scope.root.typeHelper.getVariableInfo(elemAccess.expression);
+            type = scope.root.typeHelper.getCType(elemAccess.expression);
             if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
                 this.elementAccess = elemAccess.expression.getText();
             else
@@ -228,7 +237,6 @@ export class CElementAccess {
                 this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
         }
 
-        let type = varInfo && varInfo.type;
         this.isSimpleVar = typeof type === 'string';
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;

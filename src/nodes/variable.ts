@@ -28,11 +28,11 @@ export class CVariableDeclaration {
     public needAllocate: boolean;
     public isStruct: boolean;
     public isDict: boolean;
-    public initializer: CAssignment;
+    public initializer: CAssignment | string = '';
     public gcVarName: string;
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
-        let varInfo = scope.root.typeHelper.getVariableInfo(varDecl.name);
+        let varInfo = scope.root.typeHelper.getVariableInfo(<ts.Identifier>varDecl.name);
         let varType = varInfo.type;
         scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
         this.varName = varInfo.name;
@@ -51,10 +51,10 @@ export class CVariableDeclaration {
         
         if (this.needAllocate || this.needAllocateArray)
             scope.root.headerFlags.malloc = true;
-        if (this.gcVarName || this.needAllocateArray) {
+        if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
+        if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
-        }
     }
 }
 

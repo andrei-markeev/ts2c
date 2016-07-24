@@ -7,17 +7,11 @@ import {CVariable} from './variable';
 
 export class PrintfHelper {
     public static create(scope: IScope, printNode: ts.Expression) {
-        let varInfo = scope.root.typeHelper.getVariableInfo(printNode);
+        let type = scope.root.typeHelper.getCType(printNode);
         let nodeExpression = ExpressionHelper.create(scope, printNode);
         let accessor = nodeExpression["resolve"] ? nodeExpression["resolve"]() : nodeExpression;
         let options = {
             emitCR: true
-        }
-        let type = varInfo && varInfo.type || scope.root.typeHelper.convertType(scope.root.typeChecker.getTypeAtLocation(printNode));
-        if (printNode.kind == ts.SyntaxKind.CallExpression) {
-            let call = new CCallExpression(scope, <any>printNode);
-            if (call.type == 'array' && call.funcName == 'ARRAY_POP')
-                type = (<ArrayType>call.arrayVarInfo.type).elementType;
         }
         return new CPrintf(scope, printNode, accessor, type, options);
     }
@@ -28,6 +22,7 @@ interface PrintfOptions
     emitCR?: boolean;
     quotedString?: boolean;
     propName?: string; 
+    indent?: string;
 }
 
 @CodeTemplate(`
@@ -43,16 +38,16 @@ interface PrintfOptions
     printf("{propPrefix}%s", {accessor} ? "true{CR}" : "false{CR}");
 {#elseif isStruct}
     printf("{propPrefix}{ ");
-    {elementPrintfs {    printf(", ");\n    }=> {this}}
-    printf(" }{CR}");
+    {INDENT}{elementPrintfs {    printf(", ");\n    }=> {this}}
+    {INDENT}printf(" }{CR}");
 {#elseif isArray}
     printf("{propPrefix}[ ");
-    for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
-        if ({iteratorVarName} != 0)
-            printf(", ");
-        {elementPrintfs}
-    }
-    printf(" ]{CR}");
+    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
+    {INDENT}    if ({iteratorVarName} != 0)
+    {INDENT}        printf(", ");
+    {INDENT}    {elementPrintfs}
+    {INDENT}}
+    {INDENT}printf(" ]{CR}");
 {#else}
     printf(/* Unsupported printf expression */);
 {/if}
@@ -71,6 +66,7 @@ class CPrintf {
     public elementPrintfs: CPrintf[] = [];
     public propPrefix: string = '';
     public CR: string = '';
+    public INDENT: string = '';
 
     constructor(scope: IScope, printNode: ts.Node, public accessor: string, varType: CType, options: PrintfOptions) {
         this.isQuotedCString = varType == 'char *' && options.quotedString;
@@ -84,6 +80,9 @@ class CPrintf {
         if (options.propName)
             this.propPrefix = options.propName + ": ";
 
+        if (options.indent)
+            this.INDENT = options.indent;
+
         if (varType instanceof ArrayType) {
             this.isArray = true;
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
@@ -91,13 +90,17 @@ class CPrintf {
             scope.root.headerFlags.int16_t = true;
             this.arraySize = varType.isDynamicArray ? accessor + ".size" : varType.capacity + "";
             let elementAccessor = accessor + (varType.isDynamicArray ? ".data" : "") + "[" + this.iteratorVarName + "]";
-            this.elementPrintfs = [new CPrintf(scope, printNode, elementAccessor, varType.elementType, { quotedString: true })];
+            let opts = { quotedString: true, indent: this.INDENT + "    " };
+            this.elementPrintfs = [
+                new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
+            ];
         }
         else if (varType instanceof StructType) {
             this.isStruct = true;
             for (let k in varType.properties) {
                 let propAccessor = varType.isDict ? "DICT_GET(" + accessor + ", \"" + k + "\")" : accessor + "->" + k;
-                this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], { quotedString: true, propName: k }));
+                let opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
+                this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], opts));
             }
         }
     }

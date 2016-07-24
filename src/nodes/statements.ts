@@ -98,22 +98,31 @@ export class CForStatement
 }
 
 @CodeTemplate(`
-for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
-{
-    {init} = {arrayAccess}[{iteratorVarName}];
-    {statements {    }=> {this}}
-}
+{#if isDynamicArray}
+    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}.size; {iteratorVarName}++)
+    {
+        {init} = {arrayAccess}.data[{iteratorVarName}];
+        {statements {    }=> {this}}
+    }
+{#else}
+    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)
+    {
+        {init} = {arrayAccess}[{iteratorVarName}];
+        {statements {    }=> {this}}
+    }
+{/if}
 `)
 export class CForOfStatement implements IScope
 {
     public init: CExpression;
     public iteratorVarName: string;
-    public arraySize: string;
-    public arrayAccess: string;
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public parent: IScope;
     public root: CProgram;
+    public isDynamicArray: boolean;
+    public arrayAccess: CElementAccess;
+    public arrayCapacity: string;
     constructor(scope: IScope, node: ts.ForOfStatement)
     {
         this.parent = scope;
@@ -121,10 +130,12 @@ export class CForOfStatement implements IScope
         this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, "int16_t"));
         scope.root.headerFlags.int16_t = true;
-        let arrayVarInfo = scope.root.typeHelper.getVariableInfo(node.expression);
-        let arrayVarType = arrayVarInfo && arrayVarInfo.type as ArrayType;
-        this.arraySize = arrayVarType.isDynamicArray ? arrayVarInfo.name + ".size" : (<ArrayType>arrayVarInfo.type).capacity + "";
-        this.arrayAccess = arrayVarInfo.name + (arrayVarType.isDynamicArray ? ".data" : "");
+        this.arrayAccess = new CElementAccess(scope, node.expression);
+        let arrayVarType = scope.root.typeHelper.getCType(node.expression);
+        if (arrayVarType && arrayVarType instanceof ArrayType) {
+            this.isDynamicArray = arrayVarType.isDynamicArray;
+            this.arrayCapacity = arrayVarType.capacity+"";
+        }
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declInit = (<ts.VariableDeclarationList>node.initializer).declarations[0];
             new CVariableDeclaration(scope, declInit);
@@ -193,12 +204,18 @@ export class StatementProcessor {
             case ts.SyntaxKind.ForOfStatement:
                 StatementProcessor.pushStatements(scope, <any>new CForOfStatement(scope, <ts.ForOfStatement>node));
                 break;
+            case ts.SyntaxKind.Block:
+                for (let s of (<ts.Block>node).statements)
+                    StatementProcessor.process(s, scope);
+                break;
             default:
                 scope.statements.push("/* Unsupported statement: " + node.getText().replace(/[\n\s]+/g,' ') + " */;\n");
         }
     }
     private static pushStatements(scope: IScope, resolvableValue: IResolvable) {
         let result = resolvableValue.resolve();
+        if (result == '')
+            return;
         if (result.search(/[;}]\n$/) > -1) {
             for (let line of result.split('\n'))
                 if (line != '')
