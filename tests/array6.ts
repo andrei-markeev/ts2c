@@ -1,3 +1,4 @@
+// Test correctly determining array type after initial assignment
 var array1 = [];
 array1.push("Hello");
 console.log(array1);

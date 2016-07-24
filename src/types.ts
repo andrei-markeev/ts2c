@@ -4,11 +4,13 @@ export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
 type PropertiesDictionary = { [propName: string]: CType };
 
-export class ElementTypePromise {
+class TypePromise {
     public resolved: boolean = false;
+    public associatedProperty: string;
+    public arrayOf: boolean = false;
     constructor(
-        public ident: ts.Identifier,
-        public argumentExpr: ts.Node
+        public associatedNode: ts.Node,
+        public element: string | boolean
     ) { }
 }
 
@@ -64,7 +66,7 @@ export class VariableInfo {
 class VariableData {
     tsType: ts.Type;
     assignmentTypes: { [type: string]: CType } = {};
-    typePromises: ElementTypePromise[] = [];
+    typePromises: TypePromise[] = [];
     addedProperties: PropertiesDictionary = {};
     propertiesAssigned: boolean = false;
     isDynamicArray: boolean;
@@ -186,8 +188,8 @@ export class TypeHelper {
     }
 
     /** Convert ts.Type to CType */
-    /** This is a simplistic implementation: when possible, use getVariableInfo instead. */
-    public convertType(tsType: ts.Type, ident?: ts.Identifier): CType {
+    /** Used mostly during type preprocessing stage */
+    private convertType(tsType: ts.Type, ident?: ts.Identifier): CType {
         if (!tsType || tsType.flags == ts.TypeFlags.Void)
             return "void";
 
@@ -290,9 +292,8 @@ export class TypeHelper {
                         let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
                         if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
                             let forOfInitializer = <ts.VariableDeclarationList>forOfStatement.initializer;
-                            if (forOfInitializer.declarations[0].pos == varDecl.pos
-                                && forOfStatement.expression.kind == ts.SyntaxKind.Identifier) {
-                                varData.typePromises.push(new ElementTypePromise(<ts.Identifier>forOfStatement.expression, null));
+                            if (forOfInitializer.declarations[0].pos == varDecl.pos) {
+                                varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
                             }
                         }
                     }
@@ -315,25 +316,38 @@ export class TypeHelper {
                     if (binExpr.left.pos == propAccess.pos) {
                         varData.propertiesAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
-                        if (!(determinedType instanceof ElementTypePromise))
+                        if (!(determinedType instanceof TypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
                     }
                 }
                 if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
                     varData.isDynamicArray = true;
-                    let determinedType: CType | ElementTypePromise = UniversalVarType;
+                    let determinedType: CType | TypePromise = UniversalVarType;
                     if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                         let call = <ts.CallExpression>propAccess.parent;
                         if (call.arguments.length == 1)
                             determinedType = this.determineType(<ts.Identifier>propAccess.expression, call.arguments[0]);
                     }
-                    if (!(determinedType instanceof ElementTypePromise)) {
+                    if (determinedType instanceof TypePromise) {
+                        determinedType.arrayOf = true;
+                        varData.typePromises.push(determinedType)
+                    }
+                    else {
                         if (determinedType instanceof ArrayType)
                             determinedType.isDynamicArray = true;
-                        for (let atKey in varData.assignmentTypes) {
-                            let at = varData.assignmentTypes[atKey];
-                            if (at instanceof ArrayType && at.elementType == UniversalVarType)
-                                at.elementType = determinedType;
+                        
+                        let dtString = this.getTypeString(determinedType);
+                        let found = false;
+                        for (let tk of Object.keys(varData.assignmentTypes))
+                        {
+                            let at = varData.assignmentTypes[tk];
+                            if (at instanceof ArrayType && this.getTypeString(at.elementType) == dtString)
+                                found = true;
+                        }
+
+                        if (!found) {
+                            let arrayOfType = new ArrayType(determinedType, 0, true);
+                            varData.assignmentTypes[arrayOfType.getText()] = arrayOfType;
                         }
                     }
                 }
@@ -344,7 +358,7 @@ export class TypeHelper {
             else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
                 let elemAccess = <ts.ElementAccessExpression>node.parent;
                 if (elemAccess.expression.pos == node.pos) {
-                    let determinedType: CType | ElementTypePromise = UniversalVarType;
+                    let determinedType: CType | TypePromise = UniversalVarType;
                     let isLeftHandSide = false;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
@@ -357,13 +371,21 @@ export class TypeHelper {
 
                     if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                         let propName = elemAccess.argumentExpression.getText().slice(1, -1);
+                        if (determinedType instanceof TypePromise) {
+                            determinedType.associatedProperty = propName;
+                            varData.typePromises.push(determinedType);
+                        }
                         varData.addedProperties[propName] = varData.addedProperties[propName] || UniversalVarType;
-                        if (!(determinedType instanceof ElementTypePromise))
+                        if (!(determinedType instanceof TypePromise) && varData.addedProperties[propName] == UniversalVarType)
                             varData.addedProperties[propName] = determinedType;
 
                     }
                     else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
-                        if (!(determinedType instanceof ElementTypePromise)) {
+                        if (determinedType instanceof TypePromise) {
+                            determinedType.arrayOf = true;
+                            varData.typePromises.push(determinedType);
+                        }
+                        else {
                             for (let atKey in varData.assignmentTypes) {
                                 let at = varData.assignmentTypes[atKey];
                                 if (at instanceof ArrayType && at.elementType == UniversalVarType)
@@ -378,7 +400,7 @@ export class TypeHelper {
             else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
                 let forOfStatement = <ts.ForOfStatement>node.parent;
                 if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
-                    varData.typePromises.push(new ElementTypePromise(<ts.Identifier>forOfStatement.expression, null));
+                    varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
                 }
             }
         }
@@ -387,37 +409,14 @@ export class TypeHelper {
 
 
     private resolvePromisesAndFinalizeTypes() {
-        let firstPass = true;
-        let somePromisesAreResolved;
+        
+        let somePromisesAreResolved: boolean;
+
         do {
+
             somePromisesAreResolved = false;
 
             for (let k of Object.keys(this.variables).map(k => +k)) {
-
-                if (this.variablesData[k].typePromises.length > 0) {
-                    for (let promise of this.variablesData[k].typePromises.filter(p => !p.resolved)) {
-                        let accessVarInfo = this.getVariableInfo(promise.ident);
-                        if (accessVarInfo != null) {
-                            promise.resolved = true;
-                            somePromisesAreResolved = true;
-                            let accessVarType = accessVarInfo.type;
-                            if (accessVarType instanceof StructType) {
-                                if (promise.argumentExpr.kind == ts.SyntaxKind.StringLiteral) {
-                                    let propType = accessVarType.properties[promise.argumentExpr.getText().slice(1, -1)];
-                                    if (propType instanceof StructType)
-                                        this.variablesData[k].assignmentTypes[propType.text] = propType;
-                                    else if (propType instanceof ArrayType)
-                                        this.variablesData[k].assignmentTypes[propType.getText()] = propType;
-                                    else
-                                        this.variablesData[k].assignmentTypes[propType] = propType;
-                                }
-                            }
-                            else if (accessVarType instanceof ArrayType) {
-                                this.variablesData[k].assignmentTypes[this.getTypeString(accessVarType.elementType)] = accessVarType.elementType;
-                            }
-                        }
-                    }
-                }
 
                 let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != "void *" && t != UniversalVarType);
                 if (types.length == 1) {
@@ -431,7 +430,9 @@ export class TypeHelper {
                     }
                     if (varType instanceof StructType) {
                         for (let addPropKey in this.variablesData[k].addedProperties) {
-                            varType.properties[addPropKey] = this.variablesData[k].addedProperties[addPropKey];
+                            let addPropType = this.variablesData[k].addedProperties[addPropKey];
+                            if (!(addPropType instanceof TypePromise))
+                                varType.properties[addPropKey] = addPropType;
                         }
                         varType.isDict = this.variablesData[k].isDict;
                     }
@@ -444,20 +445,62 @@ export class TypeHelper {
                     this.variables[k].requiresAllocation = true;
                     this.variables[k].type = UniversalVarType;
                 }
-            }
 
-            if (firstPass) {
-                firstPass = false;
-                somePromisesAreResolved = true;
+                somePromisesAreResolved = somePromisesAreResolved || this.tryResolvePromises(k);
+
             }
 
         } while (somePromisesAreResolved);
 
     }
 
+    private tryResolvePromises(varPos: number)
+    {
+        let somePromisesAreResolved = false;
+
+        if (this.variablesData[varPos].typePromises.length > 0) {
+            let promises = this.variablesData[varPos].typePromises.filter(p => !p.resolved);
+            for (let promise of promises) {
+                let resolvedType = this.getCType(promise.associatedNode);
+                if (resolvedType != null) {
+                    let finalType = resolvedType;
+                    promise.resolved = true;
+                    somePromisesAreResolved = true;
+                    if (promise.arrayOf)
+                        finalType = new ArrayType(resolvedType, 0, true); 
+                    else if (resolvedType instanceof StructType && promise.element) {
+                        let propName = promise.element;
+                        if (typeof propName === 'string') {
+                            finalType = resolvedType.properties[propName];
+                        }
+                    }
+                    else if (resolvedType instanceof ArrayType && promise.element) {
+                        finalType = resolvedType.elementType;
+                    }
+
+                    if (promise.associatedProperty) {
+                        this.variablesData[varPos].addedProperties[promise.associatedProperty] = finalType;
+                    }
+                    else {
+                        if (finalType instanceof StructType)
+                            this.variablesData[varPos].assignmentTypes[finalType.text] = finalType;
+                        else if (finalType instanceof ArrayType)
+                            this.variablesData[varPos].assignmentTypes[finalType.getText()] = finalType;
+                        else
+                            this.variablesData[varPos].assignmentTypes[finalType] = finalType;
+                    }
+
+                }
+            }
+        }
+
+        return somePromisesAreResolved;
+        
+    }
+
     private addTypeToVariable(varPos: number, left: ts.Identifier, right: ts.Node) {
         let determinedType = this.determineType(left, right);
-        if (determinedType instanceof ElementTypePromise)
+        if (determinedType instanceof TypePromise)
             this.variablesData[varPos].typePromises.push(determinedType);
         else if (determinedType instanceof ArrayType)
             this.variablesData[varPos].assignmentTypes[determinedType.getText()] = determinedType;
@@ -468,21 +511,20 @@ export class TypeHelper {
 
     }
 
-    private determineType(left: ts.Identifier, right: ts.Node): CType | ElementTypePromise {
+    private determineType(left: ts.Identifier, right: ts.Node): CType | TypePromise {
         let tsType = right ? this.typeChecker.getTypeAtLocation(right) : this.typeChecker.getTypeAtLocation(left);
         if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression)
             return this.generateStructure(tsType, left);
         else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
             return this.determineArrayType(<ts.ArrayLiteralExpression>right);
-        else if (right && right.kind == ts.SyntaxKind.ElementAccessExpression) {
-            let accessExpr = <ts.ElementAccessExpression>right;
-            if (accessExpr.expression.kind == ts.SyntaxKind.Identifier)
-                return new ElementTypePromise(<ts.Identifier>accessExpr.expression, accessExpr.argumentExpression);
-            else
-                return this.convertType(tsType, left);
+        else if (right && (right.kind == ts.SyntaxKind.PropertyAccessExpression
+            || right.kind == ts.SyntaxKind.ElementAccessExpression
+            || right.kind == ts.SyntaxKind.Identifier)) {
+            return new TypePromise(right, false);
         }
-        else
+        else {
             return this.convertType(tsType, left);
+        }
     }
 
     private generateStructure(tsType: ts.Type, ident?: ts.Identifier): StructType {
@@ -508,11 +550,13 @@ export class TypeHelper {
         let userStructCode = this.getStructureBodyString(userStructInfo);
 
         var found = false;
-        for (var s in this.userStructs) {
-            if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode) {
-                structName = s;
-                found = true;
-                break;
+        if (Object.keys(userStructInfo).length > 0) {
+            for (var s in this.userStructs) {
+                if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode) {
+                    structName = s;
+                    found = true;
+                    break;
+                }
             }
         }
 
@@ -541,12 +585,12 @@ export class TypeHelper {
         return userStructCode;
     }
 
-    private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
+    private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType | string {
         var elementType;
         if (arrLiteral.elements.length > 0)
             elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
         else
-            elementType = UniversalVarType;
+            return UniversalVarType;
 
         var cap = arrLiteral.elements.length;
         return new ArrayType(elementType, cap, false);

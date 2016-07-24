@@ -1,0 +1,5 @@
+[ { obj2: { array2: [ "Hello", "world!" ] } } ]
+{ obj2: { array2: [ "Hello", "world!" ] } }
+{ array2: [ "Hello", "world!" ] }
+[ "Hello", "world!" ]
+world!

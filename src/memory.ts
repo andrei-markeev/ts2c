@@ -75,6 +75,11 @@ export class MemoryManager {
         while (queue.length > 0) {
             let node = queue.shift();
 
+            let nodeVarInfo = this.typeHelper.getVariableInfo(node);
+            if (!nodeVarInfo) {
+                console.log("WARNING: Cannot find references for " + node.getText());
+                continue;
+            }
             let refs = this.typeHelper.getVariableInfo(node).references;
             let returned = false;
             for (let ref of refs) {

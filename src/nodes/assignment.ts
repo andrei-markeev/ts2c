@@ -17,6 +17,8 @@ export class AssignmentHelper {
     {objInitializers}
 {#elseif isArrayLiteralAssignment}
     {arrInitializers}
+{#elseif isDynamicArray && argumentExpression == null}
+    {accessor} = ((void *){expression});\n
 {#elseif argumentExpression == null}
     {accessor} = {expression};\n
 {#elseif isStruct}

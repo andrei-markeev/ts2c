@@ -177,7 +177,7 @@ class ArrayLiteralHelper {
             let assignment = new CAssignment(scope, varName, i+"", type, node.elements[i])
             scope.statements.push(assignment);
         }
-        return varName;
+        return "((void *)" + varName + ")";
     }
 }
 
@@ -188,6 +188,8 @@ class ArrayLiteralHelper {
     {elementAccess}->size
 {#elseif isDynamicArray}
     {elementAccess}->data[{argumentExpression}]
+{#elseif isStaticArray && argumentExpression == 'length'}
+    {arrayCapacity}
 {#elseif isStaticArray}
     {elementAccess}[{argumentExpression}]
 {#elseif isStruct}
@@ -205,6 +207,7 @@ export class CElementAccess {
     public isDict: boolean = false;
     public elementAccess: CElementAccess | string;
     public argumentExpression: CExpression = null;
+    public arrayCapacity: string;
     public nodeText: string;
     constructor(scope: IScope, node: ts.Node) {
         let type: CType = null;
@@ -240,6 +243,7 @@ export class CElementAccess {
         this.isSimpleVar = typeof type === 'string';
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
+        this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity+"";
         this.isDict = type instanceof StructType && type.isDict;
         this.isStruct = type instanceof StructType && !type.isDict;
         this.nodeText = node.getText();

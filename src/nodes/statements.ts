@@ -101,13 +101,13 @@ export class CForStatement
 {#if isDynamicArray}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)
     {
-        {init} = {arrayAccess}->data[{iteratorVarName}];
+        {init} = {cast}{arrayAccess}->data[{iteratorVarName}];
         {statements {    }=> {this}}
     }
 {#else}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)
     {
-        {init} = {arrayAccess}[{iteratorVarName}];
+        {init} = {cast}{arrayAccess}[{iteratorVarName}];
         {statements {    }=> {this}}
     }
 {/if}
@@ -123,6 +123,7 @@ export class CForOfStatement implements IScope
     public isDynamicArray: boolean;
     public arrayAccess: CElementAccess;
     public arrayCapacity: string;
+    public cast: string = "";
     constructor(scope: IScope, node: ts.ForOfStatement)
     {
         this.parent = scope;
@@ -135,14 +136,20 @@ export class CForOfStatement implements IScope
         if (arrayVarType && arrayVarType instanceof ArrayType) {
             this.isDynamicArray = arrayVarType.isDynamicArray;
             this.arrayCapacity = arrayVarType.capacity+"";
+            let elemType = arrayVarType.elementType;
+            if (elemType instanceof ArrayType && elemType.isDynamicArray)
+                this.cast = "(void *)"; 
         }
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declInit = (<ts.VariableDeclarationList>node.initializer).declarations[0];
+            // this will push the variable declaration to scope.variables
+            // we are not using the return value
             new CVariableDeclaration(scope, declInit);
             this.init = declInit.name.getText();
         }
-        else
+        else {
             this.init = new CElementAccess(scope, node.initializer);
+        }
         StatementProcessor.process(node.statement, this);
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
