@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType} from '../types';
+import {ArrayType, StructType, NumberVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 
 @CodeTemplate(`
@@ -48,6 +48,8 @@ export class CVariableDeclaration {
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
         
+        if (varType == NumberVarType)
+            scope.root.headerFlags.int16_t = true;
         if (this.needAllocate || this.needAllocateArray)
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
@@ -82,17 +84,28 @@ export class CVariableDestructors {
 }
 
 
+interface CVariableOptions {
+    removeStorageSpecifier?: boolean;
+    initializer?: string;
+}
+
 export class CVariable {
     private varString: string;
-    constructor(scope: IScope, name: string, private typeSource, insideStruct = false) {
+    constructor(scope: IScope, name: string, private typeSource, options?: CVariableOptions) {
         let typeString = scope.root.typeHelper.getTypeString(typeSource);
         if (typeString.indexOf('{var}') > -1)
             this.varString = typeString.replace('{var}', name);
         else
             this.varString = typeString + " " + name;
+
+        // root scope, make variables file-scoped by default
+        if (scope.parent == null && this.varString.indexOf('static') != 0)
+            this.varString = 'static ' + this.varString;
         
-        if (insideStruct)
+        if (options && options.removeStorageSpecifier)
             this.varString = this.varString.replace(/^static /,'');
+        if (options && options.initializer)
+            this.varString += " = " + options.initializer;
     }
     resolve() {
         return this.varString;

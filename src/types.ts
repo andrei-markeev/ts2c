@@ -84,6 +84,7 @@ export class TypeHelper {
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
     private functionCallsData: { [funcDeclPos: number]: (CType | TypePromise)[] } = {};
+    private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
 
     constructor(private typeChecker: ts.TypeChecker) {
     }
@@ -159,6 +160,8 @@ export class TypeHelper {
                     }
                     return null;
                 }
+            case ts.SyntaxKind.ArrayLiteralExpression:
+                return this.arrayLiteralsTypes[node.pos];
             default:
                 {
                     let tsType = this.typeChecker.getTypeAtLocation(node);
@@ -558,12 +561,8 @@ export class TypeHelper {
         let determinedType = this.determineType(left, right);
         if (determinedType instanceof TypePromise)
             this.variablesData[varPos].typePromises.push(determinedType);
-        else if (determinedType instanceof ArrayType)
-            this.variablesData[varPos].assignmentTypes[determinedType.getText()] = determinedType;
-        else if (determinedType instanceof StructType)
-            this.variablesData[varPos].assignmentTypes[determinedType.text] = determinedType;
         else
-            this.variablesData[varPos].assignmentTypes[determinedType] = determinedType;
+            this.variablesData[varPos].assignmentTypes[this.getTypeString(determinedType)] = determinedType;
 
     }
 
@@ -648,8 +647,10 @@ export class TypeHelper {
         else
             return UniversalVarType;
 
-        var cap = arrLiteral.elements.length;
-        return new ArrayType(elementType, cap, false);
+        let cap = arrLiteral.elements.length;
+        let type = new ArrayType(elementType, cap, false);
+        this.arrayLiteralsTypes[arrLiteral.pos] = type;
+        return type;
     }
 
     private findParentFunction(node: ts.Node)

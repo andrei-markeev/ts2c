@@ -34,10 +34,10 @@ class HeaderFlags {
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi}
+{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc}
+{#if headerFlags.malloc || headerFlags.array}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf}
@@ -154,7 +154,7 @@ export class CProgram implements IScope {
         this.userStructs = structs.map(s => {
             return {
                 name: s.name,
-                properties: s.properties.map(p => new CVariable(this, p.name, p.type, true))
+                properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
             };
         });
         this.memoryManager.preprocess();

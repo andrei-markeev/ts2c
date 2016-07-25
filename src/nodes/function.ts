@@ -33,7 +33,7 @@ export class CFunction implements IScope {
 
         this.name = funcDecl.name.getText();
         this.returnType = root.typeHelper.getTypeString(signature.getReturnType());
-        this.parameters = signature.parameters.map(p => new CVariable(this, p.name, p));
+        this.parameters = signature.parameters.map(p => new CVariable(this, p.name, p, { removeStorageSpecifier: true }));
         this.variables = [];
 
         this.gcVarName = root.memoryManager.getGCVariableForScope(funcDecl);

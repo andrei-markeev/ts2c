@@ -79,9 +79,9 @@ export class CCallExpression {
                     this.funcName = "ARRAY_PUSH";
                     this.arrayAccess = new CElementAccess(scope, propAccess.expression);
                 } else {
-                    // ARRAY_PUSH cannot be used as expression directly, so
-                    // let's make it a separate statement, and replace it's occurence in expression
-                    // with array size
+                    // ARRAY_PUSH cannot be used as expression directly, because it is a macros
+                    // containing several statements, so let's push it separately into scope
+                    // statements, and replace it's occurence in expression with array size
                     this.type = "array_size";
                     scope.statements.push(new CCallExpression(scope, call));
                 }
@@ -228,23 +228,43 @@ class CTernaryExpression {
 
 class ArrayLiteralHelper {
     public static create(scope: IScope, node: ts.ArrayLiteralExpression) {
-        if (node.elements.length == 0) {
+        let arrSize = node.elements.length;
+        if (arrSize == 0) {
             return "/* Empty array is not supported inside expressions */";
         }
 
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
-        let tsType = scope.root.typeChecker.getTypeAtLocation(node);
-        let elementType = scope.root.typeHelper.getCType(node.elements[0]);
-        let arrSize = node.elements.length;
-        let type = new ArrayType(elementType, node.elements.length, true);
-        scope.variables.push(new CVariable(scope, varName, type, false));
-
-        scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
-        for (let i = 0; i < node.elements.length; i++) {
-            let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])
-            scope.statements.push(assignment);
+        let type = scope.root.typeHelper.getCType(node);
+        if (type instanceof ArrayType)
+        {
+            let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
+            if (!type.isDynamicArray && canUseInitializerList) {
+                let s = "{ ";
+                for (let i = 0; i < arrSize; i++) {
+                    if (i != 0)
+                        s += ", ";
+                    let cExpr = ExpressionHelper.create(scope, node.elements[i]);
+                    s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resove();
+                }
+                s += " }";
+                scope.variables.push(new CVariable(scope, varName, type, { initializer: s }));
+            }
+            else {
+                scope.variables.push(new CVariable(scope, varName, type));
+                if (type.isDynamicArray)
+                {
+                    scope.root.headerFlags.array = true;
+                    scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
+                }
+                for (let i = 0; i < arrSize; i++) {
+                    let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])
+                    scope.statements.push(assignment);
+                }
+            }
+            return type.isDynamicArray ? "((void *)" + varName + ")" : varName;
         }
-        return "((void *)" + varName + ")";
+        else
+            return "/* Unsupported use of array literal expression */";
     }
 }
 
