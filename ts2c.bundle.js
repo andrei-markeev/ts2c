@@ -402,7 +402,8 @@ var CCallExpression = (function () {
     function CCallExpression(scope, call) {
         this.type = "call";
         this.funcName = call.expression.getText();
-        this.arguments = call.arguments.map(function (a) { return ExpressionHelper.create(scope, a); });
+        if (this.funcName != "console.log")
+            this.arguments = call.arguments.map(function (a) { return ExpressionHelper.create(scope, a); });
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             var propAccess = call.expression;
             if (this.funcName == "console.log") {
@@ -443,12 +444,13 @@ exports.CCallExpression = CCallExpression;
 var CBinaryExpression = (function () {
     function CBinaryExpression(scope, node) {
         this.replacedWithCall = false;
+        this.replacedWithVar = false;
         var operatorMap = {};
         var callReplaceMap = {};
         var leftType = scope.root.typeHelper.getCType(node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
-        var left = node.left;
-        var right = node.right;
+        this.left = ExpressionHelper.create(scope, node.left);
+        this.right = ExpressionHelper.create(scope, node.right);
         if (leftType == types_1.NumberVarType && rightType == types_1.NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -470,32 +472,79 @@ var CBinaryExpression = (function () {
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['strcmp', ' == 0'];
             if (callReplaceMap[node.operatorToken.kind])
                 scope.root.headerFlags.strings = true;
+            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                var tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
+                if (this.left["resolve"])
+                    this.left = this.left["resolve"]();
+                if (this.right["resolve"])
+                    this.right = this.right["resolve"]();
+                // TODO: free
+                scope.variables.push(new variable_1.CVariable(scope, tempVarName, "char *"));
+                scope.statements.push(tempVarName + " = malloc(strlen(" + this.left + ") + strlen(" + this.right + ") + 1);\n");
+                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
+                scope.statements.push("strcpy(" + tempVarName + ", " + this.left + ");\n");
+                scope.statements.push("strcat(" + tempVarName + ", " + this.right + ");\n");
+                this.replacedWithVar = true;
+                this.replacementVarName = tempVarName;
+                scope.root.headerFlags.strings = true;
+                scope.root.headerFlags.malloc = true;
+            }
         }
         else if (leftType == types_1.NumberVarType && rightType == types_1.StringVarType
             || leftType == types_1.StringVarType && rightType == types_1.NumberVarType) {
-            if (leftType == types_1.NumberVarType) {
-                right = node.left;
-                left = node.right;
-            }
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
-            if (callReplaceMap[node.operatorToken.kind])
+            if (callReplaceMap[node.operatorToken.kind]) {
                 scope.root.headerFlags.str_int16_t_cmp = true;
+                // str_int16_t_cmp expects certain order of arguments (string, number)
+                if (leftType == types_1.NumberVarType) {
+                    var tmp = this.left;
+                    this.left = this.right;
+                    this.right = tmp;
+                }
+            }
+            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                var tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
+                if (this.left["resolve"])
+                    this.left = this.left["resolve"]();
+                if (this.right["resolve"])
+                    this.right = this.right["resolve"]();
+                // TODO: free
+                var num = leftType == types_1.NumberVarType ? this.left : this.right;
+                var str = leftType == types_1.StringVarType ? this.left : this.right;
+                scope.variables.push(new variable_1.CVariable(scope, tempVarName, "char *"));
+                scope.statements.push(tempVarName + " = malloc(strlen(" + str + ") + STR_INT16_T_BUFLEN + 1);\n");
+                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
+                scope.statements.push(tempVarName + "[0] = '\\0';\n");
+                var strcatNumber = "str_int16_t_cat(" + tempVarName + ", " + num + ");\n";
+                var strcatString = "strcat(" + tempVarName + ", " + str + ");\n";
+                if (leftType == types_1.NumberVarType) {
+                    scope.statements.push(strcatNumber);
+                    scope.statements.push(strcatString);
+                }
+                else {
+                    scope.statements.push(strcatString);
+                    scope.statements.push(strcatNumber);
+                }
+                this.replacedWithVar = true;
+                this.replacementVarName = tempVarName;
+                scope.root.headerFlags.strings = true;
+                scope.root.headerFlags.malloc = true;
+                scope.root.headerFlags.str_int16_t_cat = true;
+            }
         }
         this.operator = operatorMap[node.operatorToken.kind];
         if (callReplaceMap[node.operatorToken.kind]) {
             this.replacedWithCall = true;
             _a = callReplaceMap[node.operatorToken.kind], this.call = _a[0], this.callCondition = _a[1];
         }
-        this.left = ExpressionHelper.create(scope, node.left);
-        this.right = ExpressionHelper.create(scope, node.right);
         this.nodeText = node.getText();
         var _a;
     }
     CBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
+        template_1.CodeTemplate("\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
     ], CBinaryExpression);
     return CBinaryExpression;
 }());
@@ -733,11 +782,11 @@ var CPrintf = (function () {
         this.propPrefix = '';
         this.CR = '';
         this.INDENT = '';
-        this.isStringLiteral = varType == 'char *' && printNode.kind == ts.SyntaxKind.StringLiteral;
-        this.isQuotedCString = varType == 'char *' && options.quotedString;
-        this.isCString = varType == 'char *' && !options.quotedString;
-        this.isInteger = varType == 'int16_t';
-        this.isBoolean = varType == 'uint8_t';
+        this.isStringLiteral = varType == types_1.StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
+        this.isQuotedCString = varType == types_1.StringVarType && options.quotedString;
+        this.isCString = varType == types_1.StringVarType && !options.quotedString;
+        this.isInteger = varType == types_1.NumberVarType;
+        this.isBoolean = varType == types_1.BooleanVarType;
         if (this.isStringLiteral)
             this.accessor = this.accessor.slice(1, -1);
         if (options.emitCR)
@@ -1076,6 +1125,7 @@ var HeaderFlags = (function () {
         this.gc_iterator = false;
         this.dict = false;
         this.str_int16_t_cmp = false;
+        this.str_int16_t_cat = false;
         this.atoi = false;
     }
     return HeaderFlags;
@@ -1109,7 +1159,7 @@ var CProgram = (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_int16_t_cmp}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n    int str_int16_t_cmp(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties => {this};}\n};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {#if gcVarName}\n        ARRAY_CREATE({gcVarName}, 2, 0);\n    {/if}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties => {this};}\n};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {#if gcVarName}\n        ARRAY_CREATE({gcVarName}, 2, 0);\n    {/if}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
     ], CProgram);
     return CProgram;
 }());
@@ -1258,7 +1308,7 @@ function processTemplate(template, args) {
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 exports.UniversalVarType = "struct js_var *";
 exports.PointerVarType = "void *";
-exports.StringVarType = "char *";
+exports.StringVarType = "const char *";
 exports.NumberVarType = "int16_t";
 exports.BooleanVarType = "uint8_t";
 var TypePromise = (function () {
@@ -1570,7 +1620,9 @@ var TypeHelper = (function () {
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
                 var binExpr = node.parent;
-                if (binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.left.getText() == node.getText()) {
+                if (binExpr.left.kind == ts.SyntaxKind.Identifier
+                    && binExpr.left.getText() == node.getText()
+                    && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                     this.addTypeToVariable(varPos, binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                         varData.propertiesAssigned = true;
@@ -1582,7 +1634,7 @@ var TypeHelper = (function () {
                 var propAccess = node.parent;
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     var binExpr = propAccess.parent;
-                    if (binExpr.left.pos == propAccess.pos) {
+                    if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                         varData.propertiesAssigned = true;
                         var determinedType = this.determineType(propAccess.name, binExpr.right);
                         if (!(determinedType instanceof TypePromise))
@@ -1629,7 +1681,7 @@ var TypeHelper = (function () {
                     var isLeftHandSide = false;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         var binExpr = elemAccess.parent;
-                        if (binExpr.left.pos == elemAccess.pos) {
+                        if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                             varData.propertiesAssigned = true;
                             determinedType = this.determineType(elemAccess.expression, binExpr.right);
                             isLeftHandSide = true;
