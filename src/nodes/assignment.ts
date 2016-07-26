@@ -1,8 +1,8 @@
 import * as ts from 'typescript';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType} from '../types';
-import {CElementAccess, CExpression, ExpressionHelper} from './expressions';
+import {CElementAccess, CExpression} from './expressions';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression) {
@@ -68,6 +68,6 @@ export class CAssignment {
             this.arrayLiteralSize = arrLiteral.elements.length;
             this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, this.accessor, ""+i, type, e))
         } else
-            this.expression = ExpressionHelper.create(scope, right);
+            this.expression = CodeTemplateFactory.createForNode(scope, right);
     }
 }

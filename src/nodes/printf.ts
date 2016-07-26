@@ -1,14 +1,14 @@
 import * as ts from 'typescript';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CType, ArrayType, StructType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
 import {IScope} from '../program';
-import {CExpression, CCallExpression, ExpressionHelper} from './expressions';
+import {CExpression, CCallExpression} from './expressions';
 import {CVariable} from './variable';
 
 export class PrintfHelper {
     public static create(scope: IScope, printNode: ts.Expression) {
         let type = scope.root.typeHelper.getCType(printNode);
-        let nodeExpression = ExpressionHelper.create(scope, printNode);
+        let nodeExpression = CodeTemplateFactory.createForNode(scope, printNode);
         let accessor = nodeExpression["resolve"] ? nodeExpression["resolve"]() : nodeExpression;
         let options = {
             emitCR: true
@@ -52,8 +52,7 @@ interface PrintfOptions
     {INDENT}printf(" ]{CR}");
 {#else}
     printf(/* Unsupported printf expression */);
-{/if}
-`)
+{/if}`)
 class CPrintf {
 
     public isStringLiteral: boolean = false;

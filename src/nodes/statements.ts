@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
-import {CodeTemplate, IResolvable} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
 import {ArrayType} from '../types';
-import {CFunction} from './function';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
-import {ExpressionHelper, CExpression, CElementAccess} from './expressions';
+import {CExpression, CElementAccess} from './expressions';
+import {AssignmentHelper} from './assignment';
 
 @CodeTemplate(`
 {#if needBlock}
@@ -17,7 +17,7 @@ import {ExpressionHelper, CExpression, CElementAccess} from './expressions';
     {destructors}
     return {expression};
 {/if}
-`)
+`, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement
 {
     public expression: CExpression;
@@ -25,7 +25,7 @@ export class CReturnStatement
     public destructors: CVariableDestructors;
     constructor(scope: IScope, node: ts.ReturnStatement)
     {
-        this.expression = ExpressionHelper.create(scope, node.expression);
+        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
         this.needBlock = node.parent && (
             node.parent.kind == ts.SyntaxKind.IfStatement
@@ -41,7 +41,7 @@ if ({condition})
     else
     {elseBlock}
 {/if}
-`)
+`, ts.SyntaxKind.IfStatement)
 export class CIfStatement
 {
     public condition: CExpression;
@@ -50,50 +50,52 @@ export class CIfStatement
     public hasElseBlock: boolean;
     constructor(scope: IScope, node: ts.IfStatement)
     {
-        this.thenBlock = new CBlock(scope);
-        this.elseBlock = new CBlock(scope);
+        this.thenBlock = new CBlock(scope, node.thenStatement);
+        this.elseBlock = node.elseStatement && new CBlock(scope, node.elseStatement);
         this.hasElseBlock = !!node.elseStatement;
-        this.condition = ExpressionHelper.create(scope, node.expression);
-        StatementProcessor.process(node.thenStatement, this.thenBlock);
+        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
     }
 }
 
 @CodeTemplate(`
 while ({condition})
-{block}`)
+{block}`, ts.SyntaxKind.WhileStatement)
 export class CWhileStatement
 {
     public condition: CExpression;
     public block: CBlock;
     constructor(scope: IScope, node: ts.WhileStatement)
     {
-        this.block = new CBlock(scope);
-        this.condition = ExpressionHelper.create(scope, node.expression);
-        StatementProcessor.process(node.statement, this.block);
+        this.block = new CBlock(scope, node.statement);
+        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
     }
 }
 
 @CodeTemplate(`
+{#if varDecl}
+    {varDecl}
+{/if}
 for ({init};{condition};{increment})
-{block}`)
+{block}`, ts.SyntaxKind.ForStatement)
 export class CForStatement
 {
     public init: CExpression;
     public condition: CExpression;
     public increment: CExpression;
     public block: CBlock;
+    public varDecl: CVariableDeclaration = null;
     constructor(scope: IScope, node: ts.ForStatement)
     {
-        this.block = new CBlock(scope);
+        this.block = new CBlock(scope, node.statement);
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
-            StatementProcessor.process(<any>{ kind: ts.SyntaxKind.VariableStatement, declarationList: node.initializer }, scope);
+            let declList = <ts.VariableDeclarationList>node.initializer;
+            this.varDecl = new CVariableDeclaration(scope, declList.declarations[0]);
             this.init = "";
         }
         else
-            this.init = ExpressionHelper.create(scope, <ts.Expression>node.initializer);
-        this.condition = ExpressionHelper.create(scope, node.condition);
-        this.increment = ExpressionHelper.create(scope, node.incrementor);
-        StatementProcessor.process(node.statement, this.block);
+            this.init = CodeTemplateFactory.createForNode(scope, node.initializer);
+        this.condition = CodeTemplateFactory.createForNode(scope, node.condition);
+        this.increment = CodeTemplateFactory.createForNode(scope, node.incrementor);
     }
 }
 
@@ -111,7 +113,7 @@ export class CForStatement
         {statements {    }=> {this}}
     }
 {/if}
-`)
+`, ts.SyntaxKind.ForOfStatement)
 export class CForOfStatement implements IScope
 {
     public init: CExpression;
@@ -150,9 +152,26 @@ export class CForOfStatement implements IScope
         else {
             this.init = new CElementAccess(scope, node.initializer);
         }
-        StatementProcessor.process(node.statement, this);
+        this.statements.push(CodeTemplateFactory.createForNode(this, node.statement));
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
+    }
+}
+
+@CodeTemplate(`{expression};\n`, ts.SyntaxKind.ExpressionStatement)
+export class CExpressionStatement {
+    public expression: CExpression;
+    constructor(scope: IScope, node: ts.ExpressionStatement)
+    {
+        if (node.expression.kind == ts.SyntaxKind.BinaryExpression)
+        {
+            let binExpr = <ts.BinaryExpression>node.expression;
+            if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                this.expression = AssignmentHelper.create(scope, binExpr.left, binExpr.right);;
+            }
+        }
+        if (!this.expression)
+            this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
     }
 }
 
@@ -169,67 +188,24 @@ export class CForOfStatement implements IScope
 {/if}
 {#if statements.length == 0 && variables.length == 0}
         /* no statements */;
-{/if}`)
+{/if}`, ts.SyntaxKind.Block)
 export class CBlock implements IScope
 {
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public parent: IScope;
     public root: CProgram;
-    constructor(scope: IScope)
+    constructor(scope: IScope, node: ts.Statement)
     {
         this.parent = scope;
         this.root = scope.root;
+        if (node.kind == ts.SyntaxKind.Block)
+        {
+            let block = <ts.Block>node;
+            block.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(scope, s)));
+        }
+        else
+            this.statements.push(CodeTemplateFactory.createForNode(scope, node));
     }
 }
 
-export class StatementProcessor {
-    public static process(node: ts.Node, scope: IScope) {
-        switch (node.kind) {
-            case ts.SyntaxKind.FunctionDeclaration:
-                scope.root.functions.push(new CFunction(scope.root, <ts.FunctionDeclaration>node));
-                break;
-            case ts.SyntaxKind.VariableStatement:
-                for (let decl of (<ts.VariableStatement>node).declarationList.declarations)
-                    StatementProcessor.pushStatements(scope, <any>new CVariableDeclaration(scope, decl));
-                break;
-            case ts.SyntaxKind.ReturnStatement:
-                StatementProcessor.pushStatements(scope, <any>new CReturnStatement(scope, <ts.ReturnStatement>node));
-                break;
-            case ts.SyntaxKind.ExpressionStatement:
-                StatementProcessor.pushStatements(scope, <any>ExpressionHelper.create(scope, (<ts.ExpressionStatement>node).expression));
-                break;
-            case ts.SyntaxKind.IfStatement:
-                StatementProcessor.pushStatements(scope, <any>new CIfStatement(scope, <ts.IfStatement>node));
-                break;
-            case ts.SyntaxKind.WhileStatement:
-                StatementProcessor.pushStatements(scope, <any>new CWhileStatement(scope, <ts.WhileStatement>node));
-                break;
-            case ts.SyntaxKind.ForStatement:
-                StatementProcessor.pushStatements(scope, <any>new CForStatement(scope, <ts.ForStatement>node));
-                break;
-            case ts.SyntaxKind.ForOfStatement:
-                StatementProcessor.pushStatements(scope, <any>new CForOfStatement(scope, <ts.ForOfStatement>node));
-                break;
-            case ts.SyntaxKind.Block:
-                for (let s of (<ts.Block>node).statements)
-                    StatementProcessor.process(s, scope);
-                break;
-            default:
-                scope.statements.push("/* Unsupported statement: " + node.getText().replace(/[\n\s]+/g,' ') + " */;\n");
-        }
-    }
-    private static pushStatements(scope: IScope, resolvableValue: IResolvable) {
-        let result = resolvableValue.resolve();
-        if (result == '')
-            return;
-        if (result.search(/[;}]\n$/) > -1) {
-            for (let line of result.split('\n'))
-                if (line != '')
-                    scope.statements.push(line + '\n');
-        }
-        else {
-            scope.statements.push(result + ";\n");
-        }
-    }
-}

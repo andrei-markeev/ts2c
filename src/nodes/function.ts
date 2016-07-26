@@ -1,8 +1,7 @@
 import * as ts from 'typescript';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope, CProgram} from '../program';
 import {ArrayType} from '../types';
-import {StatementProcessor} from './statements';
 import {CVariable, CVariableDestructors} from './variable';
 
 @CodeTemplate(`
@@ -16,8 +15,7 @@ import {CVariable, CVariableDestructors} from './variable';
     {statements {    }=> {this}}
 
     {destructors}
-}`
-)
+}`, ts.SyntaxKind.FunctionDeclaration)
 export class CFunction implements IScope {
     public parent: IScope;
     public returnType: string;
@@ -40,7 +38,7 @@ export class CFunction implements IScope {
         if (this.gcVarName)
             root.variables.push(new CVariable(this, this.gcVarName, new ArrayType("void *", 0, true)));
 
-        funcDecl.body.statements.forEach(s => StatementProcessor.process(s, this));
+        funcDecl.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
         if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
             this.destructors = new CVariableDestructors(this, funcDecl);

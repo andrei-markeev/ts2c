@@ -1,10 +1,10 @@
 import * as ts from 'typescript'
 import {MemoryManager} from './memory';
 import {TypeHelper, ArrayType} from './types';
-import {CodeTemplate} from './template';
-import {StatementProcessor} from './nodes/statements';
+import {CodeTemplate, CodeTemplateFactory} from './template';
 import {CFunction} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
+import './nodes/statements';
 
 export interface IScope {
     parent: IScope;
@@ -173,9 +173,14 @@ export class CProgram implements IScope {
         if (this.gcVarName)
             this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("void *", 0, true)));
 
-        tsProgram.getSourceFiles().forEach(source =>
-            source.statements.forEach(s => StatementProcessor.process(s, this))
-        );
+        for (let source of tsProgram.getSourceFiles()) {
+            for (let s of source.statements) {
+                if (s.kind == ts.SyntaxKind.FunctionDeclaration)
+                    this.functions.push(new CFunction(this, <any>s));
+                else
+            	    this.statements.push(CodeTemplateFactory.createForNode(this, s));
+            }
+        }
 
         this.destructors = new CVariableDestructors(this, null);
     }

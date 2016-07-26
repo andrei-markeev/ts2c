@@ -1,8 +1,28 @@
 import * as ts from 'typescript';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType, NumberVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
+
+
+@CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
+export class CVariableStatement {
+    public declarations: CVariableDeclaration[];
+    constructor(scope: IScope, node: ts.VariableStatement)
+    {
+        this.declarations = node.declarationList.declarations.map(d => CodeTemplateFactory.createForNode(scope, d));
+    }
+}
+
+@CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableDeclarationList)
+export class CVariableDeclarationList {
+    public declarations: CVariableDeclaration[];
+    constructor(scope: IScope, node: ts.VariableDeclarationList)
+    {
+        this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d));
+    }
+}
+
 
 @CodeTemplate(`
 {#if needAllocateArray}
@@ -17,7 +37,7 @@ import {AssignmentHelper, CAssignment} from './assignment';
 {#if gcVarName && needAllocate}
     ARRAY_PUSH({gcVarName}, {varName});
 {/if}
-{initializer}`)
+{initializer}`, ts.SyntaxKind.VariableDeclaration)
 export class CVariableDeclaration {
     public varName: string;
     public isArray: boolean;

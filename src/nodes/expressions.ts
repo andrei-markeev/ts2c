@@ -1,98 +1,56 @@
 import * as ts from 'typescript';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, StringVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
 import {CVariable} from './variable';
 
-export class ExpressionHelper {
-    public static create(scope: IScope, node: ts.Expression): CExpression {
-        if (typeof node === 'string')
-            return node;
-        switch (node.kind) {
-            case ts.SyntaxKind.ElementAccessExpression:
-            case ts.SyntaxKind.PropertyAccessExpression:
-                return new CElementAccess(scope, node);
-            case ts.SyntaxKind.CallExpression:
-                return new CCallExpression(scope, <any>node);
-            case ts.SyntaxKind.BinaryExpression:
-                let binaryExpr = <ts.BinaryExpression>node;
-                if (binaryExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken)
-                    return AssignmentHelper.create(scope, binaryExpr.left, binaryExpr.right);
-                else
-                    return new CBinaryExpression(scope, binaryExpr);
-            case ts.SyntaxKind.ArrayLiteralExpression:
-                return ArrayLiteralHelper.create(scope, <any>node);
-            case ts.SyntaxKind.StringLiteral:
-                return new CString(node.getText());
-            case ts.SyntaxKind.NumericLiteral:
-            case ts.SyntaxKind.Identifier:
-                return node.getText();
-            case ts.SyntaxKind.PrefixUnaryExpression:
-            case ts.SyntaxKind.PostfixUnaryExpression:
-                return new CUnaryExpression(scope, <any>node);
-            case ts.SyntaxKind.ConditionalExpression:
-                return new CTernaryExpression(scope, <any>node);
-            default:
-                return "/* unsupported expression " + node.getText() + " */";
-        }
-    }
-}
-
 export interface CExpression { }
 
 @CodeTemplate(`
-{#if type == "call"}
-    {funcName}({arguments {, }=> {this}})
-{/if}
-{#if type == "array"}
-    {funcName}({arrayAccess}{arguments => , {this}})
-{/if}
-{#if type == "array_size"}
+{#statements}
+    {#if !topExpressionOfStatement && propName == "push" && arguments.length == 1}
+        ARRAY_PUSH({arrayAccess}, {arguments});
+    {/if}
+{/statements}
+{#if topExpressionOfStatement && propName == "push" && arguments.length == 1}
+    ARRAY_PUSH({arrayAccess}, {arguments})
+{#elseif propName == "push" && arguments.length == 1}
     {arrayAccess}->size
-{/if}
-{#if type == "printf"}
+{#elseif propName == "pop" && arguments.length == 0}
+    ARRAY_POP({arrayAccess})
+{#elseif printfCalls.length}
     {printfCalls}
-{/if}`
-)
+{#else}
+    {funcName}({arguments {, }=> {this}})
+{/if}`, ts.SyntaxKind.CallExpression)
 export class CCallExpression {
-    public type: string;
     public funcName: string;
+    public propName: string = null;
+    public topExpressionOfStatement: boolean;
     public arrayAccess: CElementAccess;
     public arguments: CExpression[];
-    public printfCalls: any[];
+    public printfCalls: any[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
-        this.type = "call";
         this.funcName = call.expression.getText();
+        this.topExpressionOfStatement =  call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (this.funcName != "console.log")
-            this.arguments = call.arguments.map(a => ExpressionHelper.create(scope, a));
+            this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
 
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
+            this.propName = propAccess.name.getText();
+            this.arrayAccess = new CElementAccess(scope, propAccess.expression);
+            
             if (this.funcName == "console.log") {
-                this.type = "printf";
                 this.printfCalls = call.arguments.map(a => PrintfHelper.create(scope, a));
                 scope.root.headerFlags.printf = true;
             }
             if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
-                if (call.parent.kind == ts.SyntaxKind.ExpressionStatement) {
-                    this.type = "array";
-                    this.funcName = "ARRAY_PUSH";
-                    this.arrayAccess = new CElementAccess(scope, propAccess.expression);
-                } else {
-                    // ARRAY_PUSH cannot be used as expression directly, because it is a macros
-                    // containing several statements, so let's push it separately into scope
-                    // statements, and replace it's occurence in expression with array size
-                    this.type = "array_size";
-                    scope.statements.push(new CCallExpression(scope, call));
-                }
                 scope.root.headerFlags.array = true;
             }
             if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
-                this.type = "array";
-                this.funcName = "ARRAY_POP";
-                this.arrayAccess = new CElementAccess(scope, propAccess.expression);
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_pop = true;
             }
@@ -101,6 +59,26 @@ export class CCallExpression {
 }
 
 @CodeTemplate(`
+{#statements}
+    {#if replacedWithVar && strPlusStr}
+        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);
+        assert({replacementVarName} != NULL);
+        strcpy({replacementVarName}, {left});
+        strcat({replacementVarName}, {right});
+    {#elseif replacedWithVar && strPlusNumber}
+        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);
+        assert({replacementVarName} != NULL);
+        {replacementVarName}[0] = '\\0';
+        strcat({replacementVarName}, {left});
+        str_int16_t_cat({replacementVarName}, {right});
+    {#elseif replacedWithVar && numberPlusStr}
+        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);
+        assert({replacementVarName} != NULL);
+        {replacementVarName}[0] = '\\0';
+        str_int16_t_cat({replacementVarName}, {left});
+        strcat({replacementVarName}, {right});
+    {/if}
+{/statements}
 {#if operator}
     {left} {operator} {right}
 {#elseif replacedWithCall}
@@ -109,8 +87,7 @@ export class CCallExpression {
     {replacementVarName}
 {#else}
     /* unsupported expression {nodeText} */
-{/if}`
-)
+{/if}`, ts.SyntaxKind.BinaryExpression)
 class CBinaryExpression {
     public nodeText: string;
     public operator: string;
@@ -119,6 +96,9 @@ class CBinaryExpression {
     public callCondition: string;
     public replacedWithVar: boolean = false;
     public replacementVarName: string;
+    public strPlusStr:boolean = false;
+    public strPlusNumber:boolean = false;
+    public numberPlusStr:boolean = false;
     public left: CExpression;
     public right: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
@@ -126,8 +106,8 @@ class CBinaryExpression {
         let callReplaceMap: { [token: number]: [string, string] } = {};
         let leftType = scope.root.typeHelper.getCType(node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
-        this.left = ExpressionHelper.create(scope, node.left);
-        this.right = ExpressionHelper.create(scope, node.right);
+        this.left = CodeTemplateFactory.createForNode(scope, node.left);
+        this.right = CodeTemplateFactory.createForNode(scope, node.right);
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -153,18 +133,10 @@ class CBinaryExpression {
 
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
                 let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                if (this.left["resolve"])
-                    this.left = this.left["resolve"]();
-                if (this.right["resolve"])
-                    this.right = this.right["resolve"]();
-                // TODO: free
                 scope.variables.push(new CVariable(scope, tempVarName, "char *"));
-                scope.statements.push(tempVarName + " = malloc(strlen(" + this.left + ") + strlen(" + this.right + ") + 1);\n");
-                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
-                scope.statements.push("strcpy(" + tempVarName + ", " + this.left + ");\n");
-                scope.statements.push("strcat(" + tempVarName + ", " + this.right + ");\n");
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
+                this.strPlusStr = true;
                 scope.root.headerFlags.strings = true;
                 scope.root.headerFlags.malloc = true;
             }
@@ -189,30 +161,13 @@ class CBinaryExpression {
 
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
                 let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                if (this.left["resolve"])
-                    this.left = this.left["resolve"]();
-                if (this.right["resolve"])
-                    this.right = this.right["resolve"]();
-                // TODO: free
-                let num = leftType == NumberVarType ? this.left : this.right;
-                let str = leftType == StringVarType ? this.left : this.right;
-
                 scope.variables.push(new CVariable(scope, tempVarName, "char *"));
-                scope.statements.push(tempVarName + " = malloc(strlen(" + str + ") + STR_INT16_T_BUFLEN + 1);\n");
-                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
-                scope.statements.push(tempVarName + "[0] = '\\0';\n");
-                let strcatNumber = "str_int16_t_cat(" + tempVarName + ", " + num + ");\n";
-                let strcatString = "strcat(" + tempVarName + ", " + str + ");\n";
-                if (leftType == NumberVarType) {
-                    scope.statements.push(strcatNumber);
-                    scope.statements.push(strcatString);
-                }
-                else {
-                    scope.statements.push(strcatString);
-                    scope.statements.push(strcatNumber);
-                }
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
+                if (leftType == NumberVarType)
+                    this.numberPlusStr = true;
+                else
+                    this.strPlusNumber = true;
                 scope.root.headerFlags.strings = true;
                 scope.root.headerFlags.malloc = true;
                 scope.root.headerFlags.str_int16_t_cat = true;
@@ -238,8 +193,7 @@ class CBinaryExpression {
     {call}({operand}){callCondition}
 {#else}
     /* unsupported expression {nodeText} */
-{/if}`
-)
+{/if}`, [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
 class CUnaryExpression {
     public nodeText: string;
     public operator: string;
@@ -265,29 +219,32 @@ class CUnaryExpression {
             this.replacedWithCall = true;
             [this.call, this.callCondition] = callReplaceMap[node.operator];
         }
-        this.operand = ExpressionHelper.create(scope, node.operand);
+        this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
     }
 }
 
-@CodeTemplate(`{condition} ? {whenTrue} : {whenFalse}`)
+@CodeTemplate(`{condition} ? {whenTrue} : {whenFalse}`, ts.SyntaxKind.ConditionalExpression)
 class CTernaryExpression {
     public condition: CExpression;
     public whenTrue: CExpression;
     public whenFalse: CExpression;
     constructor(scope: IScope, node: ts.ConditionalExpression) {
-        this.condition = ExpressionHelper.create(scope, node.condition);
-        this.whenTrue = ExpressionHelper.create(scope, node.whenTrue);
-        this.whenFalse = ExpressionHelper.create(scope, node.whenFalse);
+        this.condition = CodeTemplateFactory.createForNode(scope, node.condition);
+        this.whenTrue = CodeTemplateFactory.createForNode(scope, node.whenTrue);
+        this.whenFalse = CodeTemplateFactory.createForNode(scope, node.whenFalse);
     }
 }
 
-class ArrayLiteralHelper {
-    public static create(scope: IScope, node: ts.ArrayLiteralExpression) {
+@CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
+class CArrayLiteralExpression {
+    public expression: string;
+    constructor(scope: IScope, node: ts.ArrayLiteralExpression) {
         let arrSize = node.elements.length;
         if (arrSize == 0) {
-            return "/* Empty array is not supported inside expressions */";
+            this.expression = "/* Empty array is not supported inside expressions */";
+            return;
         }
 
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
@@ -299,8 +256,8 @@ class ArrayLiteralHelper {
                 for (let i = 0; i < arrSize; i++) {
                     if (i != 0)
                         s += ", ";
-                    let cExpr = ExpressionHelper.create(scope, node.elements[i]);
-                    s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resove();
+                    let cExpr = CodeTemplateFactory.createForNode(scope, node.elements[i]);
+                    s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
                 }
                 s += " }";
                 scope.variables.push(new CVariable(scope, varName, type, { initializer: s }));
@@ -316,10 +273,10 @@ class ArrayLiteralHelper {
                     scope.statements.push(assignment);
                 }
             }
-            return type.isDynamicArray ? "((void *)" + varName + ")" : varName;
+            this.expression = type.isDynamicArray ? "((void *)" + varName + ")" : varName;
         }
         else
-            return "/* Unsupported use of array literal expression */";
+            this.expression = "/* Unsupported use of array literal expression */";
     }
 }
 
@@ -339,9 +296,8 @@ class ArrayLiteralHelper {
 {#elseif isDict}
     DICT_GET({elementAccess}, {argumentExpression})
 {#else}
-    /* Unsupported left hand side expression {nodeText} */
-{/if}`
-)
+    /* Unsupported expression {nodeText} */
+{/if}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
 export class CElementAccess {
     public isSimpleVar: boolean;
     public isDynamicArray: boolean = false;
@@ -378,9 +334,9 @@ export class CElementAccess {
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     this.argumentExpression = ident;
                 else
-                    this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
+                    this.argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
             } else
-                this.argumentExpression = ExpressionHelper.create(scope, elemAccess.argumentExpression);
+                this.argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
         }
 
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
@@ -394,15 +350,24 @@ export class CElementAccess {
     }
 }
 
+@CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
 export class CString {
-    private value: string;
-    constructor(value: string) {
-        if (value.indexOf("'") == 0)
-            this.value = '"' + value.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
+    public value: string;
+    constructor(scope: IScope, value: ts.StringLiteral) {
+        let s = value.getText();
+        if (s.indexOf("'") == 0)
+            this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
-            this.value = value;
+            this.value = s;
     }
-    resolve() {
-        return this.value;
+}
+
+@CodeTemplate(`{value}`, [ts.SyntaxKind.NumericLiteral])
+export class CNumber
+{
+    public value: string;
+    constructor(scope: IScope, value: ts.Node)
+    {
+        this.value = value.getText();
     }
 }
