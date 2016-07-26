@@ -3,7 +3,7 @@ import * as ts from 'typescript';
 export type CType = string | StructType | ArrayType;
 export const UniversalVarType = "struct js_var *";
 export const PointerVarType = "void *";
-export const StringVarType = "char *";
+export const StringVarType = "const char *";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
 type PropertiesDictionary = { [propName: string]: CType };
@@ -344,7 +344,9 @@ export class TypeHelper {
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
                 let binExpr = <ts.BinaryExpression>node.parent;
-                if (binExpr.left.kind == ts.SyntaxKind.Identifier && binExpr.left.getText() == node.getText()) {
+                if (binExpr.left.kind == ts.SyntaxKind.Identifier
+                    && binExpr.left.getText() == node.getText()
+                    && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                     this.addTypeToVariable(varPos, <ts.Identifier>binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                         varData.propertiesAssigned = true;
@@ -356,7 +358,7 @@ export class TypeHelper {
                 let propAccess = <ts.PropertyAccessExpression>node.parent;
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binExpr = <ts.BinaryExpression>propAccess.parent;
-                    if (binExpr.left.pos == propAccess.pos) {
+                    if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                         varData.propertiesAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
                         if (!(determinedType instanceof TypePromise))
@@ -405,7 +407,7 @@ export class TypeHelper {
                     let isLeftHandSide = false;
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
-                        if (binExpr.left.pos == elemAccess.pos) {
+                        if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                             varData.propertiesAssigned = true;
                             determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
                             isLeftHandSide = true;

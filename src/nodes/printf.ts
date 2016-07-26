@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate} from '../template';
-import {CType, ArrayType, StructType, VariableInfo} from '../types';
+import {CType, ArrayType, StructType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
 import {IScope} from '../program';
 import {CExpression, CCallExpression, ExpressionHelper} from './expressions';
 import {CVariable} from './variable';
@@ -72,11 +72,11 @@ class CPrintf {
     public INDENT: string = '';
 
     constructor(scope: IScope, printNode: ts.Node, public accessor: string, varType: CType, options: PrintfOptions) {
-        this.isStringLiteral = varType == 'char *' && printNode.kind == ts.SyntaxKind.StringLiteral;
-        this.isQuotedCString = varType == 'char *' && options.quotedString;
-        this.isCString = varType == 'char *' && !options.quotedString;
-        this.isInteger = varType == 'int16_t';
-        this.isBoolean = varType == 'uint8_t';
+        this.isStringLiteral = varType == StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
+        this.isQuotedCString = varType == StringVarType && options.quotedString;
+        this.isCString = varType == StringVarType && !options.quotedString;
+        this.isInteger = varType == NumberVarType;
+        this.isBoolean = varType == BooleanVarType;
 
         if (this.isStringLiteral)
             this.accessor = this.accessor.slice(1,-1);

@@ -26,6 +26,7 @@ class HeaderFlags {
     gc_iterator: boolean = false;
     dict: boolean = false;
     str_int16_t_cmp: boolean = false;
+    str_int16_t_cat: boolean = false;
     atoi: boolean = false;
 }
 
@@ -43,7 +44,7 @@ class HeaderFlags {
 {#if headerFlags.printf}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_cmp}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
     #include <limits.h>
 {/if}
 
@@ -64,7 +65,7 @@ class HeaderFlags {
 	    enum js_var_type type;
 	    uint8_t bool;
 	    int16_t number;
-	    char *string;
+	    const char *string;
 	    void *obj;
 	};
 {/if}
@@ -99,12 +100,21 @@ class HeaderFlags {
     #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
 {/if}
 
-{#if headerFlags.str_int16_t_cmp}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
-    int str_int16_t_cmp(char *str, int16_t num) {
+{/if}
+{#if headerFlags.str_int16_t_cmp}
+    int str_int16_t_cmp(const char *str, int16_t num) {
         char numstr[STR_INT16_T_BUFLEN];
         sprintf(numstr, "%d", num);
         return strcmp(str, numstr);
+    }
+{/if}
+{#if headerFlags.str_int16_t_cat}
+    void str_int16_t_cat(char *str, int16_t num) {
+        char numstr[STR_INT16_T_BUFLEN];
+        sprintf(numstr, "%d", num);
+        strcat(str, numstr);
     }
 {/if}
 

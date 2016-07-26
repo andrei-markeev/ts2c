@@ -65,7 +65,9 @@ export class CCallExpression {
     constructor(scope: IScope, call: ts.CallExpression) {
         this.type = "call";
         this.funcName = call.expression.getText();
-        this.arguments = call.arguments.map(a => ExpressionHelper.create(scope, a));
+        if (this.funcName != "console.log")
+            this.arguments = call.arguments.map(a => ExpressionHelper.create(scope, a));
+
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
             if (this.funcName == "console.log") {
@@ -103,6 +105,8 @@ export class CCallExpression {
     {left} {operator} {right}
 {#elseif replacedWithCall}
     {call}({left}, {right}){callCondition}
+{#elseif replacedWithVar}
+    {replacementVarName}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`
@@ -113,6 +117,8 @@ class CBinaryExpression {
     public replacedWithCall: boolean = false;
     public call: string;
     public callCondition: string;
+    public replacedWithVar: boolean = false;
+    public replacementVarName: string;
     public left: CExpression;
     public right: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
@@ -120,8 +126,8 @@ class CBinaryExpression {
         let callReplaceMap: { [token: number]: [string, string] } = {};
         let leftType = scope.root.typeHelper.getCType(node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
-        let left = node.left;
-        let right = node.right;
+        this.left = ExpressionHelper.create(scope, node.left);
+        this.right = ExpressionHelper.create(scope, node.right);
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -144,29 +150,80 @@ class CBinaryExpression {
 
             if (callReplaceMap[node.operatorToken.kind])
                 scope.root.headerFlags.strings = true;
+
+            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
+                if (this.left["resolve"])
+                    this.left = this.left["resolve"]();
+                if (this.right["resolve"])
+                    this.right = this.right["resolve"]();
+                // TODO: free
+                scope.variables.push(new CVariable(scope, tempVarName, "char *"));
+                scope.statements.push(tempVarName + " = malloc(strlen(" + this.left + ") + strlen(" + this.right + ") + 1);\n");
+                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
+                scope.statements.push("strcpy(" + tempVarName + ", " + this.left + ");\n");
+                scope.statements.push("strcat(" + tempVarName + ", " + this.right + ");\n");
+                this.replacedWithVar = true;
+                this.replacementVarName = tempVarName;
+                scope.root.headerFlags.strings = true;
+                scope.root.headerFlags.malloc = true;
+            }
         }
         else if (leftType == NumberVarType && rightType == StringVarType
             || leftType == StringVarType && rightType == NumberVarType) {
-            if (leftType == NumberVarType) {
-                right = node.left;
-                left = node.right;
-            }
 
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
 
-            if (callReplaceMap[node.operatorToken.kind])
+            if (callReplaceMap[node.operatorToken.kind]) {
                 scope.root.headerFlags.str_int16_t_cmp = true;
+                // str_int16_t_cmp expects certain order of arguments (string, number)
+                if (leftType == NumberVarType) {
+                    let tmp = this.left;
+                    this.left = this.right;
+                    this.right = tmp;
+                }
+            }
+
+            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
+                if (this.left["resolve"])
+                    this.left = this.left["resolve"]();
+                if (this.right["resolve"])
+                    this.right = this.right["resolve"]();
+                // TODO: free
+                let num = leftType == NumberVarType ? this.left : this.right;
+                let str = leftType == StringVarType ? this.left : this.right;
+
+                scope.variables.push(new CVariable(scope, tempVarName, "char *"));
+                scope.statements.push(tempVarName + " = malloc(strlen(" + str + ") + STR_INT16_T_BUFLEN + 1);\n");
+                scope.statements.push("assert(" + tempVarName + " != NULL);\n");
+                scope.statements.push(tempVarName + "[0] = '\\0';\n");
+                let strcatNumber = "str_int16_t_cat(" + tempVarName + ", " + num + ");\n";
+                let strcatString = "strcat(" + tempVarName + ", " + str + ");\n";
+                if (leftType == NumberVarType) {
+                    scope.statements.push(strcatNumber);
+                    scope.statements.push(strcatString);
+                }
+                else {
+                    scope.statements.push(strcatString);
+                    scope.statements.push(strcatNumber);
+                }
+                this.replacedWithVar = true;
+                this.replacementVarName = tempVarName;
+                scope.root.headerFlags.strings = true;
+                scope.root.headerFlags.malloc = true;
+                scope.root.headerFlags.str_int16_t_cat = true;
+            }
+
         }
         this.operator = operatorMap[node.operatorToken.kind];
         if (callReplaceMap[node.operatorToken.kind]) {
             this.replacedWithCall = true;
             [this.call, this.callCondition] = callReplaceMap[node.operatorToken.kind];
         }
-        this.left = ExpressionHelper.create(scope, node.left);
-        this.right = ExpressionHelper.create(scope, node.right);
         this.nodeText = node.getText();
     }
 }
@@ -199,7 +256,7 @@ class CUnaryExpression {
             operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
-            callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi",""];
+            callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
             if (callReplaceMap[node.operator])
                 scope.root.headerFlags.atoi = true;
         }
@@ -235,8 +292,7 @@ class ArrayLiteralHelper {
 
         let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         let type = scope.root.typeHelper.getCType(node);
-        if (type instanceof ArrayType)
-        {
+        if (type instanceof ArrayType) {
             let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
             if (!type.isDynamicArray && canUseInitializerList) {
                 let s = "{ ";
@@ -251,8 +307,7 @@ class ArrayLiteralHelper {
             }
             else {
                 scope.variables.push(new CVariable(scope, varName, type));
-                if (type.isDynamicArray)
-                {
+                if (type.isDynamicArray) {
                     scope.root.headerFlags.array = true;
                     scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
                 }
