@@ -114,6 +114,8 @@ export class TypeHelper {
     }
 
     public getCType(node: ts.Node): CType {
+        if (!node.kind)
+            return null;
         switch (node.kind) {
             case ts.SyntaxKind.NumericLiteral:
                 return NumberVarType;
@@ -157,6 +159,16 @@ export class TypeHelper {
                             if (arrType && arrType instanceof ArrayType)
                                 return arrType.elementType;
                         }
+                        else if (propAccess.name.getText() == 'push' && call.arguments.length == 1) {
+                            let arrType = this.getCType(propAccess.expression);
+                            if (arrType && arrType instanceof ArrayType)
+                                return NumberVarType;
+                        }
+                        else if (propAccess.name.getText() == 'indexOf' && call.arguments.length == 1) {
+                            let arrType = this.getCType(propAccess.expression);
+                            if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
+                                return NumberVarType;
+                        } 
                     }
                     return null;
                 }
@@ -455,22 +467,6 @@ export class TypeHelper {
 
     private resolvePromisesAndFinalizeTypes() {
         
-        for (let k in this.variablesData)
-        {
-            let funcDeclPos = this.variablesData[+k].parameterFuncDeclPos;
-            let paramIndex = this.variablesData[+k].parameterIndex;
-            if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
-                let type = this.functionCallsData[funcDeclPos][paramIndex];
-                let finalType = !(type instanceof TypePromise) && type;
-                
-                if (type instanceof TypePromise)
-                    finalType = this.getCType(type.associatedNode) || finalType;
-
-                if (finalType)
-                    this.variablesData[k].assignmentTypes[this.getTypeString(finalType)] = finalType;
-            }
-        }
-
         let somePromisesAreResolved: boolean;
 
         do {
@@ -518,6 +514,25 @@ export class TypeHelper {
     private tryResolvePromises(varPos: number)
     {
         let somePromisesAreResolved = false;
+
+        let funcDeclPos = this.variablesData[varPos].parameterFuncDeclPos;
+        if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
+            let paramIndex = this.variablesData[varPos].parameterIndex;
+            let type = this.functionCallsData[funcDeclPos][paramIndex];
+            let finalType = !(type instanceof TypePromise) && type;
+            
+            if (type instanceof TypePromise) {
+                finalType = this.getCType(type.associatedNode) || finalType;
+                if (finalType) {
+                    type.resolved = true;
+                }
+            }
+
+            if (finalType && !this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)]) {
+                somePromisesAreResolved = true;
+                this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)] = finalType;
+            }
+        }
 
         if (this.variablesData[varPos].typePromises.length > 0) {
             let promises = this.variablesData[varPos].typePromises.filter(p => !p.resolved);

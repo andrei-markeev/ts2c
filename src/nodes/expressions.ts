@@ -10,16 +10,18 @@ export interface CExpression { }
 
 @CodeTemplate(`
 {#statements}
-    {#if !topExpressionOfStatement && propName == "push" && arguments.length == 1}
+    {#if propName == "push" && arguments.length == 1 && !topExpressionOfStatement}
         ARRAY_PUSH({arrayAccess}, {arguments});
     {/if}
 {/statements}
-{#if topExpressionOfStatement && propName == "push" && arguments.length == 1}
-    ARRAY_PUSH({arrayAccess}, {arguments})
+{#if propName == "push" && arguments.length == 1 && topExpressionOfStatement}
+    ARRAY_PUSH({varAccess}, {arguments})
 {#elseif propName == "push" && arguments.length == 1}
-    {arrayAccess}->size
+    {varAccess}->size
+{#elseif propName == "indexOf" && arguments.length == 1}
+    STR_POS({arg1}, {arg2})
 {#elseif propName == "pop" && arguments.length == 0}
-    ARRAY_POP({arrayAccess})
+    ARRAY_POP({varAccess})
 {#elseif printfCalls.length}
     {printfCalls}
 {#else}
@@ -29,30 +31,45 @@ export class CCallExpression {
     public funcName: string;
     public propName: string = null;
     public topExpressionOfStatement: boolean;
-    public arrayAccess: CElementAccess;
+    public varAccess: CElementAccess;
+    public tempVarName: string;
     public arguments: CExpression[];
     public printfCalls: any[] = [];
+    public arg1: CExpression;
+    public arg2: CExpression;
     constructor(scope: IScope, call: ts.CallExpression) {
         this.funcName = call.expression.getText();
-        this.topExpressionOfStatement =  call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (this.funcName != "console.log")
             this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
 
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
             this.propName = propAccess.name.getText();
-            this.arrayAccess = new CElementAccess(scope, propAccess.expression);
-            
+            this.varAccess = new CElementAccess(scope, propAccess.expression);
+
             if (this.funcName == "console.log") {
                 this.printfCalls = call.arguments.map(a => PrintfHelper.create(scope, a));
                 scope.root.headerFlags.printf = true;
             }
-            if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
+            else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
                 scope.root.headerFlags.array = true;
             }
-            if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
+            else if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_pop = true;
+            }
+            else if (propAccess.name.getText() == 'indexOf' && this.arguments.length == 1) {
+                let type = scope.root.typeHelper.getCType(propAccess.expression);
+                if (type == StringVarType) {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "tmp")
+                    this.arg1 = CodeTemplateFactory.createForNode(scope, propAccess.expression);
+                    this.arg2 = this.arguments[0];
+                    scope.root.headerFlags.str_pos = true;
+                } else if (type instanceof ArrayType) {
+                    // TODO
+                    scope.root.headerFlags.array = true;
+                }
             }
         }
     }
@@ -78,6 +95,7 @@ export class CCallExpression {
         str_int16_t_cat({replacementVarName}, {left});
         strcat({replacementVarName}, {right});
     {/if}
+
 {/statements}
 {#if operator}
     {left} {operator} {right}
@@ -96,9 +114,9 @@ class CBinaryExpression {
     public callCondition: string;
     public replacedWithVar: boolean = false;
     public replacementVarName: string;
-    public strPlusStr:boolean = false;
-    public strPlusNumber:boolean = false;
-    public numberPlusStr:boolean = false;
+    public strPlusStr: boolean = false;
+    public strPlusNumber: boolean = false;
+    public numberPlusStr: boolean = false;
     public left: CExpression;
     public right: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
@@ -209,6 +227,7 @@ class CUnaryExpression {
         if (type == NumberVarType) {
             operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
+            operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
             callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
             if (callReplaceMap[node.operator])
@@ -363,11 +382,9 @@ export class CString {
 }
 
 @CodeTemplate(`{value}`, [ts.SyntaxKind.NumericLiteral])
-export class CNumber
-{
+export class CNumber {
     public value: string;
-    constructor(scope: IScope, value: ts.Node)
-    {
+    constructor(scope: IScope, value: ts.Node) {
         this.value = value.getText();
     }
 }

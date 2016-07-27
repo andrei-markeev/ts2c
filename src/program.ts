@@ -27,12 +27,13 @@ class HeaderFlags {
     dict: boolean = false;
     str_int16_t_cmp: boolean = false;
     str_int16_t_cat: boolean = false;
+    str_pos: boolean = false;
     atoi: boolean = false;
 }
 
 
 @CodeTemplate(`
-{#if headerFlags.strings || headerFlags.str_int16_t_cmp}
+{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
@@ -100,6 +101,10 @@ class HeaderFlags {
     #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
 {/if}
 
+{#if headerFlags.str_pos}
+    static const char * str_pos_tmpvar;
+    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)
+{/if}
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}

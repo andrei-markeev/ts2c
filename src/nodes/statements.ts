@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
-import {ArrayType} from '../types';
+import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression, CElementAccess} from './expressions';
 import {AssignmentHelper} from './assignment';
@@ -50,10 +50,10 @@ export class CIfStatement
     public hasElseBlock: boolean;
     constructor(scope: IScope, node: ts.IfStatement)
     {
-        this.thenBlock = new CBlock(scope, node.thenStatement);
-        this.elseBlock = node.elseStatement && new CBlock(scope, node.elseStatement);
-        this.hasElseBlock = !!node.elseStatement;
         this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.thenBlock = new CBlock(scope, node.thenStatement);
+        this.hasElseBlock = !!node.elseStatement;
+        this.elseBlock = this.hasElseBlock && new CBlock(scope, node.elseStatement);
     }
 }
 
@@ -131,8 +131,7 @@ export class CForOfStatement implements IScope
         this.parent = scope;
         this.root = scope.root;
         this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
-        scope.variables.push(new CVariable(scope, this.iteratorVarName, "int16_t"));
-        scope.root.headerFlags.int16_t = true;
+        scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         this.arrayAccess = new CElementAccess(scope, node.expression);
         let arrayVarType = scope.root.typeHelper.getCType(node.expression);
         if (arrayVarType && arrayVarType instanceof ArrayType) {
@@ -144,9 +143,7 @@ export class CForOfStatement implements IScope
         }
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declInit = (<ts.VariableDeclarationList>node.initializer).declarations[0];
-            // this will push the variable declaration to scope.variables
-            // we are not using the return value
-            new CVariableDeclaration(scope, declInit);
+            scope.variables.push(new CVariable(scope, declInit.name.getText(), declInit.name));
             this.init = declInit.name.getText();
         }
         else {
@@ -158,9 +155,10 @@ export class CForOfStatement implements IScope
     }
 }
 
-@CodeTemplate(`{expression};\n`, ts.SyntaxKind.ExpressionStatement)
+@CodeTemplate(`{expression}{SemicolonCR}`, ts.SyntaxKind.ExpressionStatement)
 export class CExpressionStatement {
     public expression: CExpression;
+    public SemicolonCR: string = ';\n';
     constructor(scope: IScope, node: ts.ExpressionStatement)
     {
         if (node.expression.kind == ts.SyntaxKind.BinaryExpression)
@@ -168,6 +166,7 @@ export class CExpressionStatement {
             let binExpr = <ts.BinaryExpression>node.expression;
             if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                 this.expression = AssignmentHelper.create(scope, binExpr.left, binExpr.right);;
+                this.SemicolonCR = '';
             }
         }
         if (!this.expression)
@@ -179,7 +178,7 @@ export class CExpressionStatement {
 @CodeTemplate(`
 {#if statements.length > 1 || variables.length > 0}
     {
-        {variables => {this};\n}
+        {variables {    }=> {this};\n}
         {statements {    }=> {this}}
     }
 {/if}
@@ -202,10 +201,10 @@ export class CBlock implements IScope
         if (node.kind == ts.SyntaxKind.Block)
         {
             let block = <ts.Block>node;
-            block.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(scope, s)));
+            block.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
         }
         else
-            this.statements.push(CodeTemplateFactory.createForNode(scope, node));
+            this.statements.push(CodeTemplateFactory.createForNode(this, node));
     }
 }
 

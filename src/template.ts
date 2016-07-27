@@ -15,13 +15,14 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
     return function (target: Function) {
         let newConstructor = function (scope: IScope, ...rest: any[]) {
             let self = this;
+            let retValue = target.apply(self, arguments);
+            let [code, statements] = processTemplate(tempString, self);
+            if (statements)
+                scope.statements.push(statements);
             self.resolve = function () {
-                let [code, statements] = processTemplate(tempString, self);
-                if (statements)
-                    scope.statements.push(statements);
                 return code;
             };
-            return target.apply(self, arguments);
+            return retValue;
         };
 
         if (nodeKind) {
@@ -35,7 +36,7 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
     };
 }
 
-/** Returns: code, statements */
+/** Returns: [code, statements] */
 function processTemplate(template: string, args: any): [string, string] {
 
     let statements = "";
@@ -48,8 +49,9 @@ function processTemplate(template: string, args: any): [string, string] {
             statementsStartPos--;
         if (statementsBodyEndPos > 0 && template[statementsBodyEndPos - 1] == '\n')
             statementsBodyEndPos--;
-        let [c, s] = processTemplate(template.slice(statementsBodyStartPos, statementsBodyEndPos), args);
-        statements += c + s;
+        let templateText = template.slice(statementsBodyStartPos, statementsBodyEndPos).replace(/\n    /g, '\n');
+        let [c, s] = processTemplate(templateText, args);
+        statements += s + c;
         template = template.slice(0, statementsStartPos) + template.slice(statementsEndPos);
     }
 
@@ -78,6 +80,8 @@ function processTemplate(template: string, args: any): [string, string] {
             endIfBodyPos--;
 
         let posAfterIf = endIfPos + 5;
+        if (endIfPos > 0 && template[endIfPos - 1] == '\n')
+            endIfPos--;
 
         let evalText = template.slice(conditionStartPos, ifPos);
         for (let k in args)
@@ -160,12 +164,13 @@ function processTemplate(template: string, args: any): [string, string] {
                 statements += elementStatements;
 
                 if (k == 'statements') {
-                    if (resolvedElement.search(/[;}]\n$/) > -1) {
+                    resolvedElement = resolvedElement.replace(/[;\n*]+;/g, ';');
+                    if (resolvedElement.search(/\n/) > -1) {
                         for (let line of resolvedElement.split('\n')) {
                             if (line != '') {
                                 if (elementsResolved != "")
                                     elementsResolved += separator;
-                                elementsResolved += line.replace(/;{2,}$/, ';').replace(/\n+;$/,';') + '\n';
+                                elementsResolved += line + '\n';
                             }
                         }
                     }
@@ -174,8 +179,6 @@ function processTemplate(template: string, args: any): [string, string] {
                             elementsResolved += separator;
                         if (statements.search(/^[\n\s]*$/) == -1)
                             elementsResolved += resolvedElement + '\n';
-                        else
-                            elementsResolved += resolvedElement;
                     }
                 }
                 else {

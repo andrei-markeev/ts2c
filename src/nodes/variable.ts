@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, NumberVarType} from '../types';
+import {ArrayType, StructType, NumberVarType, BooleanVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 
 
@@ -68,8 +68,6 @@ export class CVariableDeclaration {
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
         
-        if (varType == NumberVarType)
-            scope.root.headerFlags.int16_t = true;
         if (this.needAllocate || this.needAllocateArray)
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
@@ -113,6 +111,10 @@ export class CVariable {
     private varString: string;
     constructor(scope: IScope, name: string, private typeSource, options?: CVariableOptions) {
         let typeString = scope.root.typeHelper.getTypeString(typeSource);
+        if (typeString == NumberVarType)
+            scope.root.headerFlags.int16_t = true;
+        else if (typeString == BooleanVarType)
+            scope.root.headerFlags.uint8_t = true;
         if (typeString.indexOf('{var}') > -1)
             this.varString = typeString.replace('{var}', name);
         else
