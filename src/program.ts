@@ -8,6 +8,7 @@ import './nodes/statements';
 
 export interface IScope {
     parent: IScope;
+    func: IScope;
     root: CProgram;
     variables: CVariable[];
     statements: any[];
@@ -88,6 +89,7 @@ class HeaderFlags {
         if (array->size == array->capacity) {  \\
             array->capacity *= 2;  \\
             array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\
+            assert(array->data != NULL); \\
         }  \\
         array->data[array->size++] = item; \\
     }
@@ -136,9 +138,7 @@ class HeaderFlags {
 {functions => {this}\n}
 
 int main(void) {
-    {#if gcVarName}
-        ARRAY_CREATE({gcVarName}, 2, 0);
-    {/if}
+    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
 
     {statements {    }=> {this}}
 
@@ -149,10 +149,11 @@ int main(void) {
 export class CProgram implements IScope {
     public parent: IScope = null;
     public root = this;
+    public func = this;
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public functions: CFunction[] = [];
-    public gcVarName: string;
+    public gcVarNames: string[];
     public destructors: CVariableDestructors;
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
@@ -172,11 +173,18 @@ export class CProgram implements IScope {
                 properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
             };
         });
-        this.memoryManager.preprocess();
+        this.memoryManager.preprocessVariables();
+        for (let source of tsProgram.getSourceFiles())
+            this.memoryManager.preprocessTemporaryVariables(source);
 
-        this.gcVarName = this.memoryManager.getGCVariableForScope(null);
-        if (this.gcVarName)
-            this.variables.push(new CVariable(this, this.gcVarName, new ArrayType("void *", 0, true)));
+        this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
+        for (let gcVarName of this.gcVarNames) {
+            let pointerType = new ArrayType("void *", 0, true);
+            if (gcVarName.indexOf("arrays") == -1)
+                this.variables.push(new CVariable(this, gcVarName, pointerType));
+            else
+                this.variables.push(new CVariable(this, gcVarName, new ArrayType(pointerType, 0, true)));
+        }
 
         for (let source of tsProgram.getSourceFiles()) {
             for (let s of source.statements) {

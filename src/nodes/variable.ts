@@ -31,11 +31,8 @@ export class CVariableDeclarationList {
     {varName} = malloc(sizeof(*{varName}));
     assert({varName} != NULL);
 {/if}
-{#if gcVarName && needAllocateArray}
-    ARRAY_PUSH({gcVarName}, {varName}->data);
-{/if}
 {#if gcVarName && needAllocate}
-    ARRAY_PUSH({gcVarName}, {varName});
+    ARRAY_PUSH({gcVarName}, (void *){varName});
 {/if}
 {initializer}`, ts.SyntaxKind.VariableDeclaration)
 export class CVariableDeclaration {
@@ -57,7 +54,7 @@ export class CVariableDeclaration {
         this.varName = varInfo.name;
         this.needAllocateArray = varType instanceof ArrayType && varInfo.requiresAllocation;
         this.needAllocate = varInfo.requiresAllocation;
-        this.gcVarName = scope.root.memoryManager.getGCVariableForVariable(varDecl, varDecl.pos);
+        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(varDecl.name);
         this.isStruct = varType instanceof StructType && !varType.isDict;
         this.isDict = varType instanceof StructType && varType.isDict;
         this.isArray = varType instanceof ArrayType;
@@ -79,24 +76,42 @@ export class CVariableDeclaration {
 
 @CodeTemplate(`
 {destructors {    }=> free({this});\n}
+{#if gcArraysVarName}
+        for (_gc_i = 0; _gc_i < {gcArraysVarName}->size; _gc_i++) {
+            free({gcArraysVarName}->data[_gc_i]->data);
+            free({gcArraysVarName}->data[_gc_i]);
+        }
+        free({gcArraysVarName}->data);
+        free({gcArraysVarName});
+{/if}
 {#if gcVarName}
-    for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)
+        for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)
             free({gcVarName}->data[_gc_i]);
         free({gcVarName}->data);
+        free({gcVarName});
 {/if}`
 )
 export class CVariableDestructors {
-    public gcVarName: string;
+    public gcVarName: string = null;
+    public gcArraysVarName: string = null;
     public destructors: string[];
     constructor(scope: IScope, node: ts.Node) {
-        this.gcVarName = scope.root.memoryManager.getGCVariableForScope(node);
+        let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
+        for (let gc of gcVarNames)
+        {
+            if (gc.indexOf("arrays") > -1)
+                this.gcArraysVarName = gc;
+            else
+                this.gcVarName = gc;
+        }
+        
         this.destructors = [];
         scope.root.memoryManager.getDestructorsForScope(node)
-            .map(d => scope.root.typeHelper.getVariableInfo(d))
-            .forEach(dv => {
-                if (dv.type instanceof ArrayType)
-                    this.destructors.push(dv.name + "->data");
-                this.destructors.push(dv.name);
+            .forEach(r => {
+                let type = scope.root.typeHelper.getCType(r.node);
+                if (type instanceof ArrayType)
+                    this.destructors.push(r.varName + "->data");
+                this.destructors.push(r.varName);
             })
     }
 }

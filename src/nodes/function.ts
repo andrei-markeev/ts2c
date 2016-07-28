@@ -8,9 +8,7 @@ import {CVariable, CVariableDestructors} from './variable';
 {returnType} {name}({parameters {, }=> {this}})
 {
     {variables  {    }=> {this};\n}
-    {#if gcVarName}
-        ARRAY_CREATE({gcVarName}, 2, 0);
-    {/if}
+    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
 
     {statements {    }=> {this}}
 
@@ -18,12 +16,13 @@ import {CVariable, CVariableDestructors} from './variable';
 }`, ts.SyntaxKind.FunctionDeclaration)
 export class CFunction implements IScope {
     public parent: IScope;
+    public func = this;
     public returnType: string;
     public name: string;
     public parameters: CVariable[] = [];
     public variables: CVariable[] = [];
     public statements: any[] = [];
-    public gcVarName: string;
+    public gcVarNames: string[];
     public destructors: CVariableDestructors;
     constructor(public root: CProgram, funcDecl: ts.FunctionDeclaration) {
         this.parent = root;
@@ -34,9 +33,14 @@ export class CFunction implements IScope {
         this.parameters = signature.parameters.map(p => new CVariable(this, p.name, p, { removeStorageSpecifier: true }));
         this.variables = [];
 
-        this.gcVarName = root.memoryManager.getGCVariableForScope(funcDecl);
-        if (this.gcVarName)
-            root.variables.push(new CVariable(this, this.gcVarName, new ArrayType("void *", 0, true)));
+        this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
+        for (let gcVarName of this.gcVarNames) {
+            let pointerType = new ArrayType("void *", 0, true);
+            if (gcVarName.indexOf("arrays") == -1)
+                root.variables.push(new CVariable(root, gcVarName, pointerType));
+            else
+                root.variables.push(new CVariable(root, gcVarName, new ArrayType(pointerType, 0, true)));
+        }
 
         funcDecl.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 

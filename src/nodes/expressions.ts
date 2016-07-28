@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, StringVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
-import {AssignmentHelper, CAssignment} from './assignment';
+import {CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
 import {CVariable} from './variable';
 
@@ -95,6 +95,9 @@ export class CCallExpression {
         str_int16_t_cat({replacementVarName}, {left});
         strcat({replacementVarName}, {right});
     {/if}
+    {#if replacedWithVar && gcVarName}
+        ARRAY_PUSH({gcVarName}, {replacementVarName});
+    {/if}
 
 {/statements}
 {#if operator}
@@ -114,6 +117,7 @@ class CBinaryExpression {
     public callCondition: string;
     public replacedWithVar: boolean = false;
     public replacementVarName: string;
+    public gcVarName: string = null;
     public strPlusStr: boolean = false;
     public strPlusNumber: boolean = false;
     public numberPlusStr: boolean = false;
@@ -150,8 +154,9 @@ class CBinaryExpression {
                 scope.root.headerFlags.strings = true;
 
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
-                let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                scope.variables.push(new CVariable(scope, tempVarName, "char *"));
+                let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
+                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
                 this.strPlusStr = true;
@@ -178,8 +183,9 @@ class CBinaryExpression {
             }
 
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
-                let tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                scope.variables.push(new CVariable(scope, tempVarName, "char *"));
+                let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
+                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
                 if (leftType == NumberVarType)
@@ -198,6 +204,11 @@ class CBinaryExpression {
             [this.call, this.callCondition] = callReplaceMap[node.operatorToken.kind];
         }
         this.nodeText = node.getText();
+
+        if (this.gcVarName) {
+            scope.root.headerFlags.gc_iterator = true;
+            scope.root.headerFlags.array = true;
+        }
     }
 }
 
@@ -266,11 +277,12 @@ class CArrayLiteralExpression {
             return;
         }
 
-        let varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         let type = scope.root.typeHelper.getCType(node);
         if (type instanceof ArrayType) {
+            let varName: string;
             let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
             if (!type.isDynamicArray && canUseInitializerList) {
+                varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
                 let s = "{ ";
                 for (let i = 0; i < arrSize; i++) {
                     if (i != 0)
@@ -282,10 +294,22 @@ class CArrayLiteralExpression {
                 scope.variables.push(new CVariable(scope, varName, type, { initializer: s }));
             }
             else {
-                scope.variables.push(new CVariable(scope, varName, type));
                 if (type.isDynamicArray) {
+                    varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                    scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
                     scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
+                    let gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+                    if (gcVarName) {
+                        scope.statements.push("ARRAY_PUSH(" + gcVarName + ", (void *)" + varName + ");\n");
+                        scope.root.headerFlags.gc_iterator = true;
+                        scope.root.headerFlags.array = true;
+                    }
+                }
+                else
+                {
+                    varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                    scope.variables.push(new CVariable(scope, varName, type));
                 }
                 for (let i = 0; i < arrSize; i++) {
                     let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])

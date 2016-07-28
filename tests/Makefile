@@ -8,9 +8,9 @@ RES = $(TS:.ts=.res)
 %.c: %.ts
 	node ../ts2c.js $<
 %.elf: %.c
-	gcc $< -ansi -pedantic -Wall -o $@
+	gcc $< -ansi -pedantic -Wall -g -o $@
 %.res: %.elf
-	./$< > $@
+	valgrind --error-exitcode=1 --leak-check=yes --quiet ./$< > $@
 	diff $@.expect $@
 
 all: $(RES) $(ELF) $(C)

@@ -121,6 +121,7 @@ export class CForOfStatement implements IScope
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public parent: IScope;
+    public func: IScope;
     public root: CProgram;
     public isDynamicArray: boolean;
     public arrayAccess: CElementAccess;
@@ -129,6 +130,7 @@ export class CForOfStatement implements IScope
     constructor(scope: IScope, node: ts.ForOfStatement)
     {
         this.parent = scope;
+        this.func = scope.func;
         this.root = scope.root;
         this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
@@ -193,10 +195,12 @@ export class CBlock implements IScope
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public parent: IScope;
+    public func: IScope;
     public root: CProgram;
     constructor(scope: IScope, node: ts.Statement)
     {
         this.parent = scope;
+        this.func = scope.func;
         this.root = scope.root;
         if (node.kind == ts.SyntaxKind.Block)
         {
