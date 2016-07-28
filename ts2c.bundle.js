@@ -125,6 +125,7 @@ process.umask = function() { return 0; };
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var types_1 = require('./types');
 var MemoryManager = (function () {
     function MemoryManager(typeChecker, typeHelper) {
         this.typeChecker = typeChecker;
@@ -132,26 +133,62 @@ var MemoryManager = (function () {
         this.scopes = {};
         this.scopesOfVariables = {};
     }
-    MemoryManager.prototype.preprocess = function () {
+    MemoryManager.prototype.preprocessVariables = function () {
         for (var k in this.typeHelper.variables) {
             var v = this.typeHelper.variables[k];
             if (v.requiresAllocation)
-                this.scheduleVariableDisposal(v.declaration.name);
+                this.scheduleNodeDisposal(v.declaration.name);
         }
     };
-    MemoryManager.prototype.getGCVariableForScope = function (node) {
-        var parentDecl = this.findParentFunctionNode(node);
-        var scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple; }).length) {
-            return "_gc_" + scopeId;
+    MemoryManager.prototype.preprocessTemporaryVariables = function (node) {
+        var _this = this;
+        switch (node.kind) {
+            case ts.SyntaxKind.ArrayLiteralExpression:
+                {
+                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
+                        return;
+                    var type = this.typeHelper.getCType(node);
+                    if (type && type instanceof types_1.ArrayType && type.isDynamicArray)
+                        this.scheduleNodeDisposal(node);
+                }
+                break;
+            case ts.SyntaxKind.BinaryExpression:
+                {
+                    var binExpr = node;
+                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                        var leftType = this.typeHelper.getCType(binExpr.left);
+                        var rightType = this.typeHelper.getCType(binExpr.right);
+                        if (leftType == types_1.StringVarType || rightType == types_1.StringVarType)
+                            this.scheduleNodeDisposal(binExpr);
+                        if (binExpr.left.kind == ts.SyntaxKind.BinaryExpression)
+                            this.preprocessTemporaryVariables(binExpr.left);
+                        if (binExpr.right.kind == ts.SyntaxKind.BinaryExpression)
+                            this.preprocessTemporaryVariables(binExpr.right);
+                        return;
+                    }
+                }
+                break;
         }
-        return null;
+        node.getChildren().forEach(function (c) { return _this.preprocessTemporaryVariables(c); });
     };
-    MemoryManager.prototype.getGCVariableForVariable = function (node, varPos) {
+    MemoryManager.prototype.getGCVariablesForScope = function (node) {
         var parentDecl = this.findParentFunctionNode(node);
         var scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        if (this.scopesOfVariables[varPos] && !this.scopesOfVariables[varPos].simple)
-            return "_gc_" + this.scopesOfVariables[varPos].scopeId;
+        var gcVars = [];
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && !v.array; }).length) {
+            gcVars.push("_gc_" + scopeId);
+        }
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && v.array; }).length) {
+            gcVars.push("_gc_" + scopeId + "_arrays");
+        }
+        return gcVars;
+    };
+    MemoryManager.prototype.getGCVariableForNode = function (node) {
+        var parentDecl = this.findParentFunctionNode(node);
+        var scopeId = parentDecl && parentDecl.pos + 1 || "main";
+        var key = node.pos + "_" + node.end;
+        if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple)
+            return "_gc_" + this.scopesOfVariables[key].scopeId + (this.scopesOfVariables[key].array ? "_arrays" : "");
         else
             return null;
     };
@@ -162,31 +199,36 @@ var MemoryManager = (function () {
         if (this.scopes[scopeId]) {
             for (var _i = 0, _a = this.scopes[scopeId].filter(function (v) { return v.simple; }); _i < _a.length; _i++) {
                 var simpleVarScopeInfo = _a[_i];
-                destructors.push(simpleVarScopeInfo.declIdent);
+                destructors.push({ node: simpleVarScopeInfo.node, varName: simpleVarScopeInfo.varName });
             }
         }
         return destructors;
     };
-    MemoryManager.prototype.scheduleVariableDisposal = function (varIdent) {
-        var varId = this.getSymbolId(varIdent);
-        var varFuncNode = this.findParentFunctionNode(varIdent);
-        var varPos = varIdent.pos;
+    MemoryManager.prototype.getReservedTemporaryVarName = function (node) {
+        return this.scopesOfVariables[node.pos + "_" + node.end].varName;
+    };
+    MemoryManager.prototype.scheduleNodeDisposal = function (heapNode) {
+        var varFuncNode = this.findParentFunctionNode(heapNode);
         var scope = varFuncNode && varFuncNode.pos + 1 || "main";
         var isSimple = true;
         // TODO:
         // - calls from multiple external functions (only one of them is processed currently)
         // - circular references
         // - complicated call tree
-        var queue = [varIdent];
+        var queue = [heapNode];
         queue.push();
         while (queue.length > 0) {
             var node = queue.shift();
-            var nodeVarInfo = this.typeHelper.getVariableInfo(node);
-            if (!nodeVarInfo) {
-                console.log("WARNING: Cannot find references for " + node.getText());
-                continue;
+            var refs = [node];
+            if (node.kind == ts.SyntaxKind.Identifier) {
+                var varIdent = node;
+                var nodeVarInfo = this.typeHelper.getVariableInfo(varIdent);
+                if (!nodeVarInfo) {
+                    console.log("WARNING: Cannot find references for " + node.getText());
+                    continue;
+                }
+                refs = this.typeHelper.getVariableInfo(varIdent).references;
             }
-            var refs = this.typeHelper.getVariableInfo(node).references;
             var returned = false;
             for (var _i = 0, refs_1 = refs; _i < refs_1.length; _i++) {
                 var ref = refs_1[_i];
@@ -195,34 +237,48 @@ var MemoryManager = (function () {
                     scope = "main";
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     var binaryExpr = ref.parent;
-                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.left.pos == ref.pos)
+                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binaryExpr.left.getText() == heapNode.getText()) {
+                        console.log(heapNode.getText() + " -> Detected assignment: " + binaryExpr.getText() + ".");
                         isSimple = false;
+                    }
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     var call = ref.parent;
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
-                        console.log(varIdent.getText() + " -> Found function call!");
+                        console.log(heapNode.getText() + " -> Found function call!");
                         if (scope !== "main") {
                             var funcNode = this.findParentFunctionNode(call);
                             scope = funcNode && funcNode.pos + 1 || "main";
                             isSimple = false;
                         }
-                        this.addIfFoundInAssignment(varIdent, call, queue);
+                        this.addIfFoundInAssignment(heapNode, call, queue);
                     }
                     else {
                         var symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
                             if (call.expression.getText() != "console.log") {
-                                console.log(varIdent.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
-                                scope = "main";
-                                isSimple = false;
+                                var isPush = false;
+                                if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                                    var propAccess = call.expression;
+                                    var type_1 = this.typeHelper.getCType(propAccess.expression);
+                                    if (type_1 && (type_1 instanceof types_1.ArrayType) && propAccess.name.getText() == "push")
+                                        isPush = true;
+                                }
+                                if (isPush) {
+                                    console.log("WARNING: " + heapNode.getText() + " is pushed to an array ('" + call.getText() + "'), but this scenario is not yet supported by memory manager!");
+                                }
+                                else {
+                                    console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
+                                    scope = "main";
+                                    isSimple = false;
+                                }
                             }
                         }
                         else {
                             var funcDecl = symbol.valueDeclaration;
                             for (var i = 0; i < call.arguments.length; i++) {
                                 if (call.arguments[i].kind == ts.SyntaxKind.Identifier && call.arguments[i].getText() == node.getText()) {
-                                    console.log(varIdent.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
+                                    console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
                                     queue.push(funcDecl.parameters[i].name);
                                     isSimple = false;
                                 }
@@ -233,17 +289,31 @@ var MemoryManager = (function () {
                 else if (ref.parent && ref.parent.kind == ts.SyntaxKind.ReturnStatement && !returned) {
                     returned = true;
                     queue.push(parentNode.name);
-                    console.log(varIdent.getText() + " -> Found variable returned from the function!");
+                    console.log(heapNode.getText() + " -> Found variable returned from the function!");
                     isSimple = false;
                 }
                 else
-                    this.addIfFoundInAssignment(varIdent, ref, queue);
+                    this.addIfFoundInAssignment(heapNode, ref, queue);
             }
         }
-        var scopeInfo = { varPos: varPos, varId: varId, declIdent: varIdent, scopeId: scope, symbolId: varId, simple: isSimple };
+        var type = this.typeHelper.getCType(heapNode);
+        var varName;
+        if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
+            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
+        else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
+            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
+        else
+            varName = heapNode.getText();
+        var scopeInfo = {
+            node: heapNode,
+            simple: isSimple,
+            array: type && type instanceof types_1.ArrayType && type.isDynamicArray,
+            varName: varName,
+            scopeId: scope
+        };
         this.scopes[scope] = this.scopes[scope] || [];
         this.scopes[scope].push(scopeInfo);
-        this.scopesOfVariables[varPos] = scopeInfo;
+        this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
     };
     MemoryManager.prototype.addIfFoundInAssignment = function (varIdent, ref, queue) {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
@@ -280,7 +350,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],4:[function(require,module,exports){
+},{"./types":12}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -409,6 +479,7 @@ var CBinaryExpression = (function () {
     function CBinaryExpression(scope, node) {
         this.replacedWithCall = false;
         this.replacedWithVar = false;
+        this.gcVarName = null;
         this.strPlusStr = false;
         this.strPlusNumber = false;
         this.numberPlusStr = false;
@@ -440,8 +511,9 @@ var CBinaryExpression = (function () {
             if (callReplaceMap[node.operatorToken.kind])
                 scope.root.headerFlags.strings = true;
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
-                var tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                scope.variables.push(new variable_1.CVariable(scope, tempVarName, "char *"));
+                var tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                scope.func.variables.push(new variable_1.CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
+                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
                 this.strPlusStr = true;
@@ -465,8 +537,9 @@ var CBinaryExpression = (function () {
                 }
             }
             if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
-                var tempVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_string");
-                scope.variables.push(new variable_1.CVariable(scope, tempVarName, "char *"));
+                var tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                scope.func.variables.push(new variable_1.CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
+                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
                 this.replacementVarName = tempVarName;
                 if (leftType == types_1.NumberVarType)
@@ -484,10 +557,14 @@ var CBinaryExpression = (function () {
             _a = callReplaceMap[node.operatorToken.kind], this.call = _a[0], this.callCondition = _a[1];
         }
         this.nodeText = node.getText();
+        if (this.gcVarName) {
+            scope.root.headerFlags.gc_iterator = true;
+            scope.root.headerFlags.array = true;
+        }
         var _a;
     }
     CBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", ts.SyntaxKind.BinaryExpression)
+        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", ts.SyntaxKind.BinaryExpression)
     ], CBinaryExpression);
     return CBinaryExpression;
 }());
@@ -539,11 +616,12 @@ var CArrayLiteralExpression = (function () {
             this.expression = "/* Empty array is not supported inside expressions */";
             return;
         }
-        var varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
         var type = scope.root.typeHelper.getCType(node);
         if (type instanceof types_1.ArrayType) {
+            var varName = void 0;
             var canUseInitializerList = node.elements.every(function (e) { return e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral; });
             if (!type.isDynamicArray && canUseInitializerList) {
+                varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
                 var s = "{ ";
                 for (var i = 0; i < arrSize; i++) {
                     if (i != 0)
@@ -555,10 +633,21 @@ var CArrayLiteralExpression = (function () {
                 scope.variables.push(new variable_1.CVariable(scope, varName, type, { initializer: s }));
             }
             else {
-                scope.variables.push(new variable_1.CVariable(scope, varName, type));
                 if (type.isDynamicArray) {
+                    varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+                    scope.func.variables.push(new variable_1.CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
                     scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
+                    var gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+                    if (gcVarName) {
+                        scope.statements.push("ARRAY_PUSH(" + gcVarName + ", (void *)" + varName + ");\n");
+                        scope.root.headerFlags.gc_iterator = true;
+                        scope.root.headerFlags.array = true;
+                    }
+                }
+                else {
+                    varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                    scope.variables.push(new variable_1.CVariable(scope, varName, type));
                 }
                 for (var i = 0; i < arrSize; i++) {
                     var assignment = new assignment_1.CAssignment(scope, varName, i + "", type, node.elements[i]);
@@ -670,6 +759,7 @@ var CFunction = (function () {
     function CFunction(root, funcDecl) {
         var _this = this;
         this.root = root;
+        this.func = this;
         this.parameters = [];
         this.variables = [];
         this.statements = [];
@@ -679,16 +769,22 @@ var CFunction = (function () {
         this.returnType = root.typeHelper.getTypeString(signature.getReturnType());
         this.parameters = signature.parameters.map(function (p) { return new variable_1.CVariable(_this, p.name, p, { removeStorageSpecifier: true }); });
         this.variables = [];
-        this.gcVarName = root.memoryManager.getGCVariableForScope(funcDecl);
-        if (this.gcVarName)
-            root.variables.push(new variable_1.CVariable(this, this.gcVarName, new types_1.ArrayType("void *", 0, true)));
+        this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
+        for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
+            var gcVarName = _a[_i];
+            var pointerType = new types_1.ArrayType("void *", 0, true);
+            if (gcVarName.indexOf("arrays") == -1)
+                root.variables.push(new variable_1.CVariable(root, gcVarName, pointerType));
+            else
+                root.variables.push(new variable_1.CVariable(root, gcVarName, new types_1.ArrayType(pointerType, 0, true)));
+        }
         funcDecl.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
         if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
             this.destructors = new variable_1.CVariableDestructors(this, funcDecl);
         }
     }
     CFunction = __decorate([
-        template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {#if gcVarName}\n        ARRAY_CREATE({gcVarName}, 2, 0);\n    {/if}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
+        template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
     ], CFunction);
     return CFunction;
 }());
@@ -856,6 +952,7 @@ var CForOfStatement = (function () {
         this.statements = [];
         this.cast = "";
         this.parent = scope;
+        this.func = scope.func;
         this.root = scope.root;
         this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
         scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
@@ -912,6 +1009,7 @@ var CBlock = (function () {
         this.variables = [];
         this.statements = [];
         this.parent = scope;
+        this.func = scope.func;
         this.root = scope.root;
         if (node.kind == ts.SyntaxKind.Block) {
             var block = node;
@@ -970,7 +1068,7 @@ var CVariableDeclaration = (function () {
         this.varName = varInfo.name;
         this.needAllocateArray = varType instanceof types_1.ArrayType && varInfo.requiresAllocation;
         this.needAllocate = varInfo.requiresAllocation;
-        this.gcVarName = scope.root.memoryManager.getGCVariableForVariable(varDecl, varDecl.pos);
+        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(varDecl.name);
         this.isStruct = varType instanceof types_1.StructType && !varType.isDict;
         this.isDict = varType instanceof types_1.StructType && varType.isDict;
         this.isArray = varType instanceof types_1.ArrayType;
@@ -988,7 +1086,7 @@ var CVariableDeclaration = (function () {
             scope.root.headerFlags.gc_iterator = true;
     }
     CVariableDeclaration = __decorate([
-        template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocate}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && needAllocateArray}\n    ARRAY_PUSH({gcVarName}, {varName}->data);\n{/if}\n{#if gcVarName && needAllocate}\n    ARRAY_PUSH({gcVarName}, {varName});\n{/if}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
+        template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocate}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && needAllocate}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
     ], CVariableDeclaration);
     return CVariableDeclaration;
 }());
@@ -996,18 +1094,27 @@ exports.CVariableDeclaration = CVariableDeclaration;
 var CVariableDestructors = (function () {
     function CVariableDestructors(scope, node) {
         var _this = this;
-        this.gcVarName = scope.root.memoryManager.getGCVariableForScope(node);
+        this.gcVarName = null;
+        this.gcArraysVarName = null;
+        var gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
+        for (var _i = 0, gcVarNames_1 = gcVarNames; _i < gcVarNames_1.length; _i++) {
+            var gc = gcVarNames_1[_i];
+            if (gc.indexOf("arrays") > -1)
+                this.gcArraysVarName = gc;
+            else
+                this.gcVarName = gc;
+        }
         this.destructors = [];
         scope.root.memoryManager.getDestructorsForScope(node)
-            .map(function (d) { return scope.root.typeHelper.getVariableInfo(d); })
-            .forEach(function (dv) {
-            if (dv.type instanceof types_1.ArrayType)
-                _this.destructors.push(dv.name + "->data");
-            _this.destructors.push(dv.name);
+            .forEach(function (r) {
+            var type = scope.root.typeHelper.getCType(r.node);
+            if (type instanceof types_1.ArrayType)
+                _this.destructors.push(r.varName + "->data");
+            _this.destructors.push(r.varName);
         });
     }
     CVariableDestructors = __decorate([
-        template_1.CodeTemplate("\n{destructors {    }=> free({this});\n}\n{#if gcVarName}\n    for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)\n            free({gcVarName}->data[_gc_i]);\n        free({gcVarName}->data);\n{/if}")
+        template_1.CodeTemplate("\n{destructors {    }=> free({this});\n}\n{#if gcArraysVarName}\n        for (_gc_i = 0; _gc_i < {gcArraysVarName}->size; _gc_i++) {\n            free({gcArraysVarName}->data[_gc_i]->data);\n            free({gcArraysVarName}->data[_gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n{/if}\n{#if gcVarName}\n        for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)\n            free({gcVarName}->data[_gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n{/if}")
     ], CVariableDestructors);
     return CVariableDestructors;
 }());
@@ -1081,6 +1188,7 @@ var CProgram = (function () {
         var _this = this;
         this.parent = null;
         this.root = this;
+        this.func = this;
         this.variables = [];
         this.statements = [];
         this.functions = [];
@@ -1095,14 +1203,24 @@ var CProgram = (function () {
                 properties: s.properties.map(function (p) { return new variable_1.CVariable(_this, p.name, p.type, { removeStorageSpecifier: true }); })
             };
         });
-        this.memoryManager.preprocess();
-        this.gcVarName = this.memoryManager.getGCVariableForScope(null);
-        if (this.gcVarName)
-            this.variables.push(new variable_1.CVariable(this, this.gcVarName, new types_1.ArrayType("void *", 0, true)));
+        this.memoryManager.preprocessVariables();
         for (var _i = 0, _a = tsProgram.getSourceFiles(); _i < _a.length; _i++) {
             var source = _a[_i];
-            for (var _b = 0, _c = source.statements; _b < _c.length; _b++) {
-                var s = _c[_b];
+            this.memoryManager.preprocessTemporaryVariables(source);
+        }
+        this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
+        for (var _b = 0, _c = this.gcVarNames; _b < _c.length; _b++) {
+            var gcVarName = _c[_b];
+            var pointerType = new types_1.ArrayType("void *", 0, true);
+            if (gcVarName.indexOf("arrays") == -1)
+                this.variables.push(new variable_1.CVariable(this, gcVarName, pointerType));
+            else
+                this.variables.push(new variable_1.CVariable(this, gcVarName, new types_1.ArrayType(pointerType, 0, true)));
+        }
+        for (var _d = 0, _e = tsProgram.getSourceFiles(); _d < _e.length; _d++) {
+            var source = _e[_d];
+            for (var _f = 0, _g = source.statements; _f < _g.length; _f++) {
+                var s = _g[_f];
                 if (s.kind == ts.SyntaxKind.FunctionDeclaration)
                     this.functions.push(new function_1.CFunction(this, s));
                 else
@@ -1112,7 +1230,7 @@ var CProgram = (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_pos}\n    static const char * str_pos_tmpvar;\n    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties => {this};}\n};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {#if gcVarName}\n        ARRAY_CREATE({gcVarName}, 2, 0);\n    {/if}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_pos}\n    static const char * str_pos_tmpvar;\n    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties => {this};}\n};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
     ], CProgram);
     return CProgram;
 }());
