@@ -173,19 +173,19 @@ var MemoryManager = (function () {
     };
     MemoryManager.prototype.getGCVariablesForScope = function (node) {
         var parentDecl = this.findParentFunctionNode(node);
-        var scopeId = parentDecl && parentDecl.pos + 1 || "main";
+        var scopeId = parentDecl && parentDecl.pos + 1 + "" || "main";
+        var realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId;
         var gcVars = [];
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && !v.array; }).length) {
-            gcVars.push("_gc_" + scopeId);
+            gcVars.push("_gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && v.array; }).length) {
-            gcVars.push("_gc_" + scopeId + "_arrays");
+            gcVars.push("_gc_" + realScopeId + "_arrays");
         }
         return gcVars;
     };
     MemoryManager.prototype.getGCVariableForNode = function (node) {
         var parentDecl = this.findParentFunctionNode(node);
-        var scopeId = parentDecl && parentDecl.pos + 1 || "main";
         var key = node.pos + "_" + node.end;
         if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple)
             return "_gc_" + this.scopesOfVariables[key].scopeId + (this.scopesOfVariables[key].array ? "_arrays" : "");
@@ -209,12 +209,12 @@ var MemoryManager = (function () {
     };
     MemoryManager.prototype.scheduleNodeDisposal = function (heapNode) {
         var varFuncNode = this.findParentFunctionNode(heapNode);
-        var scope = varFuncNode && varFuncNode.pos + 1 || "main";
+        var topScope = varFuncNode && varFuncNode.pos + 1 || "main";
         var isSimple = true;
+        var scopeTree = {};
+        scopeTree[topScope] = true;
         // TODO:
-        // - calls from multiple external functions (only one of them is processed currently)
         // - circular references
-        // - complicated call tree
         var queue = [heapNode];
         queue.push();
         while (queue.length > 0) {
@@ -234,7 +234,7 @@ var MemoryManager = (function () {
                 var ref = refs_1[_i];
                 var parentNode = this.findParentFunctionNode(ref);
                 if (!parentNode)
-                    scope = "main";
+                    topScope = "main";
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     var binaryExpr = ref.parent;
                     if (binaryExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binaryExpr.left.getText() == heapNode.getText()) {
@@ -246,10 +246,14 @@ var MemoryManager = (function () {
                     var call = ref.parent;
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
                         console.log(heapNode.getText() + " -> Found function call!");
-                        if (scope !== "main") {
+                        if (topScope !== "main") {
                             var funcNode = this.findParentFunctionNode(call);
-                            scope = funcNode && funcNode.pos + 1 || "main";
+                            topScope = funcNode && funcNode.pos + 1 || "main";
+                            var targetScope = node.parent.pos + 1 + "";
                             isSimple = false;
+                            if (scopeTree[targetScope])
+                                delete scopeTree[targetScope];
+                            scopeTree[topScope] = targetScope;
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     }
@@ -269,7 +273,7 @@ var MemoryManager = (function () {
                                 }
                                 else {
                                     console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
-                                    scope = "main";
+                                    topScope = "main";
                                     isSimple = false;
                                 }
                             }
@@ -304,16 +308,20 @@ var MemoryManager = (function () {
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
         else
             varName = heapNode.getText();
+        var foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {
             node: heapNode,
             simple: isSimple,
             array: type && type instanceof types_1.ArrayType && type.isDynamicArray,
             varName: varName,
-            scopeId: scope
+            scopeId: foundScopes.join("_")
         };
-        this.scopes[scope] = this.scopes[scope] || [];
-        this.scopes[scope].push(scopeInfo);
         this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
+        for (var _a = 0, foundScopes_1 = foundScopes; _a < foundScopes_1.length; _a++) {
+            var sc = foundScopes_1[_a];
+            this.scopes[sc] = this.scopes[sc] || [];
+            this.scopes[sc].push(scopeInfo);
+        }
     };
     MemoryManager.prototype.addIfFoundInAssignment = function (varIdent, ref, queue) {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
@@ -444,7 +452,9 @@ var CCallExpression = (function () {
             this.propName = propAccess.name.getText();
             this.varAccess = new CElementAccess(scope, propAccess.expression);
             if (this.funcName == "console.log") {
-                this.printfCalls = call.arguments.map(function (a) { return printf_1.PrintfHelper.create(scope, a); });
+                for (var i = 0; i < call.arguments.length; i++) {
+                    this.printfCalls.push(printf_1.PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
+                }
                 scope.root.headerFlags.printf = true;
             }
             else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
@@ -770,13 +780,19 @@ var CFunction = (function () {
         this.parameters = signature.parameters.map(function (p) { return new variable_1.CVariable(_this, p.name, p, { removeStorageSpecifier: true }); });
         this.variables = [];
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
-        for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
-            var gcVarName = _a[_i];
+        var _loop_1 = function(gcVarName) {
+            if (root.variables.filter(function (v) { return v.name == gcVarName; }).length)
+                return "continue";
             var pointerType = new types_1.ArrayType("void *", 0, true);
             if (gcVarName.indexOf("arrays") == -1)
                 root.variables.push(new variable_1.CVariable(root, gcVarName, pointerType));
             else
                 root.variables.push(new variable_1.CVariable(root, gcVarName, new types_1.ArrayType(pointerType, 0, true)));
+        };
+        for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
+            var gcVarName = _a[_i];
+            var state_1 = _loop_1(gcVarName);
+            if (state_1 === "continue") continue;
         }
         funcDecl.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
         if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
@@ -807,12 +823,13 @@ var variable_1 = require('./variable');
 var PrintfHelper = (function () {
     function PrintfHelper() {
     }
-    PrintfHelper.create = function (scope, printNode) {
+    PrintfHelper.create = function (scope, printNode, emitCR) {
+        if (emitCR === void 0) { emitCR = true; }
         var type = scope.root.typeHelper.getCType(printNode);
         var nodeExpression = template_1.CodeTemplateFactory.createForNode(scope, printNode);
         var accessor = nodeExpression["resolve"] ? nodeExpression["resolve"]() : nodeExpression;
         var options = {
-            emitCR: true
+            emitCR: emitCR
         };
         return new CPrintf(scope, printNode, accessor, type, options);
     };
@@ -1121,6 +1138,7 @@ var CVariableDestructors = (function () {
 exports.CVariableDestructors = CVariableDestructors;
 var CVariable = (function () {
     function CVariable(scope, name, typeSource, options) {
+        this.name = name;
         this.typeSource = typeSource;
         var typeString = scope.root.typeHelper.getTypeString(typeSource);
         if (typeString == types_1.NumberVarType)
@@ -1522,7 +1540,7 @@ var VariableData = (function () {
         this.assignmentTypes = {};
         this.typePromises = [];
         this.addedProperties = {};
-        this.propertiesAssigned = false;
+        this.objLiteralAssigned = false;
     }
     return VariableData;
 }());
@@ -1754,9 +1772,7 @@ var TypeHelper = (function () {
                 if (varDecl.name.getText() == node.getText()) {
                     this.addTypeToVariable(varPos, varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.propertiesAssigned = true;
-                    if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                        varData.propertiesAssigned = true;
+                        varData.objLiteralAssigned = true;
                     if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                         var forOfStatement = varDecl.parent.parent;
                         if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -1787,9 +1803,7 @@ var TypeHelper = (function () {
                     && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                     this.addTypeToVariable(varPos, binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.propertiesAssigned = true;
-                    if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                        varData.propertiesAssigned = true;
+                        varData.objLiteralAssigned = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -1797,7 +1811,6 @@ var TypeHelper = (function () {
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     var binExpr = propAccess.parent;
                     if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                        varData.propertiesAssigned = true;
                         var determinedType = this.determineType(propAccess.name, binExpr.right);
                         if (!(determinedType instanceof TypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
@@ -1844,7 +1857,6 @@ var TypeHelper = (function () {
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         var binExpr = elemAccess.parent;
                         if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                            varData.propertiesAssigned = true;
                             determinedType = this.determineType(elemAccess.expression, binExpr.right);
                             isLeftHandSide = true;
                         }
@@ -1899,7 +1911,7 @@ var TypeHelper = (function () {
                         if (this.variablesData[k].isDynamicArray)
                             this.variables[k].requiresAllocation = true;
                     }
-                    else if (varType instanceof StructType && this.variablesData[k].propertiesAssigned) {
+                    else if (varType instanceof StructType && this.variablesData[k].objLiteralAssigned) {
                         this.variables[k].requiresAllocation = true;
                     }
                     if (varType instanceof StructType) {
