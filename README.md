@@ -20,42 +20,106 @@ int main() {
 }
 ```
 
-No excessive code that you don't actually need is ever generated. The output is as readable as possible and maps well to the original code.
+No excessive code that is not actually needed is ever generated.
 
-Other examples can be found in **tests** folder.
+The output is as readable as possible and mostly maps well to the original code.
 
-Live demo:
+Another example:
 
- - https://andrei-markeev.github.io/ts2c/
+```javascript
+var obj = { key: "hello" };
+obj["newKey"] = "test";
+console.log(obj);
+```
+
+transpiles to the following C code:
+
+```c
+#include <stdlib.h>
+#include <assert.h>
+#include <stdio.h>
+
+struct obj_t {
+    const char * key;
+    const char * newKey;
+};
+
+static struct obj_t * obj;
+int main(void) {
+
+    obj = malloc(sizeof(*obj));
+    assert(obj != NULL);
+    obj->key = "hello";
+    obj->newKey = "test";
+
+    printf("{ ");
+    printf("key: \"%s\"", obj->key);
+    printf(", ");
+    printf("newKey: \"%s\"", obj->newKey);
+    printf(" }\n");
+
+    free(obj);
+
+    return 0;
+}
+```
+
+
+Project status
+--------------
 
 __**Work in progress:**__ it works, but only a tiny fraction of JS/TS syntax is currently supported.
 
-Use cases
+Currently supported features:
+
+ - literals: integers, strings, booleans, array literals, object literals
+ - variables of types: `number`, `string`, `boolean`, `Array`, `Object` (single type throughout variable lifetime)
+ - arrays: `push`, `pop`, `length`, `[index]`
+ - objects: only objects with static property names (i.e. you can do `obj["something"]`, but not `obj["something" + i]` yet)
+ - strings: `indexOf`
+ - functions in global scope, and calling functions (note: `this` and `new` aren't yet supported on function objects)
+ - console.log
+ - statements: `if`, `while`, `for`, `for of`, `return`
+ - operations with strings and numbers: `==`, `+`
+ - operations with strings: `==`, `+`
+ - operations with numbers: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
+
+Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
+Recursion or indirect recursion aren't supported yet, but otherwise this works relatively fine.
+
+Some working examples can be found in **tests** folder.
+
+Live demo
 ---------
 
-Use cases for TS2C include, but not limited to:
- - Rapid prototyping of IoT software
- - Porting existing libraries from JavaScript to C 
- - Creating simple solutions for microcontrollers 
+You can try it out yourself online:
 
-Examples of target platforms include:
+ - https://andrei-markeev.github.io/ts2c/
+
+Rationale
+---------
+
+The main motivation behind this project was to solve problem that IoT and wearables cannot be currently efficiently
+programmed with JavaScript.
+
+The thing is, for sustainable IoT devices that can work for a *long time* on single battery, things like
+Raspberry Pi won't do. You'll have to use low-power microcontrollers, which usually have very little memory available.
+
+RAM ranges literally **from 512 bytes** to 120KB, and ROM/Flash **from 1KB** to 4MB. In such conditions, even
+optimized JS interpreters like [JerryScript](https://github.com/Samsung/jerryscript), 
+[Espruino](https://github.com/espruino/Espruino) or [V7](https://github.com/cesanta/v7) are sometimes too 
+much of an overhead and usually lead to the increased battery drain and/or don't leave a lot of system 
+resources to your program.
+
+Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out, `eval`
+being first of them. Still, current conclusion is, that it is possible to transpile most of the language. 
+
+These are some examples of planned target platforms for using with TS2C:
  - [ESP8266](https://en.wikipedia.org/wiki/ESP8266)
  - [Pebble watch](https://en.wikipedia.org/wiki/Pebble_(watch))
  - [Atmel AVR](https://en.wikipedia.org/wiki/Atmel_AVR#Basic_families) family (used in Arduino boards)   
  - [TI MSP430](https://en.wikipedia.org/wiki/TI_MSP430) family
 
-Rationale
----------
-
-For sustainable IoT devices that can work for a long time on single battery, things like Raspberry Pi won't do.
-You'll have to use low-power microcontrollers, which usually have very little memory available.
-
-RAM ranges literally **from 512 bytes** to 120KB, and ROM/Flash **from 1KB** to 4MB. In such conditions, even
-optimized interpreters like JerryScript, Espruino an V7 are sometimes too much of an overhead and usually lead
-to the increased battery drain and/or don't leave a lot of system resources to your program.
-
-Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out, `eval`
-being first of them. Still, current conclusion is, that it is possible to transpile most of the language. 
 
 Usage
 -----
@@ -65,7 +129,7 @@ Syntax:
 node ts2c.js <files to transpile>
 ```
 
-In browser:
+In browser (also see **index.html** file):
 ```html
 <script src="https://npmcdn.com/typescript"></script>
 <script src="ts2c.bundle.js"></script>
