@@ -49,7 +49,10 @@ export class CCallExpression {
             this.varAccess = new CElementAccess(scope, propAccess.expression);
 
             if (this.funcName == "console.log") {
-                this.printfCalls = call.arguments.map(a => PrintfHelper.create(scope, a));
+                for (let i=0;i<call.arguments.length; i++)
+                {
+                    this.printfCalls.push(PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
+                }
                 scope.root.headerFlags.printf = true;
             }
             else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {

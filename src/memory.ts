@@ -1,18 +1,17 @@
 import * as ts from 'typescript';
 import {TypeHelper, ArrayType, StructType, StringVarType} from './types';
 
-type ScopeId = number | "main";
 type VariableScopeInfo = {
     node: ts.Node;
     simple: boolean,
     array: boolean;
     varName: string;
-    scopeId: ScopeId;
+    scopeId: string;
 };
 
 export class MemoryManager {
     private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
-    private scopesOfVariables: { [varPos: number]: VariableScopeInfo } = {};
+    private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
 
@@ -26,10 +25,8 @@ export class MemoryManager {
 
     }
 
-    public preprocessTemporaryVariables(node: ts.Node)
-    {
-        switch (node.kind)
-        {
+    public preprocessTemporaryVariables(node: ts.Node) {
+        switch (node.kind) {
             case ts.SyntaxKind.ArrayLiteralExpression:
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
@@ -43,8 +40,7 @@ export class MemoryManager {
             case ts.SyntaxKind.BinaryExpression:
                 {
                     let binExpr = <ts.BinaryExpression>node;
-                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken)
-                    {
+                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken) {
                         let leftType = this.typeHelper.getCType(binExpr.left);
                         let rightType = this.typeHelper.getCType(binExpr.right);
                         if (leftType == StringVarType || rightType == StringVarType)
@@ -65,20 +61,20 @@ export class MemoryManager {
 
     public getGCVariablesForScope(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
-        var scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
+        var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
+        let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array).length) {
-            gcVars.push("_gc_" + scopeId);
+            gcVars.push("_gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
-            gcVars.push("_gc_" + scopeId + "_arrays");
+            gcVars.push("_gc_" + realScopeId + "_arrays");
         }
         return gcVars;
     }
 
     public getGCVariableForNode(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
-        let scopeId: ScopeId = parentDecl && parentDecl.pos + 1 || "main";
         let key = node.pos + "_" + node.end;
 
         if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple)
@@ -91,8 +87,7 @@ export class MemoryManager {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
         let destructors: { node: ts.Node, varName: string }[] = [];
-        if (this.scopes[scopeId])
-        {
+        if (this.scopes[scopeId]) {
             for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple)) {
                 destructors.push({ node: simpleVarScopeInfo.node, varName: simpleVarScopeInfo.varName });
             }
@@ -100,30 +95,29 @@ export class MemoryManager {
         return destructors;
     }
 
-    public getReservedTemporaryVarName(node: ts.Node)
-    {
+    public getReservedTemporaryVarName(node: ts.Node) {
         return this.scopesOfVariables[node.pos + "_" + node.end].varName;
     }
 
     private scheduleNodeDisposal(heapNode: ts.Node) {
 
         let varFuncNode = this.findParentFunctionNode(heapNode);
-        var scope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
+        var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
         var isSimple = true;
 
+        var scopeTree = {};
+        scopeTree[topScope] = true;
+
         // TODO:
-        // - calls from multiple external functions (only one of them is processed currently)
         // - circular references
-        // - complicated call tree
 
         var queue = [heapNode];
         queue.push();
         while (queue.length > 0) {
             let node = queue.shift();
 
-            let refs = [ node ];
-            if (node.kind == ts.SyntaxKind.Identifier)
-            {
+            let refs = [node];
+            if (node.kind == ts.SyntaxKind.Identifier) {
                 let varIdent = <ts.Identifier>node;
                 let nodeVarInfo = this.typeHelper.getVariableInfo(varIdent);
                 if (!nodeVarInfo) {
@@ -136,7 +130,7 @@ export class MemoryManager {
             for (let ref of refs) {
                 let parentNode = this.findParentFunctionNode(ref);
                 if (!parentNode)
-                    scope = "main";
+                    topScope = "main";
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binaryExpr = <ts.BinaryExpression>ref.parent;
@@ -150,10 +144,14 @@ export class MemoryManager {
                     let call = <ts.CallExpression>ref.parent;
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
                         console.log(heapNode.getText() + " -> Found function call!");
-                        if (scope !== "main") {
+                        if (topScope !== "main") {
                             let funcNode = this.findParentFunctionNode(call);
-                            scope = funcNode && funcNode.pos + 1 || "main";
+                            topScope = funcNode && funcNode.pos + 1 || "main";
+                            let targetScope = node.parent.pos + 1 + "";
                             isSimple = false;
+                            if (scopeTree[targetScope])
+                                delete scopeTree[targetScope];
+                            scopeTree[topScope] = targetScope;
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     } else {
@@ -161,22 +159,19 @@ export class MemoryManager {
                         if (!symbol) {
                             if (call.expression.getText() != "console.log") {
                                 let isPush = false;
-                                if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression)
-                                {
+                                if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                                     let propAccess = <ts.PropertyAccessExpression>call.expression;
-                                    let type = this.typeHelper.getCType(propAccess.expression); 
+                                    let type = this.typeHelper.getCType(propAccess.expression);
                                     if (type && (type instanceof ArrayType) && propAccess.name.getText() == "push")
                                         isPush = true;
                                 }
 
-                                if (isPush)
-                                {
+                                if (isPush) {
                                     console.log("WARNING: " + heapNode.getText() + " is pushed to an array ('" + call.getText() + "'), but this scenario is not yet supported by memory manager!");
                                 }
-                                else
-                                {
+                                else {
                                     console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
-                                    scope = "main";
+                                    topScope = "main";
                                     isSimple = false;
                                 }
                             }
@@ -213,17 +208,21 @@ export class MemoryManager {
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
         else
             varName = heapNode.getText();
-        
+
+        let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {
             node: heapNode,
             simple: isSimple,
             array: type && type instanceof ArrayType && type.isDynamicArray,
             varName: varName,
-            scopeId: scope
+            scopeId: foundScopes.join("_")
         };
-        this.scopes[scope] = this.scopes[scope] || [];
-        this.scopes[scope].push(scopeInfo);
         this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
+
+        for (let sc of foundScopes) {
+            this.scopes[sc] = this.scopes[sc] || [];
+            this.scopes[sc].push(scopeInfo);
+        }
 
     }
 

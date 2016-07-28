@@ -124,7 +124,7 @@ interface CVariableOptions {
 
 export class CVariable {
     private varString: string;
-    constructor(scope: IScope, name: string, private typeSource, options?: CVariableOptions) {
+    constructor(scope: IScope, public name: string, private typeSource, options?: CVariableOptions) {
         let typeString = scope.root.typeHelper.getTypeString(typeSource);
         if (typeString == NumberVarType)
             scope.root.headerFlags.int16_t = true;

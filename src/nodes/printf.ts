@@ -6,12 +6,12 @@ import {CExpression, CCallExpression} from './expressions';
 import {CVariable} from './variable';
 
 export class PrintfHelper {
-    public static create(scope: IScope, printNode: ts.Expression) {
+    public static create(scope: IScope, printNode: ts.Expression, emitCR: boolean = true) {
         let type = scope.root.typeHelper.getCType(printNode);
         let nodeExpression = CodeTemplateFactory.createForNode(scope, printNode);
         let accessor = nodeExpression["resolve"] ? nodeExpression["resolve"]() : nodeExpression;
         let options = {
-            emitCR: true
+            emitCR: emitCR
         }
         return new CPrintf(scope, printNode, accessor, type, options);
     }

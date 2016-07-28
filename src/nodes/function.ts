@@ -35,6 +35,8 @@ export class CFunction implements IScope {
 
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
         for (let gcVarName of this.gcVarNames) {
+            if (root.variables.filter(v => v.name == gcVarName).length)
+                continue;
             let pointerType = new ArrayType("void *", 0, true);
             if (gcVarName.indexOf("arrays") == -1)
                 root.variables.push(new CVariable(root, gcVarName, pointerType));

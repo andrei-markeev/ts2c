@@ -74,7 +74,7 @@ class VariableData {
     addedProperties: PropertiesDictionary = {};
     parameterIndex: number;
     parameterFuncDeclPos: number;
-    propertiesAssigned: boolean = false;
+    objLiteralAssigned: boolean = false;
     isDynamicArray: boolean;
     isDict: boolean;
 }
@@ -327,9 +327,7 @@ export class TypeHelper {
                 if (varDecl.name.getText() == node.getText()) {
                     this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
                     if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.propertiesAssigned = true;
-                    if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                        varData.propertiesAssigned = true;
+                        varData.objLiteralAssigned = true;
                     if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                         let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
                         if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -361,9 +359,7 @@ export class TypeHelper {
                     && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                     this.addTypeToVariable(varPos, <ts.Identifier>binExpr.left, binExpr.right);
                     if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.propertiesAssigned = true;
-                    if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                        varData.propertiesAssigned = true;
+                        varData.objLiteralAssigned = true;
                 }
             }
             else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -371,7 +367,6 @@ export class TypeHelper {
                 if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binExpr = <ts.BinaryExpression>propAccess.parent;
                     if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                        varData.propertiesAssigned = true;
                         let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
                         if (!(determinedType instanceof TypePromise))
                             varData.addedProperties[propAccess.name.getText()] = determinedType;
@@ -420,7 +415,6 @@ export class TypeHelper {
                     if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>elemAccess.parent;
                         if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                            varData.propertiesAssigned = true;
                             determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
                             isLeftHandSide = true;
                         }
@@ -482,7 +476,7 @@ export class TypeHelper {
                         varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
                         if (this.variablesData[k].isDynamicArray)
                             this.variables[k].requiresAllocation = true;
-                    } else if (varType instanceof StructType && this.variablesData[k].propertiesAssigned) {
+                    } else if (varType instanceof StructType && this.variablesData[k].objLiteralAssigned) {
                         this.variables[k].requiresAllocation = true;
                     }
                     if (varType instanceof StructType) {
