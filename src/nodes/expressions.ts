@@ -20,7 +20,7 @@ export interface CExpression { }
 {#elseif propName == "push" && arguments.length == 1}
     {varAccess}->size
 {#elseif propName == "indexOf" && arguments.length == 1}
-    STR_POS({arg1}, {arg2})
+    str_pos({arg1}, {arg2})
 {#elseif propName == "pop" && arguments.length == 0}
     ARRAY_POP({varAccess})
 {#elseif printfCalls.length}

@@ -61,7 +61,8 @@ class HeaderFlags {
 {#if headerFlags.bool || headerFlags.js_var}
     typedef unsigned char uint8_t;
 {/if}
-{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp || headerFlags.str_len}
+{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
+     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}
     typedef int int16_t;
 {/if}
 
@@ -107,10 +108,6 @@ class HeaderFlags {
     #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
 {/if}
 
-{#if headerFlags.str_pos}
-    static const char * str_pos_tmpvar;
-    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)
-{/if}
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
@@ -121,12 +118,30 @@ class HeaderFlags {
         return strcmp(str, numstr);
     }
 {/if}
+{#if headerFlags.str_pos}
+    int16_t str_pos(const char * str, const char *search) {
+        int16_t i;
+        const char * found = strstr(str, search);
+        int16_t pos = 0;
+        if (found == 0)
+            return -1;
+        while (*str && str < found) {
+            i = 1;
+            if ((*str & 0xE0) == 0xC0) i=2;
+            else if ((*str & 0xF0) == 0xE0) i=3;
+            else if ((*str & 0xF8) == 0xF0) i=4;
+            str += i;
+            pos += i == 4 ? 2 : 1;
+        }
+        return pos;
+    }
+{/if}
 {#if headerFlags.str_len}
     int16_t str_len(const char * str) {
         int16_t len = 0;
         int16_t i = 0;
         while (*str) {
-            i=1;
+            i = 1;
             if ((*str & 0xE0) == 0xC0) i=2;
             else if ((*str & 0xF0) == 0xE0) i=3;
             else if ((*str & 0xF8) == 0xF0) i=4;
