@@ -2,9 +2,10 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, StringVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
-import {CAssignment} from './assignment';
+import {AssignmentHelper, CAssignment} from './assignment';
 import {PrintfHelper} from './printf';
 import {CVariable} from './variable';
+import {CElementAccess} from './elementaccess';
 
 export interface CExpression { }
 
@@ -327,74 +328,38 @@ class CArrayLiteralExpression {
 }
 
 @CodeTemplate(`
-{#if isSimpleVar || argumentExpression == null}
-    {elementAccess}
-{#elseif isDynamicArray && argumentExpression == 'length'}
-    {elementAccess}->size
-{#elseif isDynamicArray}
-    {elementAccess}->data[{argumentExpression}]
-{#elseif isStaticArray && argumentExpression == 'length'}
-    {arrayCapacity}
-{#elseif isStaticArray}
-    {elementAccess}[{argumentExpression}]
-{#elseif isStruct}
-    {elementAccess}->{argumentExpression}
-{#elseif isDict}
-    DICT_GET({elementAccess}, {argumentExpression})
-{#else}
-    /* Unsupported expression {nodeText} */
-{/if}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
-export class CElementAccess {
-    public isSimpleVar: boolean;
-    public isDynamicArray: boolean = false;
-    public isStaticArray: boolean = false;
-    public isStruct: boolean = false;
-    public isDict: boolean = false;
-    public elementAccess: CElementAccess | string;
-    public argumentExpression: CExpression = null;
-    public arrayCapacity: string;
-    public nodeText: string;
-    constructor(scope: IScope, node: ts.Node) {
-        let type: CType = null;
-
-        if (node.kind == ts.SyntaxKind.Identifier) {
-            type = scope.root.typeHelper.getCType(node);
-            this.elementAccess = node.getText();
-        } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
-            let propAccess = <ts.PropertyAccessExpression>node;
-            type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
-                this.elementAccess = propAccess.expression.getText();
-            else
-                this.elementAccess = new CElementAccess(scope, propAccess.expression);
-            this.argumentExpression = propAccess.name.getText();
-        } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
-            let elemAccess = <ts.ElementAccessExpression>node;
-            type = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                this.elementAccess = elemAccess.expression.getText();
-            else
-                this.elementAccess = new CElementAccess(scope, elemAccess.expression);
-            if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                let ident = elemAccess.argumentExpression.getText().slice(1, -1);
-                if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
-                    this.argumentExpression = ident;
-                else
-                    this.argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
-            } else
-                this.argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+{#statements}
+    {#if varName}
+        {varName} = malloc(sizeof(*{varName}));
+        assert({varName} != NULL);
+        {initializers}
+    {/if}
+{/statements}
+{expression}`, ts.SyntaxKind.ObjectLiteralExpression)
+class CObjectLiteralExpression {
+    public expression: string = '';
+    public varName: string = '';
+    public initializers: CAssignment[] = [];
+    constructor(scope: IScope, node: ts.ObjectLiteralExpression) {
+        if (node.properties.length == 0)
+            return;
+        let type = scope.root.typeHelper.getCType(node);
+        if (type instanceof StructType) {
+            this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            scope.func.variables.push(new CVariable(scope, this.varName, type, { initializer: "NULL" }));
+            
+            this.initializers = node.properties
+                .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
+                .map(p => <ts.PropertyAssignment>p)
+                .map(p => new CAssignment(scope, this.varName, p.name.getText(), type, p.initializer));
+            
+            this.expression = this.varName;
         }
-
-        this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
-        this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
-        this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
-        this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity + "";
-        this.isDict = type instanceof StructType && type.isDict;
-        this.isStruct = type instanceof StructType && !type.isDict;
-        this.nodeText = node.getText();
-
+        else
+            this.expression = "/* Unsupported use of object literal expression */";
     }
 }
+
 
 @CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
 export class CString {

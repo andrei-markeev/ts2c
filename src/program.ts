@@ -4,7 +4,10 @@ import {TypeHelper, ArrayType} from './types';
 import {CodeTemplate, CodeTemplateFactory} from './template';
 import {CFunction} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
+
+// these imports are here only because it is necessary to run decorators
 import './nodes/statements';
+import './nodes/expressions';
 
 export interface IScope {
     parent: IScope;
@@ -129,9 +132,7 @@ class HeaderFlags {
     int16_t _gc_i;
 {/if}
 
-{userStructs => struct {name} {
-    {properties => {this};}
-};\n}
+{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
 
 {variables => {this};\n}
 

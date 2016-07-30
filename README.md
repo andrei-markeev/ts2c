@@ -68,21 +68,28 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only a tiny fraction of JS/TS syntax is currently supported.
+__**Work in progress:**__ it works, but only a small fraction of JS/TS syntax is currently supported.
 
 Currently supported features:
 
- - literals: integers, strings, booleans, array literals, object literals
- - variables of types: `number`, `string`, `boolean`, `Array`, `Object` (single type throughout variable lifetime)
- - arrays: `push`, `pop`, `length`, `[index]`
- - objects: only objects with static property names (i.e. you can do `obj["something"]`, but not `obj["something" + i]` yet)
- - strings: `indexOf`
- - functions in global scope, and calling functions (note: `this` and `new` aren't yet supported on function objects)
+ - literals: integer numbers, strings, booleans, array literals, object literals
+ - variables of types: integer number, string, boolean, array, object
+ - statements: `if`-`then`-`else`, `while`, `for`, `for`-`of`, `return`
+ - functions in global scope
+ - comparisons: `>`, `<`, `<=`, `>=`, `==`, `!=`
+ - operations: `-`, `+`, `*`, `/`, `++`, `--` 
  - console.log
- - statements: `if`, `while`, `for`, `for of`, `return`
- - operations with strings and numbers: `==`, `+`
- - operations with strings: `==`, `+`
- - operations with numbers: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
+
+Limitations:
+
+ - dynamic variables (i.e. which accept values of multiple types) aren't supported yet  
+ - objects must have fixed property names, dynamic property names aren't supported yet
+ - arrays currently support only `push()`, `pop()` and `length`
+ - strings only support `indexOf()`
+ - operations and comparisons are limited depending on operand types:
+    - string and number: `==`, `+`
+    - string and string: `==`, `+`
+    - number and number: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
 Recursion or indirect recursion aren't supported yet, but otherwise this works relatively fine.

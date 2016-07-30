@@ -32,8 +32,32 @@ export class MemoryManager {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
                         return;
 
+                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
+                    {
+                        let binExpr = <ts.BinaryExpression>node.parent;
+                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
+                            return;
+                    }
+
                     let type = this.typeHelper.getCType(node);
                     if (type && type instanceof ArrayType && type.isDynamicArray)
+                        this.scheduleNodeDisposal(node);
+                }
+                break;
+            case ts.SyntaxKind.ObjectLiteralExpression:
+                {
+                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
+                        return;
+
+                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
+                    {
+                        let binExpr = <ts.BinaryExpression>node.parent;
+                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
+                            return;
+                    }
+
+                    let type = this.typeHelper.getCType(node);
+                    if (type && type instanceof StructType)
                         this.scheduleNodeDisposal(node);
                 }
                 break;
@@ -96,7 +120,10 @@ export class MemoryManager {
     }
 
     public getReservedTemporaryVarName(node: ts.Node) {
-        return this.scopesOfVariables[node.pos + "_" + node.end].varName;
+        if (this.scopesOfVariables[node.pos + "_" + node.end])
+            return this.scopesOfVariables[node.pos + "_" + node.end].varName;
+        else
+            return null;
     }
 
     private scheduleNodeDisposal(heapNode: ts.Node) {
@@ -162,14 +189,14 @@ export class MemoryManager {
                                 if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                                     let propAccess = <ts.PropertyAccessExpression>call.expression;
                                     let type = this.typeHelper.getCType(propAccess.expression);
-                                    if (type && (type instanceof ArrayType) && propAccess.name.getText() == "push")
+                                    if (type && (type instanceof ArrayType) && propAccess.name.getText() == "push") {
                                         isPush = true;
+                                        console.log(heapNode.getText() + " is pushed to array '" + propAccess.expression.getText() + "'.");
+                                        queue.push(propAccess.expression);
+                                    }
                                 }
 
-                                if (isPush) {
-                                    console.log("WARNING: " + heapNode.getText() + " is pushed to an array ('" + call.getText() + "'), but this scenario is not yet supported by memory manager!");
-                                }
-                                else {
+                                if (!isPush) {
                                     console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
                                     topScope = "main";
                                     isSimple = false;
@@ -204,6 +231,8 @@ export class MemoryManager {
         let varName: string;
         if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
+        else if (heapNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
+            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
         else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
         else
@@ -238,7 +267,6 @@ export class MemoryManager {
         else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
             let binaryExpr = <ts.BinaryExpression>ref.parent;
             if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.right.pos == ref.pos) {
-                // TODO: process non-identifier left hand side expressions
                 queue.push(binaryExpr.left);
                 console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
                 return true;

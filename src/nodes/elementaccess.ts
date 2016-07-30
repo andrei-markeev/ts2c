@@ -1,0 +1,81 @@
+import * as ts from 'typescript';
+import {CodeTemplate, CodeTemplateFactory} from '../template';
+import {IScope} from '../program';
+import {CType, ArrayType, StructType, UniversalVarType, PointerVarType} from '../types';
+
+
+@CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
+export class CElementAccess {
+    public simpleAccessor: CSimpleElementAccess;
+    constructor(scope: IScope, node: ts.Node) {
+        let type: CType = null;
+        let elementAccess: CElementAccess | string = null;
+        let argumentExpression: string = null
+
+        if (node.kind == ts.SyntaxKind.Identifier) {
+            type = scope.root.typeHelper.getCType(node);
+            elementAccess = node.getText();
+        } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
+            let propAccess = <ts.PropertyAccessExpression>node;
+            type = scope.root.typeHelper.getCType(propAccess.expression);
+            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
+                elementAccess = propAccess.expression.getText();
+            else
+                elementAccess = new CElementAccess(scope, propAccess.expression);
+            argumentExpression = propAccess.name.getText();
+        } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
+            let elemAccess = <ts.ElementAccessExpression>node;
+            type = scope.root.typeHelper.getCType(elemAccess.expression);
+            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
+                elementAccess = elemAccess.expression.getText();
+            else
+                elementAccess = new CElementAccess(scope, elemAccess.expression);
+            if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                let ident = elemAccess.argumentExpression.getText().slice(1, -1);
+                if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
+                    argumentExpression = ident;
+                else
+                    argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+            } else
+                argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+        }
+
+        this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
+    }
+}
+
+@CodeTemplate(`
+{#if isSimpleVar || argumentExpression == null}
+    {elementAccess}
+{#elseif isDynamicArray && argumentExpression == 'length'}
+    {elementAccess}->size
+{#elseif isDynamicArray}
+    {elementAccess}->data[{argumentExpression}]
+{#elseif isStaticArray && argumentExpression == 'length'}
+    {arrayCapacity}
+{#elseif isStaticArray}
+    {elementAccess}[{argumentExpression}]
+{#elseif isStruct}
+    {elementAccess}->{argumentExpression}
+{#elseif isDict}
+    DICT_GET({elementAccess}, {argumentExpression})
+{#else}
+    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */
+{/if}`)
+export class CSimpleElementAccess {
+    public isSimpleVar: boolean;
+    public isDynamicArray: boolean = false;
+    public isStaticArray: boolean = false;
+    public isStruct: boolean = false;
+    public isDict: boolean = false;
+    public arrayCapacity: string;
+    constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: string) {
+        this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
+        this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
+        this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
+        this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity + "";
+        this.isDict = type instanceof StructType && type.isDict;
+        this.isStruct = type instanceof StructType && !type.isDict;
+    }
+    
+}

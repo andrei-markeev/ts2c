@@ -3,7 +3,8 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
 import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
-import {CExpression, CElementAccess} from './expressions';
+import {CExpression} from './expressions';
+import {CElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 
 @CodeTemplate(`
