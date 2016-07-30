@@ -149,6 +149,8 @@ export class TypeHelper {
                         return parentObjectType.properties[propAccess.name.getText()];
                     else if (parentObjectType instanceof ArrayType && propAccess.name.getText() == "length")
                         return NumberVarType;
+                    else if (parentObjectType === StringVarType && propAccess.name.getText() == "length")
+                        return NumberVarType;
                     return null;
                 }
             case ts.SyntaxKind.CallExpression:

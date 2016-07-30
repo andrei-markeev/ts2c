@@ -134,6 +134,8 @@ class CBinaryExpression {
         let rightType = scope.root.typeHelper.getCType(node.right);
         this.left = CodeTemplateFactory.createForNode(scope, node.left);
         this.right = CodeTemplateFactory.createForNode(scope, node.right);
+        operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
+        operatorMap[ts.SyntaxKind.BarBarToken] = '||';
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -366,6 +368,7 @@ export class CString {
     public value: string;
     constructor(scope: IScope, value: ts.StringLiteral) {
         let s = value.getText();
+        s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else

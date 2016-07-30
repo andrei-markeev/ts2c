@@ -83,9 +83,10 @@ Currently supported features:
 Limitations:
 
  - dynamic variables (i.e. which accept values of multiple types) aren't supported yet  
- - objects must have fixed property names, dynamic property names aren't supported yet
+ - objects: `prototype` is not supported, dynamic properties not supported
  - arrays currently support only `push()`, `pop()` and `length`
- - strings only support `indexOf()`
+ - strings only support `indexOf()` and `length`
+ - functions do not support `new`, `arguments` and `this`
  - operations and comparisons are limited depending on operand types:
     - string and number: `==`, `+`
     - string and string: `==`, `+`

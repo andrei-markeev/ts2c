@@ -32,6 +32,7 @@ class HeaderFlags {
     str_int16_t_cmp: boolean = false;
     str_int16_t_cat: boolean = false;
     str_pos: boolean = false;
+    str_len: boolean = false;
     atoi: boolean = false;
 }
 
@@ -60,7 +61,7 @@ class HeaderFlags {
 {#if headerFlags.bool || headerFlags.js_var}
     typedef unsigned char uint8_t;
 {/if}
-{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}
+{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp || headerFlags.str_len}
     typedef int int16_t;
 {/if}
 
@@ -114,10 +115,25 @@ class HeaderFlags {
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}
-    int str_int16_t_cmp(const char *str, int16_t num) {
+    int str_int16_t_cmp(const char * str, int16_t num) {
         char numstr[STR_INT16_T_BUFLEN];
         sprintf(numstr, "%d", num);
         return strcmp(str, numstr);
+    }
+{/if}
+{#if headerFlags.str_len}
+    int16_t str_len(const char * str) {
+        int16_t len = 0;
+        int16_t i = 0;
+        while (*str) {
+            i=1;
+            if ((*str & 0xE0) == 0xC0) i=2;
+            else if ((*str & 0xF0) == 0xE0) i=3;
+            else if ((*str & 0xF8) == 0xF0) i=4;
+            str += i;
+            len += i == 4 ? 2 : 1;
+        }
+        return len;
     }
 {/if}
 {#if headerFlags.str_int16_t_cat}
@@ -192,7 +208,7 @@ export class CProgram implements IScope {
                 if (s.kind == ts.SyntaxKind.FunctionDeclaration)
                     this.functions.push(new CFunction(this, <any>s));
                 else
-            	    this.statements.push(CodeTemplateFactory.createForNode(this, s));
+                    this.statements.push(CodeTemplateFactory.createForNode(this, s));
             }
         }
 
