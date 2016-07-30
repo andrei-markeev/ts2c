@@ -147,8 +147,27 @@ var MemoryManager = (function () {
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
                         return;
+                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement) {
+                        var binExpr = node.parent;
+                        if (binExpr.left.kind == ts.SyntaxKind.Identifier)
+                            return;
+                    }
                     var type = this.typeHelper.getCType(node);
                     if (type && type instanceof types_1.ArrayType && type.isDynamicArray)
+                        this.scheduleNodeDisposal(node);
+                }
+                break;
+            case ts.SyntaxKind.ObjectLiteralExpression:
+                {
+                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
+                        return;
+                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement) {
+                        var binExpr = node.parent;
+                        if (binExpr.left.kind == ts.SyntaxKind.Identifier)
+                            return;
+                    }
+                    var type = this.typeHelper.getCType(node);
+                    if (type && type instanceof types_1.StructType)
                         this.scheduleNodeDisposal(node);
                 }
                 break;
@@ -205,7 +224,10 @@ var MemoryManager = (function () {
         return destructors;
     };
     MemoryManager.prototype.getReservedTemporaryVarName = function (node) {
-        return this.scopesOfVariables[node.pos + "_" + node.end].varName;
+        if (this.scopesOfVariables[node.pos + "_" + node.end])
+            return this.scopesOfVariables[node.pos + "_" + node.end].varName;
+        else
+            return null;
     };
     MemoryManager.prototype.scheduleNodeDisposal = function (heapNode) {
         var varFuncNode = this.findParentFunctionNode(heapNode);
@@ -265,13 +287,13 @@ var MemoryManager = (function () {
                                 if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                                     var propAccess = call.expression;
                                     var type_1 = this.typeHelper.getCType(propAccess.expression);
-                                    if (type_1 && (type_1 instanceof types_1.ArrayType) && propAccess.name.getText() == "push")
+                                    if (type_1 && (type_1 instanceof types_1.ArrayType) && propAccess.name.getText() == "push") {
                                         isPush = true;
+                                        console.log(heapNode.getText() + " is pushed to array '" + propAccess.expression.getText() + "'.");
+                                        queue.push(propAccess.expression);
+                                    }
                                 }
-                                if (isPush) {
-                                    console.log("WARNING: " + heapNode.getText() + " is pushed to an array ('" + call.getText() + "'), but this scenario is not yet supported by memory manager!");
-                                }
-                                else {
+                                if (!isPush) {
                                     console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
                                     topScope = "main";
                                     isSimple = false;
@@ -304,6 +326,8 @@ var MemoryManager = (function () {
         var varName;
         if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
+        else if (heapNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
+            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
         else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
         else
@@ -335,7 +359,6 @@ var MemoryManager = (function () {
         else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
             var binaryExpr = ref.parent;
             if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.right.pos == ref.pos) {
-                // TODO: process non-identifier left hand side expressions
                 queue.push(binaryExpr.left);
                 console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
                 return true;
@@ -358,7 +381,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./types":12}],4:[function(require,module,exports){
+},{"./types":13}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -370,12 +393,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var template_1 = require('../template');
 var types_1 = require('../types');
-var expressions_1 = require('./expressions');
+var elementaccess_1 = require('./elementaccess');
 var AssignmentHelper = (function () {
     function AssignmentHelper() {
     }
     AssignmentHelper.create = function (scope, left, right) {
-        var accessor = new expressions_1.CElementAccess(scope, left);
+        var accessor = new elementaccess_1.CElementAccess(scope, left);
         var varType = scope.root.typeHelper.getCType(left);
         return new CAssignment(scope, accessor, null, varType, right);
     };
@@ -384,9 +407,9 @@ var AssignmentHelper = (function () {
 exports.AssignmentHelper = AssignmentHelper;
 var CAssignment = (function () {
     function CAssignment(scope, accessor, argumentExpression, type, right) {
-        var _this = this;
         this.accessor = accessor;
         this.argumentExpression = argumentExpression;
+        this.allocator = '';
         this.isObjLiteralAssignment = false;
         this.isArrayLiteralAssignment = false;
         this.isDynamicArray = false;
@@ -399,32 +422,124 @@ var CAssignment = (function () {
         this.isDict = type instanceof types_1.StructType && type.isDict;
         this.isStruct = type instanceof types_1.StructType && !type.isDict;
         this.nodeText = right.getText();
-        if (right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+        var argType = type;
+        var argAccessor = accessor;
+        if (argumentExpression) {
+            if (type instanceof types_1.StructType)
+                argType = type.properties[argumentExpression];
+            else if (type instanceof types_1.ArrayType)
+                argType = type.elementType;
+            argAccessor = new elementaccess_1.CSimpleElementAccess(scope, type, accessor, argumentExpression);
+        }
+        var isTempVar = !!scope.root.memoryManager.getReservedTemporaryVarName(right);
+        if (right.kind == ts.SyntaxKind.ObjectLiteralExpression && !isTempVar) {
             this.isObjLiteralAssignment = true;
             var objLiteral = right;
             this.objInitializers = objLiteral.properties
                 .filter(function (p) { return p.kind == ts.SyntaxKind.PropertyAssignment; })
                 .map(function (p) { return p; })
-                .map(function (p) { return new CAssignment(scope, _this.accessor, p.name.getText(), type, p.initializer); });
+                .map(function (p) { return new CAssignment(scope, argAccessor, p.name.getText(), argType, p.initializer); });
         }
-        else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+        else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression && !isTempVar) {
             this.isArrayLiteralAssignment = true;
             var arrLiteral = right;
             this.arrayLiteralSize = arrLiteral.elements.length;
-            this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment(scope, _this.accessor, "" + i, type, e); });
+            this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment(scope, argAccessor, "" + i, argType, e); });
         }
         else
             this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
     }
     CAssignment = __decorate([
-        template_1.CodeTemplate("\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
+        template_1.CodeTemplate("\n{allocator}\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
     ], CAssignment);
     return CAssignment;
 }());
 exports.CAssignment = CAssignment;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./expressions":5}],5:[function(require,module,exports){
+},{"../template":12,"../types":13,"./elementaccess":5}],5:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require('../template');
+var types_1 = require('../types');
+var CElementAccess = (function () {
+    function CElementAccess(scope, node) {
+        var type = null;
+        var elementAccess = null;
+        var argumentExpression = null;
+        if (node.kind == ts.SyntaxKind.Identifier) {
+            type = scope.root.typeHelper.getCType(node);
+            elementAccess = node.getText();
+        }
+        else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
+            var propAccess = node;
+            type = scope.root.typeHelper.getCType(propAccess.expression);
+            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
+                elementAccess = propAccess.expression.getText();
+            else
+                elementAccess = new CElementAccess(scope, propAccess.expression);
+            argumentExpression = propAccess.name.getText();
+        }
+        else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
+            var elemAccess = node;
+            type = scope.root.typeHelper.getCType(elemAccess.expression);
+            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
+                elementAccess = elemAccess.expression.getText();
+            else
+                elementAccess = new CElementAccess(scope, elemAccess.expression);
+            if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                var ident = elemAccess.argumentExpression.getText().slice(1, -1);
+                if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
+                    argumentExpression = ident;
+                else
+                    argumentExpression = template_1.CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+            }
+            else
+                argumentExpression = template_1.CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+        }
+        this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
+    }
+    CElementAccess = __decorate([
+        template_1.CodeTemplate("{simpleAccessor}", [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
+    ], CElementAccess);
+    return CElementAccess;
+}());
+exports.CElementAccess = CElementAccess;
+var CSimpleElementAccess = (function () {
+    function CSimpleElementAccess(scope, type, elementAccess, argumentExpression) {
+        this.elementAccess = elementAccess;
+        this.argumentExpression = argumentExpression;
+        this.isDynamicArray = false;
+        this.isStaticArray = false;
+        this.isStruct = false;
+        this.isDict = false;
+        this.isString = false;
+        this.isSimpleVar = typeof type === 'string' && type != types_1.UniversalVarType && type != types_1.PointerVarType;
+        this.isDynamicArray = type instanceof types_1.ArrayType && type.isDynamicArray;
+        this.isStaticArray = type instanceof types_1.ArrayType && !type.isDynamicArray;
+        this.arrayCapacity = type instanceof types_1.ArrayType && !type.isDynamicArray && type.capacity + "";
+        this.isDict = type instanceof types_1.StructType && type.isDict;
+        this.isStruct = type instanceof types_1.StructType && !type.isDict;
+        this.isString = type === types_1.StringVarType;
+        if (this.isString && this.argumentExpression == "length")
+            scope.root.headerFlags.str_len = true;
+    }
+    CSimpleElementAccess = __decorate([
+        template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
+    ], CSimpleElementAccess);
+    return CSimpleElementAccess;
+}());
+exports.CSimpleElementAccess = CSimpleElementAccess;
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../template":12,"../types":13}],6:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -439,6 +554,7 @@ var types_1 = require('../types');
 var assignment_1 = require('./assignment');
 var printf_1 = require('./printf');
 var variable_1 = require('./variable');
+var elementaccess_1 = require('./elementaccess');
 var CCallExpression = (function () {
     function CCallExpression(scope, call) {
         this.propName = null;
@@ -450,7 +566,7 @@ var CCallExpression = (function () {
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             var propAccess = call.expression;
             this.propName = propAccess.name.getText();
-            this.varAccess = new CElementAccess(scope, propAccess.expression);
+            this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
             if (this.funcName == "console.log") {
                 for (var i = 0; i < call.arguments.length; i++) {
                     this.printfCalls.push(printf_1.PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
@@ -499,6 +615,8 @@ var CBinaryExpression = (function () {
         var rightType = scope.root.typeHelper.getCType(node.right);
         this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
         this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
+        operatorMap[ts.SyntaxKind.BarBarToken] = '||';
         if (leftType == types_1.NumberVarType && rightType == types_1.NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -674,61 +792,36 @@ var CArrayLiteralExpression = (function () {
     ], CArrayLiteralExpression);
     return CArrayLiteralExpression;
 }());
-var CElementAccess = (function () {
-    function CElementAccess(scope, node) {
-        this.isDynamicArray = false;
-        this.isStaticArray = false;
-        this.isStruct = false;
-        this.isDict = false;
-        this.argumentExpression = null;
-        var type = null;
-        if (node.kind == ts.SyntaxKind.Identifier) {
-            type = scope.root.typeHelper.getCType(node);
-            this.elementAccess = node.getText();
+var CObjectLiteralExpression = (function () {
+    function CObjectLiteralExpression(scope, node) {
+        var _this = this;
+        this.expression = '';
+        this.varName = '';
+        this.initializers = [];
+        if (node.properties.length == 0)
+            return;
+        var type = scope.root.typeHelper.getCType(node);
+        if (type instanceof types_1.StructType) {
+            this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            scope.func.variables.push(new variable_1.CVariable(scope, this.varName, type, { initializer: "NULL" }));
+            this.initializers = node.properties
+                .filter(function (p) { return p.kind == ts.SyntaxKind.PropertyAssignment; })
+                .map(function (p) { return p; })
+                .map(function (p) { return new assignment_1.CAssignment(scope, _this.varName, p.name.getText(), type, p.initializer); });
+            this.expression = this.varName;
         }
-        else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
-            var propAccess = node;
-            type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
-                this.elementAccess = propAccess.expression.getText();
-            else
-                this.elementAccess = new CElementAccess(scope, propAccess.expression);
-            this.argumentExpression = propAccess.name.getText();
-        }
-        else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
-            var elemAccess = node;
-            type = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                this.elementAccess = elemAccess.expression.getText();
-            else
-                this.elementAccess = new CElementAccess(scope, elemAccess.expression);
-            if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                var ident = elemAccess.argumentExpression.getText().slice(1, -1);
-                if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
-                    this.argumentExpression = ident;
-                else
-                    this.argumentExpression = template_1.CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
-            }
-            else
-                this.argumentExpression = template_1.CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
-        }
-        this.isSimpleVar = typeof type === 'string' && type != types_1.UniversalVarType && type != types_1.PointerVarType;
-        this.isDynamicArray = type instanceof types_1.ArrayType && type.isDynamicArray;
-        this.isStaticArray = type instanceof types_1.ArrayType && !type.isDynamicArray;
-        this.arrayCapacity = type instanceof types_1.ArrayType && !type.isDynamicArray && type.capacity + "";
-        this.isDict = type instanceof types_1.StructType && type.isDict;
-        this.isStruct = type instanceof types_1.StructType && !type.isDict;
-        this.nodeText = node.getText();
+        else
+            this.expression = "/* Unsupported use of object literal expression */";
     }
-    CElementAccess = __decorate([
-        template_1.CodeTemplate("\n{#if isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
-    ], CElementAccess);
-    return CElementAccess;
+    CObjectLiteralExpression = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if varName}\n        {varName} = malloc(sizeof(*{varName}));\n        assert({varName} != NULL);\n        {initializers}\n    {/if}\n{/statements}\n{expression}", ts.SyntaxKind.ObjectLiteralExpression)
+    ], CObjectLiteralExpression);
+    return CObjectLiteralExpression;
 }());
-exports.CElementAccess = CElementAccess;
 var CString = (function () {
     function CString(scope, value) {
         var s = value.getText();
+        s = s.replace(/\\u([A-Fa-f0-9]{4})/g, function (match, g1) { return String.fromCharCode(parseInt(g1, 16)); });
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
@@ -752,7 +845,7 @@ var CNumber = (function () {
 exports.CNumber = CNumber;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./assignment":4,"./printf":7,"./variable":9}],6:[function(require,module,exports){
+},{"../template":12,"../types":13,"./assignment":4,"./elementaccess":5,"./printf":8,"./variable":10}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -807,7 +900,7 @@ var CFunction = (function () {
 exports.CFunction = CFunction;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./variable":9}],7:[function(require,module,exports){
+},{"../template":12,"../types":13,"./variable":10}],8:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -890,7 +983,7 @@ var CPrintf = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./variable":9}],8:[function(require,module,exports){
+},{"../template":12,"../types":13,"./variable":10}],9:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -903,7 +996,7 @@ var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "unde
 var template_1 = require('../template');
 var types_1 = require('../types');
 var variable_1 = require('./variable');
-var expressions_1 = require('./expressions');
+var elementaccess_1 = require('./elementaccess');
 var assignment_1 = require('./assignment');
 var CReturnStatement = (function () {
     function CReturnStatement(scope, node) {
@@ -973,7 +1066,7 @@ var CForOfStatement = (function () {
         this.root = scope.root;
         this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
         scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
-        this.arrayAccess = new expressions_1.CElementAccess(scope, node.expression);
+        this.arrayAccess = new elementaccess_1.CElementAccess(scope, node.expression);
         var arrayVarType = scope.root.typeHelper.getCType(node.expression);
         if (arrayVarType && arrayVarType instanceof types_1.ArrayType) {
             this.isDynamicArray = arrayVarType.isDynamicArray;
@@ -988,7 +1081,7 @@ var CForOfStatement = (function () {
             this.init = declInit.name.getText();
         }
         else {
-            this.init = new expressions_1.CElementAccess(scope, node.initializer);
+            this.init = new elementaccess_1.CElementAccess(scope, node.initializer);
         }
         this.statements.push(template_1.CodeTemplateFactory.createForNode(this, node.statement));
         scope.variables = scope.variables.concat(this.variables);
@@ -1043,7 +1136,7 @@ var CBlock = (function () {
 exports.CBlock = CBlock;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./assignment":4,"./expressions":5,"./variable":9}],9:[function(require,module,exports){
+},{"../template":12,"../types":13,"./assignment":4,"./elementaccess":5,"./variable":10}],10:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1078,14 +1171,27 @@ var CVariableDeclarationList = (function () {
 exports.CVariableDeclarationList = CVariableDeclarationList;
 var CVariableDeclaration = (function () {
     function CVariableDeclaration(scope, varDecl) {
+        this.allocator = '';
         this.initializer = '';
         var varInfo = scope.root.typeHelper.getVariableInfo(varDecl.name);
-        var varType = varInfo.type;
         scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
-        this.varName = varInfo.name;
-        this.needAllocateArray = varType instanceof types_1.ArrayType && varInfo.requiresAllocation;
-        this.needAllocate = varInfo.requiresAllocation;
-        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(varDecl.name);
+        if (varInfo.requiresAllocation)
+            this.allocator = new CVariableAllocation(scope, varInfo.name, varInfo.type, varDecl.name);
+        if (varDecl.initializer)
+            this.initializer = assignment_1.AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
+    }
+    CVariableDeclaration = __decorate([
+        template_1.CodeTemplate("\n{allocator}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
+    ], CVariableDeclaration);
+    return CVariableDeclaration;
+}());
+exports.CVariableDeclaration = CVariableDeclaration;
+var CVariableAllocation = (function () {
+    function CVariableAllocation(scope, varName, varType, refNode) {
+        this.varName = varName;
+        this.needAllocateArray = varType instanceof types_1.ArrayType && varType.isDynamicArray;
+        this.needAllocateStruct = varType instanceof types_1.StructType;
+        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(refNode);
         this.isStruct = varType instanceof types_1.StructType && !varType.isDict;
         this.isDict = varType instanceof types_1.StructType && varType.isDict;
         this.isArray = varType instanceof types_1.ArrayType;
@@ -1093,21 +1199,19 @@ var CVariableDeclaration = (function () {
             this.initialCapacity = Math.max(varType.capacity * 2, 4);
             this.size = varType.capacity;
         }
-        if (varDecl.initializer)
-            this.initializer = assignment_1.AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
-        if (this.needAllocate || this.needAllocateArray)
+        if (this.needAllocateStruct || this.needAllocateArray)
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
         if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
     }
-    CVariableDeclaration = __decorate([
-        template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocate}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && needAllocate}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
-    ], CVariableDeclaration);
-    return CVariableDeclaration;
+    CVariableAllocation = __decorate([
+        template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n")
+    ], CVariableAllocation);
+    return CVariableAllocation;
 }());
-exports.CVariableDeclaration = CVariableDeclaration;
+exports.CVariableAllocation = CVariableAllocation;
 var CVariableDestructors = (function () {
     function CVariableDestructors(scope, node) {
         var _this = this;
@@ -1165,7 +1269,7 @@ var CVariable = (function () {
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":11,"../types":12,"./assignment":4}],10:[function(require,module,exports){
+},{"../template":12,"../types":13,"./assignment":4}],11:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1180,7 +1284,9 @@ var types_1 = require('./types');
 var template_1 = require('./template');
 var function_1 = require('./nodes/function');
 var variable_1 = require('./nodes/variable');
+// these imports are here only because it is necessary to run decorators
 require('./nodes/statements');
+require('./nodes/expressions');
 var HeaderFlags = (function () {
     function HeaderFlags() {
         this.strings = false;
@@ -1197,6 +1303,7 @@ var HeaderFlags = (function () {
         this.str_int16_t_cmp = false;
         this.str_int16_t_cat = false;
         this.str_pos = false;
+        this.str_len = false;
         this.atoi = false;
     }
     return HeaderFlags;
@@ -1248,14 +1355,14 @@ var CProgram = (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_pos}\n    static const char * str_pos_tmpvar;\n    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties => {this};}\n};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array || headerFlags.str_int16_t_cmp || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */\n    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */\n{/if}\n\n{#if headerFlags.str_pos}\n    static const char * str_pos_tmpvar;\n    #define STR_POS(str, search) ((str_pos_tmpvar = strstr(str, search)) != 0 ? str_pos_tmpvar - (str) : -1)\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i=1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t _gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
     ], CProgram);
     return CProgram;
 }());
 exports.CProgram = CProgram;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./memory":3,"./nodes/function":6,"./nodes/statements":8,"./nodes/variable":9,"./template":11,"./types":12}],11:[function(require,module,exports){
+},{"./memory":3,"./nodes/expressions":6,"./nodes/function":7,"./nodes/statements":9,"./nodes/variable":10,"./template":12,"./types":13}],12:[function(require,module,exports){
 "use strict";
 ;
 var nodeKindTemplates = {};
@@ -1470,7 +1577,7 @@ function processTemplate(template, args) {
     return [template, statements];
 }
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
@@ -1552,6 +1659,7 @@ var TypeHelper = (function () {
         this.variablesData = {};
         this.functionCallsData = {};
         this.arrayLiteralsTypes = {};
+        this.objectLiteralsTypes = {};
         this.temporaryVariables = {};
         this.iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
     }
@@ -1564,7 +1672,9 @@ var TypeHelper = (function () {
             this.findVariablesRecursively(source);
         }
         this.resolvePromisesAndFinalizeTypes();
-        return Object.keys(this.userStructs).map(function (k) {
+        return Object.keys(this.userStructs)
+            .filter(function (k) { return Object.keys(_this.userStructs[k].properties).length > 0; })
+            .map(function (k) {
             return {
                 name: k,
                 properties: Object.keys(_this.userStructs[k].properties)
@@ -1611,6 +1721,8 @@ var TypeHelper = (function () {
                         return parentObjectType.properties[propAccess.name.getText()];
                     else if (parentObjectType instanceof ArrayType && propAccess.name.getText() == "length")
                         return exports.NumberVarType;
+                    else if (parentObjectType === exports.StringVarType && propAccess.name.getText() == "length")
+                        return exports.NumberVarType;
                     return null;
                 }
             case ts.SyntaxKind.CallExpression:
@@ -1638,6 +1750,8 @@ var TypeHelper = (function () {
                 }
             case ts.SyntaxKind.ArrayLiteralExpression:
                 return this.arrayLiteralsTypes[node.pos];
+            case ts.SyntaxKind.ObjectLiteralExpression:
+                return this.objectLiteralsTypes[node.pos];
             default:
                 {
                     var tsType = this.typeChecker.getTypeAtLocation(node);
@@ -1751,147 +1865,156 @@ var TypeHelper = (function () {
                 }
             }
         }
-        if (node.kind == ts.SyntaxKind.Identifier) {
+        else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+            if (!this.arrayLiteralsTypes[node.pos])
+                this.determineArrayType(node);
+        }
+        else if (node.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+            if (!this.objectLiteralsTypes[node.pos]) {
+                var type = this.generateStructure(this.typeChecker.getTypeAtLocation(node));
+                this.objectLiteralsTypes[node.pos] = type;
+            }
+        }
+        else if (node.kind == ts.SyntaxKind.Identifier) {
             var symbol = this.typeChecker.getSymbolAtLocation(node);
-            if (!symbol) {
-                return;
-            }
-            var varPos = symbol.valueDeclaration.pos;
-            if (!this.variables[varPos]) {
-                this.variables[varPos] = new VariableInfo();
-                this.variablesData[varPos] = new VariableData();
-                this.variables[varPos].name = node.getText();
-                this.variables[varPos].declaration = symbol.declarations[0];
-                this.variablesData[varPos].tsType = this.typeChecker.getTypeAtLocation(node);
-            }
-            var varInfo = this.variables[varPos];
-            var varData = this.variablesData[varPos];
-            varInfo.references.push(node);
-            if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-                var varDecl = node.parent;
-                if (varDecl.name.getText() == node.getText()) {
-                    this.addTypeToVariable(varPos, varDecl.name, varDecl.initializer);
-                    if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.objLiteralAssigned = true;
-                    if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
-                        var forOfStatement = varDecl.parent.parent;
-                        if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
-                            var forOfInitializer = forOfStatement.initializer;
-                            if (forOfInitializer.declarations[0].pos == varDecl.pos) {
-                                varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+            if (symbol) {
+                var varPos = symbol.valueDeclaration.pos;
+                if (!this.variables[varPos]) {
+                    this.variables[varPos] = new VariableInfo();
+                    this.variablesData[varPos] = new VariableData();
+                    this.variables[varPos].name = node.getText();
+                    this.variables[varPos].declaration = symbol.declarations[0];
+                    this.variablesData[varPos].tsType = this.typeChecker.getTypeAtLocation(node);
+                }
+                var varInfo = this.variables[varPos];
+                var varData = this.variablesData[varPos];
+                varInfo.references.push(node);
+                if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
+                    var varDecl = node.parent;
+                    if (varDecl.name.getText() == node.getText()) {
+                        this.addTypeToVariable(varPos, varDecl.name, varDecl.initializer);
+                        if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                            varData.objLiteralAssigned = true;
+                        if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
+                            var forOfStatement = varDecl.parent.parent;
+                            if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+                                var forOfInitializer = forOfStatement.initializer;
+                                if (forOfInitializer.declarations[0].pos == varDecl.pos) {
+                                    varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                                }
                             }
                         }
                     }
                 }
-            }
-            else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
-                var funcDecl = node.parent.parent;
-                for (var i = 0; i < funcDecl.parameters.length; i++) {
-                    if (funcDecl.parameters[i].pos == node.pos) {
-                        var param = funcDecl.parameters[i];
-                        varData.parameterIndex = i;
-                        varData.parameterFuncDeclPos = funcDecl.pos + 1;
-                        this.addTypeToVariable(varPos, node, param.initializer);
-                        break;
-                    }
-                }
-            }
-            else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                var binExpr = node.parent;
-                if (binExpr.left.kind == ts.SyntaxKind.Identifier
-                    && binExpr.left.getText() == node.getText()
-                    && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                    this.addTypeToVariable(varPos, binExpr.left, binExpr.right);
-                    if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                        varData.objLiteralAssigned = true;
-                }
-            }
-            else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
-                var propAccess = node.parent;
-                if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                    var binExpr = propAccess.parent;
-                    if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                        var determinedType = this.determineType(propAccess.name, binExpr.right);
-                        if (!(determinedType instanceof TypePromise))
-                            varData.addedProperties[propAccess.name.getText()] = determinedType;
-                    }
-                }
-                if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
-                    varData.isDynamicArray = true;
-                    var determinedType = exports.UniversalVarType;
-                    if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
-                        var call = propAccess.parent;
-                        if (call.arguments.length == 1)
-                            determinedType = this.determineType(propAccess.expression, call.arguments[0]);
-                    }
-                    if (determinedType instanceof TypePromise) {
-                        determinedType.arrayOf = true;
-                        varData.typePromises.push(determinedType);
-                    }
-                    else {
-                        if (determinedType instanceof ArrayType)
-                            determinedType.isDynamicArray = true;
-                        var dtString = this.getTypeString(determinedType);
-                        var found = false;
-                        for (var _i = 0, _a = Object.keys(varData.assignmentTypes); _i < _a.length; _i++) {
-                            var tk = _a[_i];
-                            var at = varData.assignmentTypes[tk];
-                            if (at instanceof ArrayType && this.getTypeString(at.elementType) == dtString)
-                                found = true;
-                        }
-                        if (!found) {
-                            var arrayOfType = new ArrayType(determinedType, 0, true);
-                            varData.assignmentTypes[arrayOfType.getText()] = arrayOfType;
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
+                    var funcDecl = node.parent.parent;
+                    for (var i = 0; i < funcDecl.parameters.length; i++) {
+                        if (funcDecl.parameters[i].pos == node.pos) {
+                            var param = funcDecl.parameters[i];
+                            varData.parameterIndex = i;
+                            varData.parameterFuncDeclPos = funcDecl.pos + 1;
+                            this.addTypeToVariable(varPos, node, param.initializer);
+                            break;
                         }
                     }
                 }
-                if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
-                    varData.isDynamicArray = true;
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                    var binExpr = node.parent;
+                    if (binExpr.left.kind == ts.SyntaxKind.Identifier
+                        && binExpr.left.getText() == node.getText()
+                        && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                        this.addTypeToVariable(varPos, binExpr.left, binExpr.right);
+                        if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                            varData.objLiteralAssigned = true;
+                    }
                 }
-            }
-            else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
-                var elemAccess = node.parent;
-                if (elemAccess.expression.pos == node.pos) {
-                    var determinedType = exports.UniversalVarType;
-                    var isLeftHandSide = false;
-                    if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                        var binExpr = elemAccess.parent;
-                        if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                            determinedType = this.determineType(elemAccess.expression, binExpr.right);
-                            isLeftHandSide = true;
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                    var propAccess = node.parent;
+                    if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                        var binExpr = propAccess.parent;
+                        if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                            var determinedType = this.determineType(propAccess.name, binExpr.right);
+                            if (!(determinedType instanceof TypePromise))
+                                varData.addedProperties[propAccess.name.getText()] = determinedType;
                         }
                     }
-                    if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                        var propName = elemAccess.argumentExpression.getText().slice(1, -1);
-                        if (determinedType instanceof TypePromise) {
-                            determinedType.associatedProperty = propName;
-                            varData.typePromises.push(determinedType);
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
+                        varData.isDynamicArray = true;
+                        var determinedType = exports.UniversalVarType;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            var call = propAccess.parent;
+                            if (call.arguments.length == 1)
+                                determinedType = this.determineType(propAccess.expression, call.arguments[0]);
                         }
-                        varData.addedProperties[propName] = varData.addedProperties[propName] || exports.UniversalVarType;
-                        if (!(determinedType instanceof TypePromise) && varData.addedProperties[propName] == exports.UniversalVarType)
-                            varData.addedProperties[propName] = determinedType;
-                    }
-                    else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
                         if (determinedType instanceof TypePromise) {
                             determinedType.arrayOf = true;
                             varData.typePromises.push(determinedType);
                         }
                         else {
-                            for (var atKey in varData.assignmentTypes) {
-                                var at = varData.assignmentTypes[atKey];
-                                if (at instanceof ArrayType && at.elementType == exports.UniversalVarType)
-                                    at.elementType = determinedType;
+                            if (determinedType instanceof ArrayType)
+                                determinedType.isDynamicArray = true;
+                            var dtString = this.getTypeString(determinedType);
+                            var found = false;
+                            for (var _i = 0, _a = Object.keys(varData.assignmentTypes); _i < _a.length; _i++) {
+                                var tk = _a[_i];
+                                var at = varData.assignmentTypes[tk];
+                                if (at instanceof ArrayType && this.getTypeString(at.elementType) == dtString)
+                                    found = true;
+                            }
+                            if (!found) {
+                                var arrayOfType = new ArrayType(determinedType, 0, true);
+                                varData.assignmentTypes[arrayOfType.getText()] = arrayOfType;
                             }
                         }
                     }
-                    else if (isLeftHandSide)
-                        varData.isDict = true;
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
+                        varData.isDynamicArray = true;
+                    }
                 }
-            }
-            else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
-                var forOfStatement = node.parent;
-                if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
-                    varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
+                    var elemAccess = node.parent;
+                    if (elemAccess.expression.pos == node.pos) {
+                        var determinedType = exports.UniversalVarType;
+                        var isLeftHandSide = false;
+                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                            var binExpr = elemAccess.parent;
+                            if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                                determinedType = this.determineType(elemAccess.expression, binExpr.right);
+                                isLeftHandSide = true;
+                            }
+                        }
+                        if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                            var propName = elemAccess.argumentExpression.getText().slice(1, -1);
+                            if (determinedType instanceof TypePromise) {
+                                determinedType.associatedProperty = propName;
+                                varData.typePromises.push(determinedType);
+                            }
+                            varData.addedProperties[propName] = varData.addedProperties[propName] || exports.UniversalVarType;
+                            if (!(determinedType instanceof TypePromise) && varData.addedProperties[propName] == exports.UniversalVarType)
+                                varData.addedProperties[propName] = determinedType;
+                        }
+                        else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
+                            if (determinedType instanceof TypePromise) {
+                                determinedType.arrayOf = true;
+                                varData.typePromises.push(determinedType);
+                            }
+                            else {
+                                for (var atKey in varData.assignmentTypes) {
+                                    var at = varData.assignmentTypes[atKey];
+                                    if (at instanceof ArrayType && at.elementType == exports.UniversalVarType)
+                                        at.elementType = determinedType;
+                                }
+                            }
+                        }
+                        else if (isLeftHandSide)
+                            varData.isDict = true;
+                    }
+                }
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
+                    var forOfStatement = node.parent;
+                    if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
+                        varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                    }
                 }
             }
         }
@@ -1998,8 +2121,11 @@ var TypeHelper = (function () {
     };
     TypeHelper.prototype.determineType = function (left, right) {
         var tsType = right ? this.typeChecker.getTypeAtLocation(right) : this.typeChecker.getTypeAtLocation(left);
-        if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression)
-            return this.generateStructure(tsType, left);
+        if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+            var type = this.generateStructure(tsType, left);
+            this.objectLiteralsTypes[right.pos] = type;
+            return type;
+        }
         else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
             return this.determineArrayType(right);
         else if (right && (right.kind == ts.SyntaxKind.PropertyAccessExpression
@@ -2029,6 +2155,11 @@ var TypeHelper = (function () {
             var prop = _a[_i];
             var propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
             var propType = this.convertType(propTsType, prop.valueDeclaration.name);
+            if (propType == exports.UniversalVarType && prop.valueDeclaration.kind == ts.SyntaxKind.PropertyAssignment) {
+                var propAssignment = prop.valueDeclaration;
+                if (propAssignment.initializer && propAssignment.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                    propType = this.determineArrayType(propAssignment.initializer);
+            }
             userStructInfo[prop.name] = propType;
         }
         var userStructCode = this.getStructureBodyString(userStructInfo);
@@ -2090,7 +2221,7 @@ var TypeHelper = (function () {
 exports.TypeHelper = TypeHelper;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 (function (process,global){
 "use strict";
 var program_1 = require('./src/program');
@@ -2131,4 +2262,4 @@ if (typeof window !== 'undefined')
 })();
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./src/program":10,"_process":2,"fs":1}]},{},[13]);
+},{"./src/program":11,"_process":2,"fs":1}]},{},[14]);
