@@ -70,35 +70,19 @@ Project status
 
 __**Work in progress:**__ it works, but only a small fraction of JS/TS syntax is currently supported.
 
-Currently supported features:
+Overview of currently supported language features:
 
  - literals: numbers, strings, booleans, array literals, object literals
- - variables of types: number, string, boolean, array, object
+ - variables of fixed types: number, string, boolean, array, object
  - statements: `if`-`then`-`else`, `while`, `for`, `for`-`of`, `return`
- - functions in global scope
- - conditions: `||`, `&&`, `!`
- - comparisons: `>`, `<`, `<=`, `>=`, `==`, `!=`
- - operations: `-`, `+`, `*`, `/`, `++`, `--` 
- - console.log
+ - function declarations in global scope
+ - operations: `||`, `&&`, `!`, `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
 
-Limitations:
-
- - variable can accept values of only one type  
- - objects: `prototype` is not supported, dynamic properties not supported yet
- - arrays currently support only `push()`, `pop()`, `indexOf()` and `length`
- - strings currently support only `indexOf()` and `length`
- - numbers currently are only 16-bit integers
- - functions do not support `new`, `arguments` and `this` yet
- - nesting functions, using functions in expressions, and closures aren't supported yet
- - operations and comparisons are limited depending on operand types:
-    - string and number: `==`, `+`
-    - string and string: `==`, `+`
-    - number and number: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `++`, `--`
+Note: some of these features supported only partially.
+Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md). 
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
-Recursion or indirect recursion aren't supported yet, but otherwise this works relatively fine.
-
-Some working examples can be found in **tests** folder.
+Recursion or indirect recursion aren't supported yet, but otherwise this works relatively well.
 
 Live demo
 ---------
@@ -122,8 +106,9 @@ optimized JS interpreters like [JerryScript](https://github.com/Samsung/jerryscr
 much of an overhead and usually lead to the increased battery drain and/or don't leave a lot of system 
 resources to your program.
 
-Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out, `eval`
-being first of them. Still, current conclusion is, that it is possible to transpile most of the language. 
+Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out,
+for example `eval` and `try`-`catch`. Still, current conclusion is, that it is possible to transpile most of the
+language. 
 
 These are some examples of planned target platforms for using with TS2C:
  - [ESP8266](https://en.wikipedia.org/wiki/ESP8266)

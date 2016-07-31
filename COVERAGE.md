@@ -1,0 +1,259 @@
+JavaScript language features coverage
+=====================================
+
+Features that won't be implemented are ~~striked through~~.
+List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/language/E262-3.pdf), mainly sections 11, 12 and 15.
+
+### Expressions
+
+ - [ ] Primary Expressions
+    - [ ] `this`
+    - [x] Identifier reference
+    - [ ] Literal
+        - [x] `null`
+        - [x] `true` / `false`
+        - [x] number literal
+        - [x] string literal
+        - [ ] regular expression literal
+    - [x] Array initializer
+    - [x] Object initializer _(partial: dynamic property names aren't supported)_
+    - [ ] Grouping operator `(` `)`
+ - [ ] Left-hand-side Expressions
+    - [x] Property accessors
+    - [ ] `new` operator
+    - [x] Function call
+    - [x] Argument list
+    - [ ] Function expression
+ - [x] Postfix expressions
+    - [x] `--`
+    - [x] `++`
+ - [ ] Unary operators
+    - [ ] `delete`
+    - [ ] `void`
+    - [ ] `typeof`
+    - [x] Prefix increment operator `++`
+    - [x] Prefix decrement operator `--`
+    - [x] Unary `+`
+    - [ ] Unary `-`
+    - [ ] Bitwise NOT `~`
+    - [x] Logical NOT `!`
+ - [ ] Multiplicative operators
+    - [x] `*` __(only numbers)__
+    - [ ] `/`
+    - [ ] `%`
+ - [ ] Additive operators
+    - [x] `+` __(partial: number+number, string+number, string+string)__
+    - [x] `-` __(only numbers)__
+ - [ ] Bitwise shift operators
+    - [ ] `<<`
+    - [ ] `>>`
+    - [ ] `>>>`
+ - [ ] Relational operators
+    - [x] `<` __(only numbers)__
+    - [x] `>` __(only numbers)__
+    - [x] `<=` __(only numbers)__
+    - [x] `>=` __(only numbers)__
+    - [ ] `instanceof`
+    - [ ] `in`
+ - [x] Equality operators
+    - [x] `==` __(partial: number+number, string+number, string+string)__
+    - [x] `!=` __(partial: number+number, string+number, string+string)__
+    - [x] `===` __(partial: number+number, string+string)__
+    - [x] `!==` __(partial: number+number, string+string)__
+ - [ ] Binary bitwise operators
+    - [ ] `&`
+    - [ ] `|`
+    - [ ] `^`
+ - [x] Binary logical operators
+    - [x] `&&`
+    - [x] `||`
+ - [x] Conditional operator `?` `:`
+ - [ ] Assignment operators
+    - [x] Simple assignment `=` __(only as statement)__
+    - [ ] Compound assignments `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `>>>=`, `&=`, `^=`, `|=`
+ - [ ] Comma operator
+
+
+### Statements
+
+ - [x] Block statement
+ - [x] `var`
+ - [ ] Empty statement
+ - [x] Expression statement
+ - [x] `if`
+ - [ ] `do` `while`
+ - [ ] `while`
+ - [x] `for`
+ - [x] `for` `of`
+ - [x] `for` `in`
+ - [ ] `continue`
+ - [ ] `break`
+ - [x] `return`
+ - [ ] `switch`
+ - [ ] `with`
+ - [ ] ~~`throw`~~
+ - [ ] ~~`try`~~
+
+### Built-in objects
+
+ - [ ] Global
+     - [ ] NaN
+     - [ ] Infinity
+     - [ ] undefined
+     - [ ] ~~eval~~
+     - [ ] parseInt
+     - [ ] parseFloat
+     - [ ] isNaN
+     - [ ] isFinite
+     - [ ] decodeURI
+     - [ ] decodeURIComponent
+     - [ ] encodeURI
+     - [ ] encodeURIComponent
+ - [ ] Object
+     - [ ] new
+     - [ ] toString
+     - [ ] toLocaleString
+     - [ ] hasOwnProperty
+     - [ ] isPrototypeOf
+     - [ ] propertyIsEnumerable
+ - [ ] Function
+     - [ ] ~~new~~
+     - [ ] toString
+     - [ ] apply
+     - [ ] call
+ - [ ] Array
+     - [ ] new
+     - [ ] toString
+     - [ ] toLocaleString
+     - [ ] concat
+     - [x] pop
+     - [x] push
+     - [ ] reverse
+     - [ ] shift
+     - [ ] slice
+     - [ ] sort
+     - [ ] splice
+     - [ ] unshift
+     - [x] length
+     - [x] indexOf
+     - [ ] lastIndexOf
+ - [ ] String
+     - [ ] new
+     - [ ] toString
+     - [ ] valueOf
+     - [ ] charAt
+     - [ ] charCodeAt
+     - [ ] concat
+     - [x] indexOf
+     - [ ] lastIndexOf
+     - [ ] localeCompare
+     - [ ] match
+     - [ ] replace
+     - [ ] search
+     - [ ] slice
+     - [ ] split
+     - [ ] substring
+     - [ ] toLowerCase
+     - [ ] toLocaleLowerCase
+     - [ ] toUpperCase
+     - [ ] toLocaleUpperCase
+     - [x] length
+ - [ ] Boolean
+     - [ ] new
+     - [ ] toString
+     - [ ] valueOf
+ - [ ] Number
+     - [ ] new
+     - [ ] MAX_VALUE
+     - [ ] MIN_VALUE
+     - [ ] NaN
+     - [ ] NEGATIVE_INFINITY
+     - [ ] POSITIVE_INFINITY
+     - [ ] toString
+     - [ ] toLocaleString
+     - [ ] valueOf
+     - [ ] toFixed
+     - [ ] toExponential
+     - [ ] toPrecision
+ - [ ] Math
+     - [ ] LN10
+     - [ ] LN2
+     - [ ] LOG2E
+     - [ ] LOG10E
+     - [ ] PI
+     - [ ] SQRT1_2
+     - [ ] SQRT2
+     - [ ] abs
+     - [ ] acos
+     - [ ] asin
+     - [ ] atan
+     - [ ] atan2
+     - [ ] ceil
+     - [ ] cos
+     - [ ] exp
+     - [ ] floor
+     - [ ] log
+     - [ ] max
+     - [ ] min
+     - [ ] pow
+     - [ ] random
+     - [ ] round
+     - [ ] sin
+     - [ ] sqrt
+     - [ ] tan
+ - [ ] Date
+     - [ ] new
+     - [ ] Date (as function)
+     - [ ] now
+     - [ ] parse
+     - [ ] UTC
+     - [ ] toString
+     - [ ] toDateString
+     - [ ] toTimeString
+     - [ ] toLocaleString
+     - [ ] toLocaleTimeString
+     - [ ] valueOf
+     - [ ] getTime
+     - [ ] getFullYear
+     - [ ] getUTCFullYear
+     - [ ] getMonth
+     - [ ] getUTCMonth
+     - [ ] getDay
+     - [ ] getUTCDay
+     - [ ] getHours
+     - [ ] getUTCHours
+     - [ ] getMinutes
+     - [ ] getUTCMinutes
+     - [ ] getSeconds
+     - [ ] getUTCSeconds
+     - [ ] getMilliseconds
+     - [ ] getUTCMilliseconds
+     - [ ] getTimezoneOffset
+     - [ ] setTime
+     - [ ] setFullYear
+     - [ ] setUTCFullYear
+     - [ ] setMonth
+     - [ ] setUTCMonth
+     - [ ] setDay
+     - [ ] setUTCDay
+     - [ ] setHours
+     - [ ] setUTCHours
+     - [ ] setMinutes
+     - [ ] setUTCMinutes
+     - [ ] setSeconds
+     - [ ] setUTCSeconds
+     - [ ] setMilliseconds
+     - [ ] setUTCMilliseconds
+     - [ ] toUTCString
+ - [ ] RegExp
+     - [ ] RegExp (as function)
+     - [ ] new
+     - [ ] exec
+     - [ ] test
+     - [ ] toString
+     - [ ] source
+     - [ ] global
+     - [ ] ignoreCase
+     - [ ] multiline
+     - [ ] lastIndex
+ - [ ] ~~Error objects~~
