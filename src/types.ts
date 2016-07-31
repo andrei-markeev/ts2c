@@ -249,10 +249,10 @@ export class TypeHelper {
 
     private temporaryVariables: { [scopeId: string]: string[] } = {};
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
-    public addNewIteratorVariable(scope: ts.Node): string {
-        let parentFunc = this.findParentFunction(scope);
+    public addNewIteratorVariable(scopeNode: ts.Node): string {
+        let parentFunc = this.findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
+        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
@@ -273,10 +273,10 @@ export class TypeHelper {
         return iteratorVarName;
     }
 
-    public addNewTemporaryVariable(scope: ts.Node, proposedName: string): string {
-        let parentFunc = this.findParentFunction(scope);
+    public addNewTemporaryVariable(scopeNode: ts.Node, proposedName: string): string {
+        let parentFunc = this.findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scope, ts.SymbolFlags.Variable).map(s => s.name);
+        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);

@@ -72,25 +72,28 @@ __**Work in progress:**__ it works, but only a small fraction of JS/TS syntax is
 
 Currently supported features:
 
- - literals: integer numbers, strings, booleans, array literals, object literals
- - variables of types: integer number, string, boolean, array, object
+ - literals: numbers, strings, booleans, array literals, object literals
+ - variables of types: number, string, boolean, array, object
  - statements: `if`-`then`-`else`, `while`, `for`, `for`-`of`, `return`
  - functions in global scope
+ - conditions: `||`, `&&`, `!`
  - comparisons: `>`, `<`, `<=`, `>=`, `==`, `!=`
  - operations: `-`, `+`, `*`, `/`, `++`, `--` 
  - console.log
 
 Limitations:
 
- - dynamic variables (i.e. which accept values of multiple types) aren't supported yet  
- - objects: `prototype` is not supported, dynamic properties not supported
- - arrays currently support only `push()`, `pop()` and `length`
- - strings only support `indexOf()` and `length`
- - functions do not support `new`, `arguments` and `this`
+ - variable can accept values of only one type  
+ - objects: `prototype` is not supported, dynamic properties not supported yet
+ - arrays currently support only `push()`, `pop()`, `indexOf()` and `length`
+ - strings currently support only `indexOf()` and `length`
+ - numbers currently are only 16-bit integers
+ - functions do not support `new`, `arguments` and `this` yet
+ - nesting functions, using functions in expressions, and closures aren't supported yet
  - operations and comparisons are limited depending on operand types:
     - string and number: `==`, `+`
     - string and string: `==`, `+`
-    - number and number: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
+    - number and number: `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `++`, `--`
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
 Recursion or indirect recursion aren't supported yet, but otherwise this works relatively fine.

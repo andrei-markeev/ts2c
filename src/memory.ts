@@ -89,10 +89,10 @@ export class MemoryManager {
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array).length) {
-            gcVars.push("_gc_" + realScopeId);
+            gcVars.push("gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
-            gcVars.push("_gc_" + realScopeId + "_arrays");
+            gcVars.push("gc_" + realScopeId + "_arrays");
         }
         return gcVars;
     }
@@ -102,7 +102,7 @@ export class MemoryManager {
         let key = node.pos + "_" + node.end;
 
         if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple)
-            return "_gc_" + this.scopesOfVariables[key].scopeId + (this.scopesOfVariables[key].array ? "_arrays" : "");
+            return "gc_" + this.scopesOfVariables[key].scopeId + (this.scopesOfVariables[key].array ? "_arrays" : "");
         else
             return null;
     }

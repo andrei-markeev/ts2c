@@ -160,7 +160,7 @@ class HeaderFlags {
 {/if}
 
 {#if headerFlags.gc_iterator}
-    int16_t _gc_i;
+    int16_t gc_i;
 {/if}
 
 {userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}

@@ -89,16 +89,16 @@ export class CVariableAllocation {
 @CodeTemplate(`
 {destructors {    }=> free({this});\n}
 {#if gcArraysVarName}
-        for (_gc_i = 0; _gc_i < {gcArraysVarName}->size; _gc_i++) {
-            free({gcArraysVarName}->data[_gc_i]->data);
-            free({gcArraysVarName}->data[_gc_i]);
+        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
+            free({gcArraysVarName}->data[gc_i]->data);
+            free({gcArraysVarName}->data[gc_i]);
         }
         free({gcArraysVarName}->data);
         free({gcArraysVarName});
 {/if}
 {#if gcVarName}
-        for (_gc_i = 0; _gc_i < {gcVarName}->size; _gc_i++)
-            free({gcVarName}->data[_gc_i]);
+        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
+            free({gcVarName}->data[gc_i]);
         free({gcVarName}->data);
         free({gcVarName});
 {/if}`

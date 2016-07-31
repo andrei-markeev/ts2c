@@ -11,20 +11,41 @@ export interface CExpression { }
 
 @CodeTemplate(`
 {#statements}
-    {#if propName == "push" && arguments.length == 1 && !topExpressionOfStatement}
-        ARRAY_PUSH({arrayAccess}, {arguments});
+    {#if propName == "push" && tempVarName}
+        ARRAY_PUSH({varAccess}, {arguments});
+        {tempVarName} = {varAccess}->size;
+    {#elseif propName == "indexOf" && tempVarName && staticArraySize}
+        {tempVarName} = -1;
+        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
+            if ({varAccess}[{iteratorVarName}] == {arg1}) {
+                {tempVarName} = {iteratorVarName};
+                break;
+            }
+        }
+    {#elseif propName == "indexOf" && tempVarName}
+        {tempVarName} = -1;
+        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {
+            if ({varAccess}->data[{iteratorVarName}] == {arg1}) {
+                {tempVarName} = {iteratorVarName};
+                break;
+            }
+        }
     {/if}
 {/statements}
 {#if propName == "push" && arguments.length == 1 && topExpressionOfStatement}
     ARRAY_PUSH({varAccess}, {arguments})
-{#elseif propName == "push" && arguments.length == 1}
-    {varAccess}->size
+{#elseif tempVarName}
+    {tempVarName}
 {#elseif propName == "indexOf" && arguments.length == 1}
-    str_pos({arg1}, {arg2})
+    {funcName}({varAccess}, {arg1})
 {#elseif propName == "pop" && arguments.length == 0}
     ARRAY_POP({varAccess})
-{#elseif printfCalls.length}
+{#elseif printfCalls.length == 1}
     {printfCalls}
+{#elseif printfCalls.length > 1}
+    {
+        {printfCalls {    }=>{this}\n}
+    }
 {#else}
     {funcName}({arguments {, }=> {this}})
 {/if}`, ts.SyntaxKind.CallExpression)
@@ -33,7 +54,9 @@ export class CCallExpression {
     public propName: string = null;
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess;
-    public tempVarName: string;
+    public tempVarName: string = '';
+    public iteratorVarName: string;
+    public staticArraySize: string = '';
     public arguments: CExpression[];
     public printfCalls: any[] = [];
     public arg1: CExpression;
@@ -41,8 +64,11 @@ export class CCallExpression {
     constructor(scope: IScope, call: ts.CallExpression) {
         this.funcName = call.expression.getText();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (this.funcName != "console.log")
+        if (this.funcName != "console.log") {
             this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
+            this.arg1 = this.arguments[0];
+            this.arg2 = this.arguments[1];
+        }
 
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
@@ -57,6 +83,11 @@ export class CCallExpression {
                 scope.root.headerFlags.printf = true;
             }
             else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
+                if (!this.topExpressionOfStatement)
+                {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
+                    scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
+                }
                 scope.root.headerFlags.array = true;
             }
             else if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
@@ -66,12 +97,14 @@ export class CCallExpression {
             else if (propAccess.name.getText() == 'indexOf' && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);
                 if (type == StringVarType) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "tmp")
-                    this.arg1 = CodeTemplateFactory.createForNode(scope, propAccess.expression);
-                    this.arg2 = this.arguments[0];
+                    this.funcName = "str_pos";
                     scope.root.headerFlags.str_pos = true;
                 } else if (type instanceof ArrayType) {
-                    // TODO
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    this.staticArraySize = type.isDynamicArray ? '' : type.capacity+"";
+                    scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
+                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
                     scope.root.headerFlags.array = true;
                 }
             }
