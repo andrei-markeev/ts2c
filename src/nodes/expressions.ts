@@ -306,6 +306,14 @@ class CTernaryExpression {
     }
 }
 
+@CodeTemplate(`({expression})`, ts.SyntaxKind.ParenthesizedExpression)
+class CGroupingExpression {
+    public expression: CExpression;
+    constructor(scope: IScope, node: ts.ParenthesizedExpression) {
+        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+    }
+}
+
 @CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
 class CArrayLiteralExpression {
     public expression: string;

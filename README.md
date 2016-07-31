@@ -70,13 +70,35 @@ Project status
 
 __**Work in progress:**__ it works, but only a small fraction of JS/TS syntax is currently supported.
 
-Overview of currently supported language features:
+Overview of currently supported language features (compared to ES3 Standard):
 
- - literals: numbers, strings, booleans, array literals, object literals
- - variables of fixed types: number, string, boolean, array, object
- - statements: `if`-`then`-`else`, `while`, `for`, `for`-`of`, `return`
- - function declarations in global scope
- - operations: `||`, `&&`, `!`, `>`, `<`, `<=`, `>=`, `==`, `!=`, `-`, `+`, `*`, `/`, `++`, `--`
+ - statements [71%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `continue`, `break`, `return`, `function`, block, empty, expression 
+ - expressions [46%]:
+    - primary expressions [70%]: variables, literals except regex literals, array and object initializers, grouping operator 
+    - left-hand-side expressions [55%]: property accessors, function calls  
+    - postfix expressions [100%]: `++`, `--`
+    - unary operators [44%]: `++`, `--`, `+`, `!`
+    - multiplicative operators [16%]: `*`
+    - additive operators [50%]: `+`, `-`
+    - bitwise shift operators [0%]
+    - relational operators [33%]: `<`, `>`, `<=`, `>=`
+    - equality operators [50%]: `==`, `!=`, `===`, `!==`
+    - binary bitwise operators [0%]
+    - binary logical operators [100%]: `&&`, `||`
+    - conditional operator [100%]: `?`-`:`
+    - assignment operators [25%]: `=`
+    - comma operator [0%]
+ - built-in objects [4%]:
+    - Global [0%]
+    - Object [0%]
+    - Function [0%]
+    - Array [26%]: `push()`, `pop()`, `indexOf()`, `length`
+    - String [10%]: `indexOf()`, `length`
+    - Boolean [0%]
+    - Number [0%]
+    - Math [0%]
+    - Date [0%]
+    - RegExp [0%]
 
 Note: some of these features supported only partially.
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md). 

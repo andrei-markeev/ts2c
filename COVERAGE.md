@@ -1,98 +1,98 @@
 JavaScript language features coverage
 =====================================
 
-Features that won't be implemented are ~~striked through~~.
 List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/language/E262-3.pdf), mainly sections 11, 12 and 15.
 
 ### Expressions
 
  - [ ] Primary Expressions
     - [ ] `this`
-    - [x] Identifier reference
+    - [x] **Identifier reference**
     - [ ] Literal
-        - [x] `null`
-        - [x] `true` / `false`
-        - [x] number literal
-        - [x] string literal
+        - [x] **`null`**
+        - [x] **`true` / `false`**
+        - [x] **number literal** _(partial: only 16-bit integers)_
+        - [x] **string literal**
         - [ ] regular expression literal
-    - [x] Array initializer
-    - [x] Object initializer _(partial: dynamic property names aren't supported)_
-    - [ ] Grouping operator `(` `)`
+    - [x] **Array initializer `[` ... `]`** 
+    - [x] **Object initializer `{` ... `}` ** _(partial: dynamic property names aren't supported)_
+    - [x] Grouping operator `(` `)`
  - [ ] Left-hand-side Expressions
-    - [x] Property accessors
+    - [x] **Property accessors** _(partial: dynamic property names aren't supported)_
     - [ ] `new` operator
-    - [x] Function call
-    - [x] Argument list
-    - [ ] Function expression
- - [x] Postfix expressions
-    - [x] `--`
-    - [x] `++`
+    - [x] **Function call**
+    - [x] **Argument list**
+    - [ ] Function expression `function() {` ... `}`
+ - [x] **Postfix expressions**
+    - [x] **`--`**
+    - [x] **`++`**
  - [ ] Unary operators
     - [ ] `delete`
     - [ ] `void`
     - [ ] `typeof`
-    - [x] Prefix increment operator `++`
-    - [x] Prefix decrement operator `--`
-    - [x] Unary `+`
+    - [x] **Prefix increment operator `++`**
+    - [x] **Prefix decrement operator `--`**
+    - [x] **Unary `+`**
     - [ ] Unary `-`
     - [ ] Bitwise NOT `~`
-    - [x] Logical NOT `!`
+    - [x] **Logical NOT `!`**
  - [ ] Multiplicative operators
-    - [x] `*` __(only numbers)__
+    - [x] **`*`** _(only numbers)_
     - [ ] `/`
     - [ ] `%`
  - [ ] Additive operators
-    - [x] `+` __(partial: number+number, string+number, string+string)__
-    - [x] `-` __(only numbers)__
+    - [x] **`+`** _(partial: number+number, string+number, string+string)_
+    - [x] **`-`** _(only numbers)_
  - [ ] Bitwise shift operators
     - [ ] `<<`
     - [ ] `>>`
     - [ ] `>>>`
  - [ ] Relational operators
-    - [x] `<` __(only numbers)__
-    - [x] `>` __(only numbers)__
-    - [x] `<=` __(only numbers)__
-    - [x] `>=` __(only numbers)__
+    - [x] **`<`** _(only numbers)_
+    - [x] **`>`** _(only numbers)_
+    - [x] **`<=`** _(only numbers)_
+    - [x] **`>=`** _(only numbers)_
     - [ ] `instanceof`
     - [ ] `in`
  - [x] Equality operators
-    - [x] `==` __(partial: number+number, string+number, string+string)__
-    - [x] `!=` __(partial: number+number, string+number, string+string)__
-    - [x] `===` __(partial: number+number, string+string)__
-    - [x] `!==` __(partial: number+number, string+string)__
+    - [x] **`==`** _(partial: number+number, string+number, string+string)_
+    - [x] **`!=`** _(partial: number+number, string+number, string+string)_
+    - [x] **`===`** _(partial: number+number, string+string)_
+    - [x] **`!==`** _(partial: number+number, string+string)_
  - [ ] Binary bitwise operators
     - [ ] `&`
     - [ ] `|`
     - [ ] `^`
  - [x] Binary logical operators
-    - [x] `&&`
-    - [x] `||`
- - [x] Conditional operator `?` `:`
+    - [x] **`&&`**
+    - [x] **`||`**
+ - [x] **Conditional operator `?` `:`**
  - [ ] Assignment operators
-    - [x] Simple assignment `=` __(only as statement)__
+    - [x] **Simple assignment `=`** _(only as statement)_
     - [ ] Compound assignments `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `>>>=`, `&=`, `^=`, `|=`
  - [ ] Comma operator
 
-
 ### Statements
 
- - [x] Block statement
- - [x] `var`
- - [ ] Empty statement
- - [x] Expression statement
- - [x] `if`
- - [ ] `do` `while`
- - [ ] `while`
- - [x] `for`
- - [x] `for` `of`
- - [x] `for` `in`
- - [ ] `continue`
- - [ ] `break`
- - [x] `return`
+ - [x] **Block statement**
+ - [x] **`var`**
+ - [x] **Empty statement**
+ - [x] **Expression statement**
+ - [x] **`if` `else`**
+ - [x] **`do` `while`**
+ - [x] **`while`**
+ - [x] **`for`**
+ - [x] **`for` `of`**
+ - [ ] `for` `in`
+ - [x] **`continue`**
+ - [x] **`break`**
+ - [x] **`return`**
  - [ ] `switch`
  - [ ] `with`
- - [ ] ~~`throw`~~
- - [ ] ~~`try`~~
+ - [ ] Labelled statements
+ - [ ] ~~`throw`~~  _(will not be implemented)_
+ - [ ] ~~`try`~~  _(will not be implemented)_
+ - [x] Function definition `function` ident `() {` ... `}` _(only in global scope)_
 
 ### Built-in objects
 
@@ -100,7 +100,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] NaN
      - [ ] Infinity
      - [ ] undefined
-     - [ ] ~~eval~~
+     - [ ] ~~eval~~  _(will not be implemented)_
      - [ ] parseInt
      - [ ] parseFloat
      - [ ] isNaN
@@ -117,7 +117,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] isPrototypeOf
      - [ ] propertyIsEnumerable
  - [ ] Function
-     - [ ] ~~new~~
+     - [ ] ~~new~~  _(will not be implemented)_
      - [ ] toString
      - [ ] apply
      - [ ] call
@@ -126,16 +126,16 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] toLocaleString
      - [ ] concat
-     - [x] pop
-     - [x] push
+     - [x] **pop**
+     - [x] **push** _(partial: only one parameter)_
      - [ ] reverse
      - [ ] shift
      - [ ] slice
      - [ ] sort
      - [ ] splice
      - [ ] unshift
-     - [x] length
-     - [x] indexOf
+     - [x] **length**
+     - [x] **indexOf**
      - [ ] lastIndexOf
  - [ ] String
      - [ ] new
@@ -144,7 +144,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] charAt
      - [ ] charCodeAt
      - [ ] concat
-     - [x] indexOf
+     - [x] **indexOf**
      - [ ] lastIndexOf
      - [ ] localeCompare
      - [ ] match
@@ -157,7 +157,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toLocaleLowerCase
      - [ ] toUpperCase
      - [ ] toLocaleUpperCase
-     - [x] length
+     - [x] **length**
  - [ ] Boolean
      - [ ] new
      - [ ] toString
@@ -256,4 +256,4 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] ignoreCase
      - [ ] multiline
      - [ ] lastIndex
- - [ ] ~~Error objects~~
+ - [ ] ~~Error objects~~ _(will not be implemented)_

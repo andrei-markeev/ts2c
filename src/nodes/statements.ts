@@ -7,6 +7,22 @@ import {CExpression} from './expressions';
 import {CElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 
+@CodeTemplate(`break;\n`, ts.SyntaxKind.BreakStatement)
+export class CBreakStatement
+{
+    constructor(scope: IScope, node: ts.BreakStatement) {}
+}
+@CodeTemplate(`continue;\n`, ts.SyntaxKind.ContinueStatement)
+export class CContinueStatement
+{
+    constructor(scope: IScope, node: ts.BreakStatement) {}
+}
+@CodeTemplate(`;\n`, ts.SyntaxKind.EmptyStatement)
+export class CEmptyStatement
+{
+    constructor(scope: IScope, node: ts.BreakStatement) {}
+}
+
 @CodeTemplate(`
 {#if needBlock}
     {
@@ -62,6 +78,21 @@ export class CIfStatement
 while ({condition})
 {block}`, ts.SyntaxKind.WhileStatement)
 export class CWhileStatement
+{
+    public condition: CExpression;
+    public block: CBlock;
+    constructor(scope: IScope, node: ts.WhileStatement)
+    {
+        this.block = new CBlock(scope, node.statement);
+        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
+    }
+}
+
+@CodeTemplate(`
+do
+{block}
+while ({condition});`, ts.SyntaxKind.DoStatement)
+export class CDoWhileStatement
 {
     public condition: CExpression;
     public block: CBlock;
