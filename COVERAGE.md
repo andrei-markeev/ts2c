@@ -3,6 +3,29 @@ JavaScript language features coverage
 
 List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/language/E262-3.pdf), mainly sections 11, 12 and 15.
 
+### Statements
+
+ - [x] **Block statement**
+ - [x] **`var`**
+ - [x] **Empty statement**
+ - [x] **Expression statement**
+ - [x] **`if` `else`**
+ - [x] **`do` `while`**
+ - [x] **`while`**
+ - [x] **`for`**
+ - [x] **`for` `of`**
+ - [x] **`for` `in`**
+ - [x] **`continue`**
+ - [x] **`break`** _(partial: labels not supported)_
+ - [x] **`return`**
+ - [ ] `switch`
+ - [ ] `with`
+ - [ ] Labelled statements
+ - [ ] ~~`throw`~~  _(will not be implemented)_
+ - [ ] ~~`try`~~  _(will not be implemented)_
+ - [x] **Function definition `function` ident `() {` ... `}`** _(only in global scope)_
+
+
 ### Expressions
 
  - [ ] Primary Expressions
@@ -15,10 +38,10 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
         - [x] **string literal**
         - [ ] regular expression literal
     - [x] **Array initializer `[` ... `]`** 
-    - [x] **Object initializer `{` ... `}` ** _(partial: dynamic property names aren't supported)_
-    - [x] Grouping operator `(` `)`
+    - [x] **Object initializer `{` ... `}`**
+    - [x] **Grouping operator `(` `)`**
  - [ ] Left-hand-side Expressions
-    - [x] **Property accessors** _(partial: dynamic property names aren't supported)_
+    - [x] **Property accessors**
     - [ ] `new` operator
     - [x] **Function call**
     - [x] **Argument list**
@@ -71,28 +94,6 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Simple assignment `=`** _(only as statement)_
     - [ ] Compound assignments `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `>>>=`, `&=`, `^=`, `|=`
  - [ ] Comma operator
-
-### Statements
-
- - [x] **Block statement**
- - [x] **`var`**
- - [x] **Empty statement**
- - [x] **Expression statement**
- - [x] **`if` `else`**
- - [x] **`do` `while`**
- - [x] **`while`**
- - [x] **`for`**
- - [x] **`for` `of`**
- - [ ] `for` `in`
- - [x] **`continue`**
- - [x] **`break`**
- - [x] **`return`**
- - [ ] `switch`
- - [ ] `with`
- - [ ] Labelled statements
- - [ ] ~~`throw`~~  _(will not be implemented)_
- - [ ] ~~`try`~~  _(will not be implemented)_
- - [x] Function definition `function` ident `() {` ... `}` _(only in global scope)_
 
 ### Built-in objects
 

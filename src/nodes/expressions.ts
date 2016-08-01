@@ -407,8 +407,8 @@ class CObjectLiteralExpression {
 @CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
 export class CString {
     public value: string;
-    constructor(scope: IScope, value: ts.StringLiteral) {
-        let s = value.getText();
+    constructor(scope: IScope, value: ts.StringLiteral | string) {
+        let s = typeof value === 'string' ? '"' + value + '"' : value.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';

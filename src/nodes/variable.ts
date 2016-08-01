@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, NumberVarType, BooleanVarType, CType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 
@@ -45,11 +45,13 @@ export class CVariableDeclaration {
 @CodeTemplate(`
 {#if needAllocateArray}
     ARRAY_CREATE({varName}, {initialCapacity}, {size});
+{#elseif needAllocateDict}
+    DICT_CREATE({varName}, {initialCapacity});
 {#elseif needAllocateStruct}
     {varName} = malloc(sizeof(*{varName}));
     assert({varName} != NULL);
 {/if}
-{#if gcVarName && (needAllocateStruct || needAllocateArray)}
+{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}
     ARRAY_PUSH({gcVarName}, (void *){varName});
 {/if}
 `)
@@ -59,27 +61,27 @@ export class CVariableAllocation {
     public initialCapacity: number;
     public size: number;
     public needAllocateStruct: boolean;
-    public isStruct: boolean;
-    public isDict: boolean;
+    public needAllocateDict: boolean;
     public gcVarName: string;
-    constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess |string, varType: CType, refNode: ts.Node)
+    constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: ts.Node)
     {
         this.needAllocateArray = varType instanceof ArrayType && varType.isDynamicArray;
         this.needAllocateStruct = varType instanceof StructType;
+        this.needAllocateDict = varType instanceof DictType;
+        this.initialCapacity = 4;
 
         this.gcVarName = scope.root.memoryManager.getGCVariableForNode(refNode);
-        this.isStruct = varType instanceof StructType && !varType.isDict;
-        this.isDict = varType instanceof StructType && varType.isDict;
-        this.isArray = varType instanceof ArrayType;
         if (varType instanceof ArrayType) {
             this.initialCapacity = Math.max(varType.capacity * 2, 4);
             this.size = varType.capacity;
         }
         
-        if (this.needAllocateStruct || this.needAllocateArray)
+        if (this.needAllocateStruct || this.needAllocateArray || this.needAllocateDict)
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
+        if (this.needAllocateDict)
+            scope.root.headerFlags.dict = true;
         if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
     }
@@ -96,6 +98,17 @@ export class CVariableAllocation {
         free({gcArraysVarName}->data);
         free({gcArraysVarName});
 {/if}
+{#if gcDictsVarName}
+        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {
+            free({gcDictsVarName}->data[gc_i]->index->data);
+            free({gcDictsVarName}->data[gc_i]->index);
+            free({gcDictsVarName}->data[gc_i]->values->data);
+            free({gcDictsVarName}->data[gc_i]->values);
+            free({gcDictsVarName}->data[gc_i]);
+        }
+        free({gcDictsVarName}->data);
+        free({gcDictsVarName});
+{/if}
 {#if gcVarName}
         for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
             free({gcVarName}->data[gc_i]);
@@ -106,13 +119,16 @@ export class CVariableAllocation {
 export class CVariableDestructors {
     public gcVarName: string = null;
     public gcArraysVarName: string = null;
+    public gcDictsVarName: string = null;
     public destructors: string[];
     constructor(scope: IScope, node: ts.Node) {
         let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (let gc of gcVarNames)
         {
-            if (gc.indexOf("arrays") > -1)
+            if (gc.indexOf("_arrays") > -1)
                 this.gcArraysVarName = gc;
+            else if (gc.indexOf("_dicts") > -1)
+                this.gcDictsVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -123,6 +139,12 @@ export class CVariableDestructors {
                 let type = scope.root.typeHelper.getCType(r.node);
                 if (type instanceof ArrayType)
                     this.destructors.push(r.varName + "->data");
+                if (type instanceof DictType) {
+                    this.destructors.push(r.varName + "->index->data");
+                    this.destructors.push(r.varName + "->index");
+                    this.destructors.push(r.varName + "->values->data");
+                    this.destructors.push(r.varName + "->values");
+                }
                 this.destructors.push(r.varName);
             })
     }

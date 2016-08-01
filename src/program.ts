@@ -27,6 +27,8 @@ class HeaderFlags {
     js_var: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
+    array_insert: boolean = false;
+    array_remove: boolean = false;
     gc_iterator: boolean = false;
     dict: boolean = false;
     str_int16_t_cmp: boolean = false;
@@ -38,7 +40,7 @@ class HeaderFlags {
 
 
 @CodeTemplate(`
-{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos}
+{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos || headerFlags.array_insert || headerFlags.dict}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
@@ -77,7 +79,7 @@ class HeaderFlags {
 	};
 {/if}
 
-{#if headerFlags.array}
+{#if headerFlags.array || headerFlags.dict}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -102,10 +104,68 @@ class HeaderFlags {
 {#if headerFlags.array_pop}
 	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 {/if}
+{#if headerFlags.array_insert || headerFlags.dict}
+    #define ARRAY_INSERT(array, pos, item) {\\
+        ARRAY_PUSH(array, item); \\
+        if (pos < array->size - 1) {\\
+            memmove(&(array->data[pos + 1]), &(array->data[pos]), (array->size - pos - 1) * sizeof(*array->data)); \\
+            array->data[pos] = item; \\
+        } \\
+    }
+{/if}
+{#if headerFlags.array_remove}
+    #define ARRAY_REMOVE(array, pos) {\\
+        memmove(array[pos], array[pos + 1], array-size - pos - 1); \\
+        array->size--; \\
+    }
+{/if}
 
 {#if headerFlags.dict}
-    #define DICT_GET(dict, prop) /* Dictionaries aren't supported yet. */
-    #define DICT_SET(dict, prop, value) /* Dictionaries aren't supported yet. */
+    #define DICT(T) struct { \\
+        ARRAY(const char *) index; \\
+        ARRAY(T) values; \\
+    } *
+    #define DICT_CREATE(dict, init_capacity) { \\
+        dict = malloc(sizeof(*dict)); \\
+        ARRAY_CREATE(dict->index, init_capacity, 0); \\
+        ARRAY_CREATE(dict->values, init_capacity, 0); \\
+    }
+
+    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
+        int16_t low = 0;
+        int16_t high = keys_size - 1;
+
+        if (keys_size == 0 || key == NULL)
+            return -1;
+
+        while (low <= high)
+        {
+            int mid = (low + high) / 2;
+            int res = strcmp(keys[mid], key);
+
+            if (res == 0)
+                return mid;
+            else if (res < 0)
+                low = mid + 1;
+            else
+                high = mid - 1;
+        }
+
+        return -1 - low;
+    }
+
+    int16_t tmp_dict_pos;
+    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])
+    #define DICT_SET(dict, prop, value) { \\
+        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\
+        if (tmp_dict_pos < 0) { \\
+            tmp_dict_pos = -tmp_dict_pos - 1; \\
+            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\
+            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\
+        } else \\
+            dict->values->data[tmp_dict_pos] = value; \\
+    }
+
 {/if}
 
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}

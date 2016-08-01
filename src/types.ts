@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 
-export type CType = string | StructType | ArrayType;
+export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var *";
 export const PointerVarType = "void *";
 export const StringVarType = "const char *";
@@ -8,30 +8,14 @@ export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
 type PropertiesDictionary = { [propName: string]: CType };
 
-class TypePromise {
-    public resolved: boolean = false;
-    public associatedProperty: string;
-    public arrayOf: boolean = false;
-    constructor(
-        public associatedNode: ts.Node,
-        public element: string | boolean
-    ) { }
-}
-
 export class ArrayType {
     public getText() {
         let elementType = this.elementType;
         let elementTypeText;
-        if (typeof elementType === 'string') {
+        if (typeof elementType === 'string')
             elementTypeText = elementType;
-        } else if (elementType instanceof ArrayType) {
+        else
             elementTypeText = elementType.getText();
-        } else {
-            if (elementType.isDict)
-                elementTypeText = PointerVarType;
-            else
-                elementTypeText = elementType.text;
-        }
 
         if (this.isDynamicArray)
             return "ARRAY(" + elementTypeText + ")";
@@ -46,10 +30,27 @@ export class ArrayType {
 }
 
 export class StructType {
+    public getText() {
+        return this.structName;
+    }
     constructor(
-        public text: string,
-        public properties: PropertiesDictionary,
-        public isDict: boolean
+        private structName: string,
+        public properties: PropertiesDictionary
+    ) { }
+}
+export class DictType {
+    public getText() {
+        let elementType = this.elementType;
+        let elementTypeText;
+        if (typeof elementType === 'string')
+            elementTypeText = elementType;
+        else
+            elementTypeText = elementType.getText();
+
+        return "DICT(" + elementTypeText + ")";
+    }
+    constructor(
+        public elementType: CType
     ) { }
 }
 
@@ -66,12 +67,21 @@ export class VariableInfo {
     requiresAllocation: boolean;
 }
 
-/** Internal class for storing temporary variable details */
+class TypePromise {
+    public resolved: boolean = false;
+    public associatedProperty: string;
+    public arrayOf: boolean = false;
+    constructor(
+        public associatedNode: ts.Node,
+        public element: string | boolean
+    ) { }
+}
+
 class VariableData {
     tsType: ts.Type;
     assignmentTypes: { [type: string]: CType } = {};
     typePromises: TypePromise[] = [];
-    addedProperties: PropertiesDictionary = {};
+    addedProperties: { [propName: string]: CType } = {};
     parameterIndex: number;
     parameterFuncDeclPos: number;
     objLiteralAssigned: boolean = false;
@@ -79,16 +89,17 @@ class VariableData {
     isDict: boolean;
 }
 
+
 export class TypeHelper {
-    private userStructs: { [name: string]: StructType } = {};
     public variables: { [varDeclPos: number]: VariableInfo } = {};
+
+    private userStructs: { [name: string]: StructType } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
     private functionCallsData: { [funcDeclPos: number]: (CType | TypePromise)[] } = {};
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
 
-    constructor(private typeChecker: ts.TypeChecker) {
-    }
+    constructor(private typeChecker: ts.TypeChecker) { }
 
     /** Performs initialization of variables array */
     /** Call this before using getVariableInfo */
@@ -137,8 +148,10 @@ export class TypeHelper {
                     let parentObjectType = this.getCType(elemAccess.expression);
                     if (parentObjectType instanceof ArrayType)
                         return parentObjectType.elementType;
-                    else if (parentObjectType instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral)
+                    else if (parentObjectType instanceof StructType)
                         return parentObjectType.properties[elemAccess.argumentExpression.getText().slice(1, -1)];
+                    else if (parentObjectType instanceof DictType)
+                        return parentObjectType.elementType;
                     return null;
                 }
             case ts.SyntaxKind.PropertyAccessExpression:
@@ -216,7 +229,9 @@ export class TypeHelper {
         if (source instanceof ArrayType)
             return source.getText();
         else if (source instanceof StructType)
-            return source.text;
+            return source.getText();
+        else if (source instanceof DictType)
+            return source.getText();
         else if (typeof source === 'string')
             return source;
         else
@@ -289,6 +304,14 @@ export class TypeHelper {
 
         this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
+    }
+
+    private findParentFunction(node: ts.Node) {
+        let parentFunc = node;
+        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
+            parentFunc = parentFunc.parent;
+        }
+        return parentFunc;
     }
 
     private findVariablesRecursively(node: ts.Node) {
@@ -399,12 +422,18 @@ export class TypeHelper {
                             if (determinedType instanceof ArrayType)
                                 determinedType.isDynamicArray = true;
 
-                            let dtString = this.getTypeString(determinedType);
+                            let dtString = typeof determinedType === 'string' ? determinedType : determinedType.getText();
                             let found = false;
                             for (let tk of Object.keys(varData.assignmentTypes)) {
                                 let at = varData.assignmentTypes[tk];
-                                if (at instanceof ArrayType && this.getTypeString(at.elementType) == dtString)
-                                    found = true;
+                                if (at instanceof ArrayType) {
+                                    let atElementType = at.elementType;
+                                    let atElementTypeString = typeof atElementType === 'string' ? atElementType : atElementType.getText();
+                                    if (atElementTypeString === dtString) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
                             }
 
                             if (!found) {
@@ -421,12 +450,10 @@ export class TypeHelper {
                     let elemAccess = <ts.ElementAccessExpression>node.parent;
                     if (elemAccess.expression.pos == node.pos) {
                         let determinedType: CType | TypePromise = UniversalVarType;
-                        let isLeftHandSide = false;
                         if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                             let binExpr = <ts.BinaryExpression>elemAccess.parent;
                             if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                                 determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
-                                isLeftHandSide = true;
                             }
                         }
 
@@ -454,8 +481,23 @@ export class TypeHelper {
                                 }
                             }
                         }
-                        else if (isLeftHandSide)
+                        else {
                             varData.isDict = true;
+                            if (determinedType instanceof TypePromise) {
+                                determinedType.arrayOf = true;
+                                varData.typePromises.push(determinedType);
+                            }
+                            else {
+                                for (let atKey in varData.assignmentTypes) {
+                                    let at = varData.assignmentTypes[atKey];
+                                    if (at instanceof StructType) {
+                                        delete varData.assignmentTypes[atKey];
+                                        var dictType = new DictType(determinedType);
+                                        varData.assignmentTypes[dictType.getText()] = dictType;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
@@ -489,6 +531,8 @@ export class TypeHelper {
                             this.variables[k].requiresAllocation = true;
                     } else if (varType instanceof StructType && this.variablesData[k].objLiteralAssigned) {
                         this.variables[k].requiresAllocation = true;
+                    } else if (varType instanceof DictType) {
+                        this.variables[k].requiresAllocation = true;
                     }
                     if (varType instanceof StructType) {
                         for (let addPropKey in this.variablesData[k].addedProperties) {
@@ -496,7 +540,6 @@ export class TypeHelper {
                             if (!(addPropType instanceof TypePromise))
                                 varType.properties[addPropKey] = addPropType;
                         }
-                        varType.isDict = this.variablesData[k].isDict;
                     }
                     this.variables[k].type = varType;
                 }
@@ -562,12 +605,10 @@ export class TypeHelper {
                         this.variablesData[varPos].addedProperties[promise.associatedProperty] = finalType;
                     }
                     else {
-                        if (finalType instanceof StructType)
-                            this.variablesData[varPos].assignmentTypes[finalType.text] = finalType;
-                        else if (finalType instanceof ArrayType)
-                            this.variablesData[varPos].assignmentTypes[finalType.getText()] = finalType;
-                        else
+                        if (typeof finalType === 'string')
                             this.variablesData[varPos].assignmentTypes[finalType] = finalType;
+                        else
+                            this.variablesData[varPos].assignmentTypes[finalType.getText()] = finalType;
                     }
 
                 }
@@ -645,7 +686,7 @@ export class TypeHelper {
         }
 
         if (!found)
-            this.userStructs[structName] = new StructType('struct ' + structName + ' *', userStructInfo, false);
+            this.userStructs[structName] = new StructType('struct ' + structName + ' *', userStructInfo);
         return this.userStructs[structName];
     }
 
@@ -662,7 +703,7 @@ export class TypeHelper {
                 else
                     userStructCode += '    ' + propTypeText + ' ' + propName + ';\n';
             } else {
-                userStructCode += '    ' + propType.text + ' ' + propName + ';\n';
+                userStructCode += '    ' + propType.getText() + ' ' + propName + ';\n';
             }
         }
         userStructCode += "};\n"
@@ -680,14 +721,6 @@ export class TypeHelper {
         let type = new ArrayType(elementType, cap, false);
         this.arrayLiteralsTypes[arrLiteral.pos] = type;
         return type;
-    }
-
-    private findParentFunction(node: ts.Node) {
-        let parentFunc = node;
-        while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
-            parentFunc = parentFunc.parent;
-        }
-        return parentFunc;
     }
 
 }

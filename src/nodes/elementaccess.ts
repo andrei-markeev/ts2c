@@ -1,7 +1,8 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, StringVarType, UniversalVarType, PointerVarType} from '../types';
+import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
+import {CExpression} from './expressions';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
@@ -30,7 +31,7 @@ export class CElementAccess {
                 elementAccess = elemAccess.expression.getText();
             else
                 elementAccess = new CElementAccess(scope, elemAccess.expression);
-            if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+            if (type instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                 let ident = elemAccess.argumentExpression.getText().slice(1, -1);
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     argumentExpression = ident;
@@ -72,13 +73,13 @@ export class CSimpleElementAccess {
     public isDict: boolean = false;
     public isString: boolean = false;
     public arrayCapacity: string;
-    constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: string) {
+    constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression) {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity + "";
-        this.isDict = type instanceof StructType && type.isDict;
-        this.isStruct = type instanceof StructType && !type.isDict;
+        this.isDict = type instanceof DictType;
+        this.isStruct = type instanceof StructType;
         this.isString = type === StringVarType;
         if (this.isString && this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;

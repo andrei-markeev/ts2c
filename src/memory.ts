@@ -1,10 +1,11 @@
 import * as ts from 'typescript';
-import {TypeHelper, ArrayType, StructType, StringVarType} from './types';
+import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
 
 type VariableScopeInfo = {
     node: ts.Node;
     simple: boolean,
     array: boolean;
+    dict: boolean;
     varName: string;
     scopeId: string;
 };
@@ -88,11 +89,14 @@ export class MemoryManager {
         var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array).length) {
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict).length) {
             gcVars.push("gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
             gcVars.push("gc_" + realScopeId + "_arrays");
+        }
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.dict).length) {
+            gcVars.push("gc_" + realScopeId + "_dicts");
         }
         return gcVars;
     }
@@ -101,8 +105,14 @@ export class MemoryManager {
         let parentDecl = this.findParentFunctionNode(node);
         let key = node.pos + "_" + node.end;
 
-        if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple)
-            return "gc_" + this.scopesOfVariables[key].scopeId + (this.scopesOfVariables[key].array ? "_arrays" : "");
+        if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple) {
+            if (this.scopesOfVariables[key].array)
+                return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays";
+            else if (this.scopesOfVariables[key].dict)
+                return "gc_" + this.scopesOfVariables[key].scopeId + "_dicts";
+            else
+                return "gc_" + this.scopesOfVariables[key].scopeId;
+        }
         else
             return null;
     }
@@ -131,6 +141,8 @@ export class MemoryManager {
         let varFuncNode = this.findParentFunctionNode(heapNode);
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
         var isSimple = true;
+        if (this.isInsideLoop(heapNode))
+            isSimple = false;
 
         var scopeTree = {};
         scopeTree[topScope] = true;
@@ -243,6 +255,7 @@ export class MemoryManager {
             node: heapNode,
             simple: isSimple,
             array: type && type instanceof ArrayType && type.isDynamicArray,
+            dict: type && type instanceof DictType,
             varName: varName,
             scopeId: foundScopes.join("_")
         };
@@ -282,6 +295,19 @@ export class MemoryManager {
             parent = parent.parent;
         }
         return <ts.FunctionDeclaration>parent;
+    }
+
+    private isInsideLoop(node: ts.Node) {
+        var parent = node;
+        while (parent
+                && parent.kind != ts.SyntaxKind.ForInStatement
+                && parent.kind != ts.SyntaxKind.ForOfStatement
+                && parent.kind != ts.SyntaxKind.ForStatement
+                && parent.kind != ts.SyntaxKind.WhileStatement
+                && parent.kind != ts.SyntaxKind.DoStatement) {
+            parent = parent.parent;
+        }
+        return !!parent;
     }
 
     private getSymbolId(node: ts.Node) {

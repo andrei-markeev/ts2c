@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {CType, ArrayType, StructType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
+import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
 import {IScope} from '../program';
 import {CExpression, CCallExpression} from './expressions';
 import {CVariable} from './variable';
@@ -17,11 +17,10 @@ export class PrintfHelper {
     }
 }
 
-interface PrintfOptions
-{
+interface PrintfOptions {
     emitCR?: boolean;
     quotedString?: boolean;
-    propName?: string; 
+    propName?: string;
     indent?: string;
 }
 
@@ -38,6 +37,15 @@ interface PrintfOptions
     printf({accessor} ? "true{CR}" : "false{CR}");
 {#elseif isBoolean && propPrefix}
     printf("{propPrefix}%s", {accessor} ? "true{CR}" : "false{CR}");
+{#elseif isDict}
+    printf("{propPrefix}{ ");
+    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {
+    {INDENT}    if ({iteratorVarName} != 0)
+    {INDENT}        printf(", ");
+    {INDENT}    printf("\\"%s\\": ", {accessor}->index->data[{iteratorVarName}]);
+    {INDENT}    {elementPrintfs}
+    {INDENT}}
+    {INDENT}printf(" }{CR}");
 {#elseif isStruct}
     printf("{propPrefix}{ ");
     {INDENT}{elementPrintfs {    printf(", ");\n    }=> {this}}
@@ -60,6 +68,7 @@ class CPrintf {
     public isCString: boolean = false;
     public isInteger: boolean = false;
     public isBoolean: boolean = false;
+    public isDict: boolean = false;
     public isStruct: boolean = false;
     public isArray: boolean = false;
 
@@ -78,7 +87,7 @@ class CPrintf {
         this.isBoolean = varType == BooleanVarType;
 
         if (this.isStringLiteral)
-            this.accessor = this.accessor.slice(1,-1);
+            this.accessor = this.accessor.slice(1, -1);
 
         if (options.emitCR)
             this.CR = "\\n";
@@ -100,10 +109,19 @@ class CPrintf {
                 new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
             ];
         }
+        else if (varType instanceof DictType) {
+            this.isDict = true;
+            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
+            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            let opts = { quotedString: true, indent: this.INDENT + "    " };
+            this.elementPrintfs = [
+                new CPrintf(scope, printNode, accessor + "->values->data[" + this.iteratorVarName + "]", varType.elementType, opts)
+            ];
+        }
         else if (varType instanceof StructType) {
             this.isStruct = true;
             for (let k in varType.properties) {
-                let propAccessor = varType.isDict ? "DICT_GET(" + accessor + ", \"" + k + "\")" : accessor + "->" + k;
+                let propAccessor = accessor + "->" + k;
                 let opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
                 this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], opts));
             }

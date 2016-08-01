@@ -68,14 +68,14 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only a small fraction of JS/TS syntax is currently supported.
+__**Work in progress:**__ it works, but only about 42% of ES3 syntax is currently supported.
 
 Overview of currently supported language features (compared to ES3 Standard):
 
- - statements [71%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `continue`, `break`, `return`, `function`, block, empty, expression 
- - expressions [46%]:
-    - primary expressions [70%]: variables, literals except regex literals, array and object initializers, grouping operator 
-    - left-hand-side expressions [55%]: property accessors, function calls  
+ - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty, expression 
+ - expressions [47%]:
+    - primary expressions [78%]: variables, number, string and boolean literals, array and object initializers, grouping operator 
+    - left-hand-side expressions [60%]: property accessors, function calls  
     - postfix expressions [100%]: `++`, `--`
     - unary operators [44%]: `++`, `--`, `+`, `!`
     - multiplicative operators [16%]: `*`
