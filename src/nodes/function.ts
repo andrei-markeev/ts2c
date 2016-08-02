@@ -4,6 +4,19 @@ import {IScope, CProgram} from '../program';
 import {ArrayType} from '../types';
 import {CVariable, CVariableDestructors} from './variable';
 
+@CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
+export class CFunctionPrototype {
+    public returnType: string;
+    public name: string;
+    public parameters: CVariable[] = [];
+    constructor(scope: IScope, node: ts.FunctionDeclaration) {
+        this.returnType = scope.root.typeHelper.getTypeString(node);
+
+        this.name = node.name.getText();
+        this.parameters = node.parameters.map(p => new CVariable(scope, p.name.getText(), p.name, { removeStorageSpecifier: true }));
+    }
+}
+
 @CodeTemplate(`
 {returnType} {name}({parameters {, }=> {this}})
 {
@@ -26,11 +39,10 @@ export class CFunction implements IScope {
     public destructors: CVariableDestructors;
     constructor(public root: CProgram, funcDecl: ts.FunctionDeclaration) {
         this.parent = root;
-        let signature = root.typeChecker.getSignatureFromDeclaration(funcDecl);
+        this.returnType = root.typeHelper.getTypeString(funcDecl);
 
         this.name = funcDecl.name.getText();
-        this.returnType = root.typeHelper.getTypeString(signature.getReturnType());
-        this.parameters = signature.parameters.map(p => new CVariable(this, p.name, p, { removeStorageSpecifier: true }));
+        this.parameters = funcDecl.parameters.map(p => new CVariable(this, p.name.getText(), p.name, { removeStorageSpecifier: true }));
         this.variables = [];
 
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);

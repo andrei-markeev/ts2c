@@ -96,6 +96,9 @@ export class TypeHelper {
     private userStructs: { [name: string]: StructType } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
     private functionCallsData: { [funcDeclPos: number]: (CType | TypePromise)[] } = {};
+    private functionReturnsData: { [funcDeclPos: number]: CType | TypePromise } = {};
+    private functionReturnTypes: { [funcDeclPos: number]: CType } = {};
+    private functionPrototypes: { [funcDeclPos: number]: ts.FunctionDeclaration } = {};
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
 
@@ -109,7 +112,7 @@ export class TypeHelper {
             this.findVariablesRecursively(source);
         this.resolvePromisesAndFinalizeTypes();
 
-        return Object.keys(this.userStructs)
+        let structs = Object.keys(this.userStructs)
             .filter(k => Object.keys(this.userStructs[k].properties).length > 0)
             .map(k => {
                 return {
@@ -123,6 +126,10 @@ export class TypeHelper {
                         })
                 };
             });
+
+        let functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
+
+        return [structs, functionPrototypes];
 
     }
 
@@ -186,6 +193,12 @@ export class TypeHelper {
                             if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
                                 return NumberVarType;
                         }
+                    } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
+                        let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
+                        if (funcSymbol != null) {
+                            let funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
+                            return this.functionReturnTypes[funcDeclPos];
+                        }
                     }
                     return null;
                 }
@@ -193,6 +206,8 @@ export class TypeHelper {
                 return this.arrayLiteralsTypes[node.pos];
             case ts.SyntaxKind.ObjectLiteralExpression:
                 return this.objectLiteralsTypes[node.pos];
+            case ts.SyntaxKind.FunctionDeclaration:
+                return this.functionReturnTypes[node.pos + 1] || 'void';
             default:
                 {
                     let tsType = this.typeChecker.getTypeAtLocation(node);
@@ -321,6 +336,8 @@ export class TypeHelper {
                 let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                 if (funcSymbol != null) {
                     let funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
+                    if (funcDeclPos > call.pos)
+                        this.functionPrototypes[funcDeclPos] = <ts.FunctionDeclaration>funcSymbol.valueDeclaration;
                     for (let i = 0; i < call.arguments.length; i++) {
                         let determinedType = this.determineType(null, call.arguments[i]);
                         let callData = this.functionCallsData[funcDeclPos] || [];
@@ -329,6 +346,22 @@ export class TypeHelper {
                             callData[i] = determinedType;
                     }
                 }
+            }
+        }
+        else if (node.kind == ts.SyntaxKind.ReturnStatement) {
+            let ret = <ts.ReturnStatement>node;
+            let parentFunc = this.findParentFunction(node);
+            let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
+            if (ret.expression)
+            {
+                let determinedType = this.determineType(null, ret.expression);
+                if (determinedType == UniversalVarType || determinedType == PointerVarType)
+                    determinedType = new TypePromise(ret.expression, false);
+                let retData = this.functionReturnsData[scopeId];
+                if (!retData || retData == UniversalVarType || retData instanceof TypePromise)
+                    this.functionReturnsData[scopeId] = determinedType;
+            } else {
+                this.functionReturnsData[scopeId] = "void";
             }
         }
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
@@ -570,14 +603,32 @@ export class TypeHelper {
 
             if (type instanceof TypePromise) {
                 finalType = this.getCType(type.associatedNode) || finalType;
-                if (finalType) {
+                if (finalType)
                     type.resolved = true;
-                }
             }
 
             if (finalType && !this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)]) {
                 somePromisesAreResolved = true;
                 this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)] = finalType;
+            }
+        }
+
+        for (let funcDeclPos in this.functionReturnsData) {
+            let type = this.functionReturnsData[funcDeclPos];
+            let finalType = !(type instanceof TypePromise) && type;
+
+            if (type instanceof TypePromise) {
+                finalType = this.getCType(type.associatedNode) || finalType;
+                if (finalType)
+                    type.resolved = true;
+            }
+
+            if (!this.functionReturnTypes[funcDeclPos])
+                this.functionReturnTypes[funcDeclPos] = PointerVarType; 
+            
+            if (finalType && finalType != PointerVarType && this.functionReturnTypes[funcDeclPos] == PointerVarType) {
+                this.functionReturnTypes[funcDeclPos] = finalType;
+                somePromisesAreResolved = true;
             }
         }
 
@@ -637,13 +688,17 @@ export class TypeHelper {
         }
         else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
             return this.determineArrayType(<ts.ArrayLiteralExpression>right);
-        else if (right && (right.kind == ts.SyntaxKind.PropertyAccessExpression
-            || right.kind == ts.SyntaxKind.ElementAccessExpression
-            || right.kind == ts.SyntaxKind.Identifier)) {
-            return new TypePromise(right, false);
-        }
         else {
-            return this.convertType(tsType, left);
+            let type = this.convertType(tsType, left);
+            if ((type == PointerVarType || type == UniversalVarType) && right && 
+                (right.kind == ts.SyntaxKind.PropertyAccessExpression
+                || right.kind == ts.SyntaxKind.ElementAccessExpression
+                || right.kind == ts.SyntaxKind.Identifier
+                || right.kind == ts.SyntaxKind.CallExpression)) {
+                return new TypePromise(right, false);
+            }
+            else
+                return type;
         }
     }
 

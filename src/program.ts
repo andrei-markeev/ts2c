@@ -2,7 +2,7 @@ import * as ts from 'typescript'
 import {MemoryManager} from './memory';
 import {TypeHelper, ArrayType} from './types';
 import {CodeTemplate, CodeTemplateFactory} from './template';
-import {CFunction} from './nodes/function';
+import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
@@ -227,6 +227,8 @@ class HeaderFlags {
 
 {variables => {this};\n}
 
+{functionPrototypes => {this}\n}
+
 {functions => {this}\n}
 
 int main(void) {
@@ -245,6 +247,7 @@ export class CProgram implements IScope {
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public functions: CFunction[] = [];
+    public functionPrototypes: CFunctionPrototype[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
     public userStructs: { name: string, properties: CVariable[] }[];
@@ -258,13 +261,16 @@ export class CProgram implements IScope {
         this.typeHelper = new TypeHelper(this.typeChecker);
         this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper);
 
-        let structs = this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
+        let [structs, functionPrototypes] = this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
+
         this.userStructs = structs.map(s => {
             return {
                 name: s.name,
                 properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
             };
         });
+        this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
+
         this.memoryManager.preprocessVariables();
         for (let source of tsProgram.getSourceFiles())
             this.memoryManager.preprocessTemporaryVariables(source);
