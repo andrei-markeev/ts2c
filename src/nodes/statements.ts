@@ -21,28 +21,15 @@ export class CEmptyStatement {
 }
 
 @CodeTemplate(`
-{#if needBlock}
-    {
-        {destructors}
-        return {expression};
-    }
-{/if}
-{#if !needBlock}
-    {destructors}
-    return {expression};
-{/if}
+{destructors}
+return {expression};
 `, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement {
     public expression: CExpression;
-    public needBlock: boolean;
     public destructors: CVariableDestructors;
     constructor(scope: IScope, node: ts.ReturnStatement) {
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
-        this.needBlock = node.parent && (
-            node.parent.kind == ts.SyntaxKind.IfStatement
-            || node.parent.kind == ts.SyntaxKind.ForStatement
-            || node.parent.kind == ts.SyntaxKind.WhileStatement);
     }
 }
 

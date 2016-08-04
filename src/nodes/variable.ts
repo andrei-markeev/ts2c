@@ -89,16 +89,17 @@ export class CVariableAllocation {
 }
 
 @CodeTemplate(`
-{destructors {    }=> free({this});\n}
-{#if gcArraysVarName}
+{#statements}
+    {destructors => free({this});\n}
+    {#if gcArraysVarName}
         for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
             free({gcArraysVarName}->data[gc_i]->data);
             free({gcArraysVarName}->data[gc_i]);
         }
         free({gcArraysVarName}->data);
         free({gcArraysVarName});
-{/if}
-{#if gcDictsVarName}
+    {/if}
+    {#if gcDictsVarName}
         for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {
             free({gcDictsVarName}->data[gc_i]->index->data);
             free({gcDictsVarName}->data[gc_i]->index);
@@ -108,13 +109,14 @@ export class CVariableAllocation {
         }
         free({gcDictsVarName}->data);
         free({gcDictsVarName});
-{/if}
-{#if gcVarName}
+    {/if}
+    {#if gcVarName}
         for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
             free({gcVarName}->data[gc_i]);
         free({gcVarName}->data);
         free({gcVarName});
-{/if}`
+    {/if}
+{/statements}`
 )
 export class CVariableDestructors {
     public gcVarName: string = null;

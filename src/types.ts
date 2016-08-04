@@ -6,10 +6,33 @@ export const PointerVarType = "void *";
 export const StringVarType = "const char *";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
-type PropertiesDictionary = { [propName: string]: CType };
 
+/** Type that represents static or dynamic array */
 export class ArrayType {
+
+    public static getArrayStructName(elementTypeText: string) {
+        while (elementTypeText.indexOf(NumberVarType) > -1)
+            elementTypeText = elementTypeText.replace(NumberVarType, "number");
+        while (elementTypeText.indexOf(StringVarType) > -1)
+            elementTypeText = elementTypeText.replace(StringVarType, "string");
+        while (elementTypeText.indexOf(PointerVarType) > -1)
+            elementTypeText = elementTypeText.replace(PointerVarType, "pointer");
+        while (elementTypeText.indexOf(BooleanVarType) > -1)
+            elementTypeText = elementTypeText.replace(BooleanVarType, "bool");
+
+        elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, (all, g1) => "array_" + g1);
+
+        return "array_" +
+            elementTypeText
+                .replace(/^static /, '').replace('{var}', '').replace(/[\[\]]/g, '')
+                .replace(/ /g, '_')
+                .replace(/const char */g, 'string')
+                .replace(/\*/g, '8') + "_t";
+    }
+
+    private structName: string;
     public getText() {
+
         let elementType = this.elementType;
         let elementTypeText;
         if (typeof elementType === 'string')
@@ -17,8 +40,10 @@ export class ArrayType {
         else
             elementTypeText = elementType.getText();
 
+        this.structName = ArrayType.getArrayStructName(elementTypeText);
+
         if (this.isDynamicArray)
-            return "ARRAY(" + elementTypeText + ")";
+            return "struct " + this.structName + " *";
         else
             return "static " + elementTypeText + " {var}[" + this.capacity + "]";
     }
@@ -26,9 +51,13 @@ export class ArrayType {
         public elementType: CType,
         public capacity: number,
         public isDynamicArray: boolean
-    ) { }
+    ) {
+    }
 }
 
+type PropertiesDictionary = { [propName: string]: CType };
+
+/** Type that represents JS object with static properties (implemented as C struct) */
 export class StructType {
     public getText() {
         return this.structName;
@@ -38,6 +67,8 @@ export class StructType {
         public properties: PropertiesDictionary
     ) { }
 }
+
+/** Type that represents JS object with dynamic properties (implemented as dynamic dictionary) */
 export class DictType {
     public getText() {
         let elementType = this.elementType;
@@ -54,6 +85,7 @@ export class DictType {
     ) { }
 }
 
+/** Information about a variable */
 export class VariableInfo {
     /** Name of the variable */
     name: string;
@@ -67,20 +99,36 @@ export class VariableInfo {
     requiresAllocation: boolean;
 }
 
+// forOfIterator ====> for <var> of <array_variable> ---> <var>.type = (type of <array_variable>).elementType
+// dynamicArrayOf ====> <var>.push(<value>) ---> <var>.elementType = (type of <value>)
+// propertyType ====> <var>[<string>] = <value> ---> <var>.properties[<string>] = (type of <value>)
+// propertyType ====> <var>.<ident> = <value> ---> <var>.properties[<ident>] = (type of <value>)
+// arrayOf ====> <var>[<number>] = <value> ---> <var>.elementType = (type of <value>)
+// dictOf ====> <var>[<something>] = <value> ---> <var>.elementType = (type of <value>)
+
+enum TypePromiseKind {
+    variable,
+    forOfIterator,
+    propertyType,
+    dynamicArrayOf,
+    arrayOf,
+    dictOf
+}
+
 class TypePromise {
-    public resolved: boolean = false;
-    public associatedProperty: string;
-    public arrayOf: boolean = false;
+    public bestType: CType;
     constructor(
         public associatedNode: ts.Node,
-        public element: string | boolean
+        public promiseKind: TypePromiseKind = TypePromiseKind.variable,
+        public propertyName: string = null
     ) { }
 }
 
+type PromiseDictionary = { [promiseId: string]: TypePromise };
+
 class VariableData {
     tsType: ts.Type;
-    assignmentTypes: { [type: string]: CType } = {};
-    typePromises: TypePromise[] = [];
+    typePromises: { [id: string]: TypePromise } = {};
     addedProperties: { [propName: string]: CType } = {};
     parameterIndex: number;
     parameterFuncDeclPos: number;
@@ -91,12 +139,13 @@ class VariableData {
 
 
 export class TypeHelper {
-    public variables: { [varDeclPos: number]: VariableInfo } = {};
 
     private userStructs: { [name: string]: StructType } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
-    private functionCallsData: { [funcDeclPos: number]: (CType | TypePromise)[] } = {};
-    private functionReturnsData: { [funcDeclPos: number]: CType | TypePromise } = {};
+    private functionCallsData: { [funcDeclPos: number]: PromiseDictionary[] } = {};
+    private functionReturnsData: { [funcDeclPos: number]: PromiseDictionary } = {};
+
+    public variables: { [varDeclPos: number]: VariableInfo } = {};
     private functionReturnTypes: { [funcDeclPos: number]: CType } = {};
     private functionPrototypes: { [funcDeclPos: number]: ts.FunctionDeclaration } = {};
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
@@ -274,7 +323,7 @@ export class TypeHelper {
             return PointerVarType;
 
         console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
-        return UniversalVarType;
+        return PointerVarType;
     }
 
     private temporaryVariables: { [scopeId: string]: string[] } = {};
@@ -339,11 +388,13 @@ export class TypeHelper {
                     if (funcDeclPos > call.pos)
                         this.functionPrototypes[funcDeclPos] = <ts.FunctionDeclaration>funcSymbol.valueDeclaration;
                     for (let i = 0; i < call.arguments.length; i++) {
-                        let determinedType = this.determineType(null, call.arguments[i]);
-                        let callData = this.functionCallsData[funcDeclPos] || [];
-                        this.functionCallsData[funcDeclPos] = callData;
-                        if (!callData[i] || callData[i] == UniversalVarType || callData[i] instanceof TypePromise)
-                            callData[i] = determinedType;
+                        if (!this.functionCallsData[funcDeclPos])
+                            this.functionCallsData[funcDeclPos] = [];
+                        let callData = this.functionCallsData[funcDeclPos];
+                        let argId = call.arguments[i].pos + "_" + call.arguments[i].end;
+                        if (!callData[i])
+                            callData[i] = {};
+                        callData[i][argId] = new TypePromise(call.arguments[i]);
                     }
                 }
             }
@@ -352,16 +403,13 @@ export class TypeHelper {
             let ret = <ts.ReturnStatement>node;
             let parentFunc = this.findParentFunction(node);
             let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-            if (ret.expression)
-            {
-                let determinedType = this.determineType(null, ret.expression);
-                if (determinedType == UniversalVarType || determinedType == PointerVarType)
-                    determinedType = new TypePromise(ret.expression, false);
-                let retData = this.functionReturnsData[scopeId];
-                if (!retData || retData == UniversalVarType || retData instanceof TypePromise)
-                    this.functionReturnsData[scopeId] = determinedType;
+            let promiseId = node.pos + "_" + node.end;
+            if (ret.expression) {
+                if (!this.functionReturnsData[scopeId])
+                    this.functionReturnsData[scopeId] = {};
+                this.functionReturnsData[scopeId][promiseId] = new TypePromise(ret.expression);
             } else {
-                this.functionReturnsData[scopeId] = "void";
+                this.functionReturnsData[scopeId][promiseId] = "void";
             }
         }
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
@@ -393,7 +441,7 @@ export class TypeHelper {
                 if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
                     let varDecl = <ts.VariableDeclaration>node.parent;
                     if (varDecl.name.getText() == node.getText()) {
-                        this.addTypeToVariable(varPos, <ts.Identifier>varDecl.name, varDecl.initializer);
+                        this.addTypePromise(varPos, varDecl.initializer);
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
                         if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
@@ -401,7 +449,7 @@ export class TypeHelper {
                             if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
                                 let forOfInitializer = <ts.VariableDeclarationList>forOfStatement.initializer;
                                 if (forOfInitializer.declarations[0].pos == varDecl.pos) {
-                                    varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                                    this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
                                 }
                             }
                         }
@@ -414,7 +462,8 @@ export class TypeHelper {
                             let param = funcDecl.parameters[i];
                             varData.parameterIndex = i;
                             varData.parameterFuncDeclPos = funcDecl.pos + 1;
-                            this.addTypeToVariable(varPos, <ts.Identifier>node, param.initializer);
+                            this.addTypePromise(varPos, param.name);
+                            this.addTypePromise(varPos, param.initializer);
                             break;
                         }
                     }
@@ -424,7 +473,8 @@ export class TypeHelper {
                     if (binExpr.left.kind == ts.SyntaxKind.Identifier
                         && binExpr.left.getText() == node.getText()
                         && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                        this.addTypeToVariable(varPos, <ts.Identifier>binExpr.left, binExpr.right);
+                        this.addTypePromise(varPos, binExpr.left);
+                        this.addTypePromise(varPos, binExpr.right);
                         if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
                     }
@@ -434,100 +484,52 @@ export class TypeHelper {
                     if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>propAccess.parent;
                         if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                            let determinedType = this.determineType(<ts.Identifier>propAccess.name, binExpr.right);
-                            if (!(determinedType instanceof TypePromise))
-                                varData.addedProperties[propAccess.name.getText()] = determinedType;
+                            this.addTypePromise(varPos, binExpr.left, TypePromiseKind.propertyType, propAccess.name.getText());
+                            this.addTypePromise(varPos, binExpr.right, TypePromiseKind.propertyType, propAccess.name.getText());
                         }
                     }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
                         varData.isDynamicArray = true;
-                        let determinedType: CType | TypePromise = UniversalVarType;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             let call = <ts.CallExpression>propAccess.parent;
-                            if (call.arguments.length == 1)
-                                determinedType = this.determineType(<ts.Identifier>propAccess.expression, call.arguments[0]);
-                        }
-                        if (determinedType instanceof TypePromise) {
-                            determinedType.arrayOf = true;
-                            varData.typePromises.push(determinedType)
-                        }
-                        else {
-                            if (determinedType instanceof ArrayType)
-                                determinedType.isDynamicArray = true;
-
-                            let dtString = typeof determinedType === 'string' ? determinedType : determinedType.getText();
-                            let found = false;
-                            for (let tk of Object.keys(varData.assignmentTypes)) {
-                                let at = varData.assignmentTypes[tk];
-                                if (at instanceof ArrayType) {
-                                    let atElementType = at.elementType;
-                                    let atElementTypeString = typeof atElementType === 'string' ? atElementType : atElementType.getText();
-                                    if (atElementTypeString === dtString) {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (!found) {
-                                let arrayOfType = new ArrayType(determinedType, 0, true);
-                                varData.assignmentTypes[arrayOfType.getText()] = arrayOfType;
-                            }
+                            for (let arg of call.arguments)
+                                this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
                         }
                     }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
                         varData.isDynamicArray = true;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            let call = <ts.CallExpression>propAccess.parent;
+                            if (call.arguments.length == 0)
+                                this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
+                        }
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
                     let elemAccess = <ts.ElementAccessExpression>node.parent;
                     if (elemAccess.expression.pos == node.pos) {
-                        let determinedType: CType | TypePromise = UniversalVarType;
-                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                            let binExpr = <ts.BinaryExpression>elemAccess.parent;
-                            if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                                determinedType = this.determineType(<ts.Identifier>elemAccess.expression, binExpr.right);
-                            }
-                        }
 
+                        let propName;
+                        let promiseKind;
                         if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                            let propName = elemAccess.argumentExpression.getText().slice(1, -1);
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.associatedProperty = propName;
-                                varData.typePromises.push(determinedType);
-                            }
-                            varData.addedProperties[propName] = varData.addedProperties[propName] || UniversalVarType;
-                            if (!(determinedType instanceof TypePromise) && varData.addedProperties[propName] == UniversalVarType)
-                                varData.addedProperties[propName] = determinedType;
-
+                            propName = elemAccess.argumentExpression.getText().slice(1, -1);
+                            promiseKind = TypePromiseKind.propertyType;
                         }
                         else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.arrayOf = true;
-                                varData.typePromises.push(determinedType);
-                            }
-                            else {
-                                for (let atKey in varData.assignmentTypes) {
-                                    let at = varData.assignmentTypes[atKey];
-                                    if (at instanceof ArrayType && at.elementType == UniversalVarType)
-                                        at.elementType = determinedType;
-                                }
-                            }
+                            promiseKind = TypePromiseKind.arrayOf;
                         }
                         else {
                             varData.isDict = true;
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.arrayOf = true;
-                                varData.typePromises.push(determinedType);
-                            }
-                            else {
-                                for (let atKey in varData.assignmentTypes) {
-                                    let at = varData.assignmentTypes[atKey];
-                                    if (at instanceof StructType) {
-                                        delete varData.assignmentTypes[atKey];
-                                        var dictType = new DictType(determinedType);
-                                        varData.assignmentTypes[dictType.getText()] = dictType;
-                                    }
+                            promiseKind = TypePromiseKind.dictOf;
+                        }
+
+                        this.addTypePromise(varPos, elemAccess, promiseKind, propName);
+
+                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                            let binExpr = <ts.BinaryExpression>elemAccess.parent;
+                            if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                                if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                                    this.addTypePromise(varPos, binExpr.right, promiseKind, propName);
                                 }
                             }
                         }
@@ -536,7 +538,7 @@ export class TypeHelper {
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
                     let forOfStatement = <ts.ForOfStatement>node.parent;
                     if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
-                        varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                        this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
                     }
                 }
             }
@@ -551,156 +553,145 @@ export class TypeHelper {
 
         do {
 
-            somePromisesAreResolved = false;
+            somePromisesAreResolved = this.tryResolvePromises();
 
             for (let k of Object.keys(this.variables).map(k => +k)) {
+                let promises = Object.keys(this.variablesData[k].typePromises)
+                    .map(p => this.variablesData[k].typePromises[p]);
+                let variableBestTypes = promises
+                    .filter(p => p.promiseKind != TypePromiseKind.propertyType)
+                    .map(p => p.bestType);
 
-                let types = Object.keys(this.variablesData[k].assignmentTypes).filter(t => t != PointerVarType && t != UniversalVarType);
-                if (types.length == 1) {
-                    let varType = this.variablesData[k].assignmentTypes[types[0]];
-                    if (varType instanceof ArrayType) {
-                        varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
-                        if (this.variablesData[k].isDynamicArray)
-                            this.variables[k].requiresAllocation = true;
-                    } else if (varType instanceof StructType && this.variablesData[k].objLiteralAssigned) {
+                let varType = variableBestTypes.length ? variableBestTypes.reduce((c, n) => this.mergeTypes(c, n).type) : null;
+                varType = varType || PointerVarType;
+
+                if (varType instanceof ArrayType) {
+                    if (this.variablesData[k].isDynamicArray)
                         this.variables[k].requiresAllocation = true;
-                    } else if (varType instanceof DictType) {
+                    varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
+                }
+                else if (varType instanceof StructType) {
+                    if (this.variablesData[k].objLiteralAssigned)
                         this.variables[k].requiresAllocation = true;
+                    for (let addPropKey in this.variablesData[k].addedProperties) {
+                        let addPropType = this.variablesData[k].addedProperties[addPropKey];
+                        if (!(addPropType instanceof TypePromise))
+                            varType.properties[addPropKey] = addPropType;
                     }
-                    if (varType instanceof StructType) {
-                        for (let addPropKey in this.variablesData[k].addedProperties) {
-                            let addPropType = this.variablesData[k].addedProperties[addPropKey];
-                            if (!(addPropType instanceof TypePromise))
-                                varType.properties[addPropKey] = addPropType;
-                        }
-                    }
-                    this.variables[k].type = varType;
                 }
-                else if (types.length == 0) {
-                    this.variables[k].type = PointerVarType;
-                }
-                else {
+                else if (varType instanceof DictType) {
                     this.variables[k].requiresAllocation = true;
-                    this.variables[k].type = UniversalVarType;
+                    let elemType = varType.elementType;
+                    for (let addPropKey in this.variablesData[k].addedProperties) {
+                        let addPropType = this.variablesData[k].addedProperties[addPropKey];
+                        let mergeResult = this.mergeTypes(elemType, addPropType);
+                        elemType = mergeResult.type;
+                    }
+                    varType.elementType = elemType;
                 }
-
-                somePromisesAreResolved = somePromisesAreResolved || this.tryResolvePromises(k);
+                this.variables[k].type = varType;
 
             }
 
         } while (somePromisesAreResolved);
 
+        for (let k of Object.keys(this.variables).map(k => +k))
+            this.postProcessArrays(this.variables[k].type)
+
     }
 
-    private tryResolvePromises(varPos: number) {
+    private postProcessArrays(varType: CType) {
+
+        if (varType instanceof ArrayType && varType.isDynamicArray) {
+            this.ensureArrayStruct(varType.elementType);
+            this.postProcessArrays(varType.elementType);
+        } else if (varType instanceof DictType) {
+            this.postProcessArrays(varType.elementType);
+        } else if (varType instanceof StructType) {
+            for (let k in varType.properties) {
+                this.postProcessArrays(varType.properties[k]);
+            }
+        }
+
+    }
+
+    private tryResolvePromises() {
         let somePromisesAreResolved = false;
 
-        let funcDeclPos = this.variablesData[varPos].parameterFuncDeclPos;
-        if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
-            let paramIndex = this.variablesData[varPos].parameterIndex;
-            let type = this.functionCallsData[funcDeclPos][paramIndex];
-            let finalType = !(type instanceof TypePromise) && type;
-
-            if (type instanceof TypePromise) {
-                finalType = this.getCType(type.associatedNode) || finalType;
-                if (finalType)
-                    type.resolved = true;
-            }
-
-            if (finalType && !this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)]) {
-                somePromisesAreResolved = true;
-                this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)] = finalType;
-            }
-        }
-
-        for (let funcDeclPos in this.functionReturnsData) {
-            let type = this.functionReturnsData[funcDeclPos];
-            let finalType = !(type instanceof TypePromise) && type;
-
-            if (type instanceof TypePromise) {
-                finalType = this.getCType(type.associatedNode) || finalType;
-                if (finalType)
-                    type.resolved = true;
-            }
-
-            if (!this.functionReturnTypes[funcDeclPos])
-                this.functionReturnTypes[funcDeclPos] = PointerVarType; 
-            
-            if (finalType && finalType != PointerVarType && this.functionReturnTypes[funcDeclPos] == PointerVarType) {
-                this.functionReturnTypes[funcDeclPos] = finalType;
-                somePromisesAreResolved = true;
-            }
-        }
-
-        if (this.variablesData[varPos].typePromises.length > 0) {
-            let promises = this.variablesData[varPos].typePromises.filter(p => !p.resolved);
-            for (let promise of promises) {
-                let resolvedType = this.getCType(promise.associatedNode);
-                if (resolvedType != null) {
-                    let finalType = resolvedType;
-                    promise.resolved = true;
-                    somePromisesAreResolved = true;
-                    if (promise.arrayOf)
-                        finalType = new ArrayType(resolvedType, 0, true);
-                    else if (resolvedType instanceof StructType && promise.element) {
-                        let propName = promise.element;
-                        if (typeof propName === 'string') {
-                            finalType = resolvedType.properties[propName];
-                        }
+        /** Function parameters */
+        for (let varPos of Object.keys(this.variables).map(k => +k)) {
+            let funcDeclPos = this.variablesData[varPos].parameterFuncDeclPos;
+            if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
+                let paramIndex = this.variablesData[varPos].parameterIndex;
+                let functionCallsPromises = this.functionCallsData[funcDeclPos][paramIndex];
+                let variablePromises = this.variablesData[varPos].typePromises;
+                for (let id in functionCallsPromises) {
+                    if (!variablePromises[id]) {
+                        variablePromises[id] = functionCallsPromises[id];
+                        somePromisesAreResolved = true;
                     }
-                    else if (resolvedType instanceof ArrayType && promise.element) {
-                        finalType = resolvedType.elementType;
-                    }
-
-                    if (promise.associatedProperty) {
-                        this.variablesData[varPos].addedProperties[promise.associatedProperty] = finalType;
-                    }
-                    else {
-                        if (typeof finalType === 'string')
-                            this.variablesData[varPos].assignmentTypes[finalType] = finalType;
-                        else
-                            this.variablesData[varPos].assignmentTypes[finalType.getText()] = finalType;
-                    }
-
+                    let currentType = variablePromises[id].bestType || PointerVarType;
+                    let resolvedType = this.getCType(functionCallsPromises[id].associatedNode);
+                    let mergeResult = this.mergeTypes(currentType, resolvedType);
+                    if (mergeResult.replaced)
+                        somePromisesAreResolved = true;
+                    variablePromises[id].bestType = mergeResult.type;
                 }
             }
+        }
+
+        /** Function return types */
+        for (let funcDeclPos in this.functionReturnsData) {
+            let promises = this.functionReturnsData[funcDeclPos];
+            for (let id in promises) {
+                let resolvedType = this.getCType(promises[id].associatedNode) || PointerVarType;
+
+                let mergeResult = this.mergeTypes(this.functionReturnTypes[funcDeclPos], resolvedType);
+                if (mergeResult.replaced)
+                    somePromisesAreResolved = true;
+                this.functionReturnTypes[funcDeclPos] = mergeResult.type;
+            }
+        }
+
+        /** Variables */
+        for (let varPos of Object.keys(this.variables).map(k => +k)) {
+
+            for (let promiseId in this.variablesData[varPos].typePromises) {
+                let promise = this.variablesData[varPos].typePromises[promiseId];
+                let resolvedType = this.getCType(promise.associatedNode) || PointerVarType;
+
+                let finalType = resolvedType;
+                if (promise.promiseKind == TypePromiseKind.dynamicArrayOf) {
+                    // nested arrays should also be dynamic
+                    if (resolvedType instanceof ArrayType)
+                        resolvedType.isDynamicArray = true;
+                    finalType = new ArrayType(resolvedType, 0, true);
+                }
+                else if (promise.promiseKind == TypePromiseKind.arrayOf) {
+                    finalType = new ArrayType(resolvedType, 0, false);
+                }
+                else if (promise.promiseKind == TypePromiseKind.dictOf) {
+                    finalType = new DictType(resolvedType);
+                }
+                else if (resolvedType instanceof ArrayType && promise.promiseKind == TypePromiseKind.forOfIterator) {
+                    finalType = resolvedType.elementType;
+                }
+
+                let mergeResult = this.mergeTypes(promise.bestType, finalType);
+                if (mergeResult.replaced)
+                    somePromisesAreResolved = true;
+                promise.bestType = mergeResult.type;
+
+                if (promise.promiseKind == TypePromiseKind.propertyType && mergeResult.replaced)
+                    this.variablesData[varPos].addedProperties[promise.propertyName] = mergeResult.type;
+            }
+
         }
 
         return somePromisesAreResolved;
 
     }
 
-    private addTypeToVariable(varPos: number, left: ts.Identifier, right: ts.Node) {
-        let determinedType = this.determineType(left, right);
-        if (determinedType instanceof TypePromise)
-            this.variablesData[varPos].typePromises.push(determinedType);
-        else
-            this.variablesData[varPos].assignmentTypes[this.getTypeString(determinedType)] = determinedType;
-
-    }
-
-    private determineType(left: ts.Identifier, right: ts.Node): CType | TypePromise {
-        let tsType = right ? this.typeChecker.getTypeAtLocation(right) : this.typeChecker.getTypeAtLocation(left);
-        if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
-            let type = this.generateStructure(tsType, left);
-            this.objectLiteralsTypes[right.pos] = type;
-            return type;
-        }
-        else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
-            return this.determineArrayType(<ts.ArrayLiteralExpression>right);
-        else {
-            let type = this.convertType(tsType, left);
-            if ((type == PointerVarType || type == UniversalVarType) && right && 
-                (right.kind == ts.SyntaxKind.PropertyAccessExpression
-                || right.kind == ts.SyntaxKind.ElementAccessExpression
-                || right.kind == ts.SyntaxKind.Identifier
-                || right.kind == ts.SyntaxKind.CallExpression)) {
-                return new TypePromise(right, false);
-            }
-            else
-                return type;
-        }
-    }
 
     private generateStructure(tsType: ts.Type, ident?: ts.Identifier): StructType {
         var structName = "struct_" + Object.keys(this.userStructs).length + "_t";
@@ -776,6 +767,77 @@ export class TypeHelper {
         let type = new ArrayType(elementType, cap, false);
         this.arrayLiteralsTypes[arrLiteral.pos] = type;
         return type;
+    }
+
+    private ensureArrayStruct(elementType: CType) {
+        let elementTypeText = this.getTypeString(elementType);
+        let structName = ArrayType.getArrayStructName(elementTypeText);
+        this.userStructs[structName] = new StructType(structName, {
+            size: NumberVarType,
+            capacity: NumberVarType,
+            data: elementTypeText + "*"
+        });
+    }
+
+    private addTypePromise(varPos: number, associatedNode: ts.Node, promiseKind: TypePromiseKind = TypePromiseKind.variable, propName: string = null) {
+        if (!associatedNode)
+            return;
+        let promiseId = associatedNode.pos + "_" + associatedNode.end;
+        let promise = new TypePromise(associatedNode, promiseKind, propName);
+        this.variablesData[varPos].typePromises[promiseId] = promise;
+    }
+
+    private mergeTypes(currentType: CType, newType: CType) {
+        let newResult = { type: newType, replaced: true };
+        let currentResult = { type: currentType, replaced: false };
+
+        if (!currentType && newType)
+            return newResult;
+        else if (!newType)
+            return currentResult;
+        else if (this.getTypeString(currentType) == this.getTypeString(newType))
+            return currentResult;
+        else if (currentType == PointerVarType)
+            return newResult;
+        else if (newType == PointerVarType)
+            return currentResult;
+        else if (currentType == UniversalVarType)
+            return newResult;
+        else if (newType == UniversalVarType)
+            return currentResult;
+        else if (currentType instanceof ArrayType && newType instanceof ArrayType) {
+            let cap = Math.max(newType.capacity, currentType.capacity);
+            newType.capacity = cap;
+            currentType.capacity = cap;
+            let isDynamicArray = newType.isDynamicArray || currentType.isDynamicArray;
+            newType.isDynamicArray = isDynamicArray;
+            currentType.isDynamicArray = isDynamicArray;
+
+            let mergeResult = this.mergeTypes(currentType.elementType, newType.elementType);
+            newType.elementType = mergeResult.type;
+            currentType.elementType = mergeResult.type;
+            if (mergeResult.replaced)
+                return newResult;
+
+            return currentResult;
+        }
+        else if (currentType instanceof DictType && newType instanceof ArrayType) {
+            if (newType.elementType == currentType.elementType || currentType.elementType == PointerVarType)
+                return newResult;
+        }
+        else if (currentType instanceof ArrayType && newType instanceof DictType) {
+            if (newType.elementType == currentType.elementType || newType.elementType == PointerVarType)
+                return currentResult;
+        }
+        else if (currentType instanceof DictType && newType instanceof DictType) {
+            if (newType.elementType != PointerVarType && currentType.elementType == PointerVarType)
+                return newResult;
+
+            return currentResult;
+        }
+
+        console.log("WARNING: candidate for UniversalVarType! Current: " + this.getTypeString(currentType) + ", new: " + this.getTypeString(newType));
+        return currentResult;
     }
 
 }

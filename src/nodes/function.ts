@@ -49,11 +49,8 @@ export class CFunction implements IScope {
         for (let gcVarName of this.gcVarNames) {
             if (root.variables.filter(v => v.name == gcVarName).length)
                 continue;
-            let pointerType = new ArrayType("void *", 0, true);
-            if (gcVarName.indexOf("arrays") == -1)
-                root.variables.push(new CVariable(root, gcVarName, pointerType));
-            else
-                root.variables.push(new CVariable(root, gcVarName, new ArrayType(pointerType, 0, true)));
+            let gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
+            root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 
         funcDecl.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));

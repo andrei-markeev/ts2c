@@ -79,12 +79,15 @@ class HeaderFlags {
 	};
 {/if}
 
-{#if headerFlags.array || headerFlags.dict}
+{#if headerFlags.gc_iterator || headerFlags.dict}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
         T *data;\\
     } *
+{/if}
+
+{#if headerFlags.array || headerFlags.dict}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
         array->data = malloc(init_capacity * sizeof(*array->data)); \\
@@ -277,11 +280,8 @@ export class CProgram implements IScope {
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
-            let pointerType = new ArrayType("void *", 0, true);
-            if (gcVarName.indexOf("arrays") == -1)
-                this.variables.push(new CVariable(this, gcVarName, pointerType));
-            else
-                this.variables.push(new CVariable(this, gcVarName, new ArrayType(pointerType, 0, true)));
+            let gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
+            this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
         for (let source of tsProgram.getSourceFiles()) {
