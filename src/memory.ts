@@ -147,13 +147,13 @@ export class MemoryManager {
         var scopeTree = {};
         scopeTree[topScope] = true;
 
-        // TODO:
-        // - circular references
-
         var queue = [heapNode];
         queue.push();
+        var visited = {}; 
         while (queue.length > 0) {
             let node = queue.shift();
+            if (visited[node.pos + "_" + node.end])
+                continue;
 
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
@@ -167,6 +167,7 @@ export class MemoryManager {
             }
             let returned = false;
             for (let ref of refs) {
+                visited[ref.pos + "_" + ref.end] = true;
                 let parentNode = this.findParentFunctionNode(ref);
                 if (!parentNode)
                     topScope = "main";
@@ -218,7 +219,7 @@ export class MemoryManager {
                         else {
                             let funcDecl = <ts.FunctionDeclaration>symbol.valueDeclaration;
                             for (let i = 0; i < call.arguments.length; i++) {
-                                if (call.arguments[i].kind == ts.SyntaxKind.Identifier && call.arguments[i].getText() == node.getText()) {
+                                if (call.arguments[i].pos <= ref.pos && call.arguments[i].end >= ref.end) {
                                     console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
                                     queue.push(<ts.Identifier>funcDecl.parameters[i].name);
                                     isSimple = false;
