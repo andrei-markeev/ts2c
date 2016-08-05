@@ -243,6 +243,11 @@ export class TypeHelper {
                             if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
                                 return NumberVarType;
                         }
+                        else if (propName == "splice" && call.arguments.length >= 2) {
+                            let arrType = this.getCType(propAccess.expression);
+                            if (arrType && arrType instanceof ArrayType)
+                                return arrType;
+                        }
                     } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
                         let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (funcSymbol != null) {
@@ -511,6 +516,19 @@ export class TypeHelper {
                             let call = <ts.CallExpression>propAccess.parent;
                             if (call.arguments.length == 0)
                                 this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
+                        }
+                    }
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
+                        varData.isDynamicArray = true;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            let call = <ts.CallExpression>propAccess.parent;
+                            if (call.arguments.length > 2) {
+                                for (let arg of call.arguments.slice(2))
+                                    this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
+                            }
+                            if (call.arguments.length >= 2) {
+                                this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
+                            }
                         }
                     }
                 }

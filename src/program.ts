@@ -40,7 +40,7 @@ class HeaderFlags {
 
 
 @CodeTemplate(`
-{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos || headerFlags.array_insert || headerFlags.dict}
+{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
@@ -117,9 +117,9 @@ class HeaderFlags {
     }
 {/if}
 {#if headerFlags.array_remove}
-    #define ARRAY_REMOVE(array, pos) {\\
-        memmove(&(array->data[pos]), &(array->data[pos + 1]), (array->size - pos - 1) * sizeof(*array->data)); \\
-        array->size--; \\
+    #define ARRAY_REMOVE(array, pos, num) {\\
+        memmove(&(array->data[pos]), &(array->data[pos + num]), (array->size - pos - num) * sizeof(*array->data)); \\
+        array->size -= num; \\
     }
 {/if}
 

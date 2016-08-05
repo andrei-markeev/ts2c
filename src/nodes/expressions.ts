@@ -19,7 +19,13 @@ export interface CExpression { }
         {tempVarName} = {varAccess}->size;
     {#elseif propName == "shift" && tempVarName}
         {tempVarName} = {varAccess}->data[0];
-        ARRAY_REMOVE({varAccess}, 0);
+        ARRAY_REMOVE({varAccess}, 0, 1);
+    {#elseif propName == "splice" && !topExpressionOfStatement}
+        ARRAY_CREATE({tempVarName}, {arg2}, {arg2});
+        for ({iteratorVarName} = 0; {iteratorVarName} < {arg2}; {iteratorVarName}++)
+            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+({arg1})];
+        ARRAY_REMOVE({varAccess}, {arg1}, {arg2});
+        {insertValues}
     {#elseif propName == "indexOf" && tempVarName && staticArraySize}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
@@ -38,9 +44,12 @@ export interface CExpression { }
         }
     {/if}
 {/statements}
-{#if propName == "push" && arguments.length == 1 && topExpressionOfStatement}
+{#if topExpressionOfStatement && propName == "push" && arguments.length == 1}
     ARRAY_PUSH({varAccess}, {arguments})
-{#elseif propName == "unshift" && arguments.length == 1 && topExpressionOfStatement}
+{#elseif topExpressionOfStatement && propName == "splice"}
+    ARRAY_REMOVE({varAccess}, {arg1}, {arg2});
+    {insertValues}
+{#elseif topExpressionOfStatement && propName == "unshift" && arguments.length == 1}
     ARRAY_INSERT({varAccess}, 0, {arguments})
 {#elseif tempVarName}
     {tempVarName}
@@ -69,6 +78,7 @@ export class CCallExpression {
     public printfCalls: any[] = [];
     public arg1: CExpression;
     public arg2: CExpression;
+    public insertValues: CInsertValue[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
         this.funcName = call.expression.getText();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
@@ -111,6 +121,23 @@ export class CCallExpression {
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_remove = true;
             }
+            else if (this.propName == "splice" && this.arguments.length >= 2) {
+                if (!this.topExpressionOfStatement)
+                {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "removed_values");
+                    let type = scope.root.typeHelper.getCType(propAccess.expression);
+                    scope.variables.push(new CVariable(scope, this.tempVarName, type));
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType)); 
+                }
+                if (this.arguments.length > 2)
+                {
+                    this.insertValues = this.arguments.slice(2).reverse().map(a => new CInsertValue(scope, this.varAccess, this.arg1, a));
+                    scope.root.headerFlags.array_insert = true;
+                }
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.array_remove = true;
+            }
             else if (this.propName == "indexOf" && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);
                 if (type == StringVarType) {
@@ -127,6 +154,11 @@ export class CCallExpression {
             }
         }
     }
+}
+
+@CodeTemplate(`ARRAY_INSERT({varAccess}, {startIndex}, {value});\n`)
+class CInsertValue {
+    constructor(scope: IScope, public varAccess: CElementAccess, public startIndex: CExpression, public value: CExpression) {}
 }
 
 @CodeTemplate(`
