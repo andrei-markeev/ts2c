@@ -133,7 +133,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **shift**
      - [ ] slice
      - [ ] sort
-     - [ ] splice
+     - [x] **splice** _(partial: no bounds checking)_
      - [x] **unshift** _(partial: only one parameter)_
      - [x] **length**
      - [x] **indexOf**

@@ -6,3 +6,5 @@
 [ "new4" ]
 [ "go", "here" ]
 [ "test", "new1", "new3", "new5" ]
+[ "new1" ]
+[ "new3", "new5" ]

@@ -527,7 +527,7 @@ export class TypeHelper {
                                     this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
                             }
                             if (call.arguments.length >= 2) {
-                                this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
+                                this.addTypePromise(varPos, call);
                             }
                         }
                     }

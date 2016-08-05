@@ -3,7 +3,8 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
 import {ArrayType, StructType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
-import {CExpression, CString} from './expressions';
+import {CExpression} from './expressions';
+import {CString} from './literals';
 import {CElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 

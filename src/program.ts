@@ -8,6 +8,8 @@ import {CVariable, CVariableDestructors} from './nodes/variable';
 // these imports are here only because it is necessary to run decorators
 import './nodes/statements';
 import './nodes/expressions';
+import './nodes/call';
+import './nodes/literals';
 
 export interface IScope {
     parent: IScope;
@@ -111,14 +113,14 @@ class HeaderFlags {
     #define ARRAY_INSERT(array, pos, item) {\\
         ARRAY_PUSH(array, item); \\
         if (pos < array->size - 1) {\\
-            memmove(&(array->data[pos + 1]), &(array->data[pos]), (array->size - pos - 1) * sizeof(*array->data)); \\
+            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\
             array->data[pos] = item; \\
         } \\
     }
 {/if}
 {#if headerFlags.array_remove}
     #define ARRAY_REMOVE(array, pos, num) {\\
-        memmove(&(array->data[pos]), &(array->data[pos + num]), (array->size - pos - num) * sizeof(*array->data)); \\
+        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\
         array->size -= num; \\
     }
 {/if}

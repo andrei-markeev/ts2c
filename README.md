@@ -72,7 +72,7 @@ __**Work in progress:**__ it works, but only about 42% of ES3 syntax is currentl
 
 Overview of currently supported language features (compared to ES3 Standard):
 
- - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty, expression 
+ - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement 
  - expressions [47%]:
     - primary expressions [78%]: variables, number, string and boolean literals, array and object initializers, grouping operator 
     - left-hand-side expressions [60%]: property accessors, function calls  
@@ -88,11 +88,11 @@ Overview of currently supported language features (compared to ES3 Standard):
     - conditional operator [100%]: `?`-`:`
     - assignment operators [25%]: `=`
     - comma operator [0%]
- - built-in objects [4%]:
+ - built-in objects [5%]:
     - Global [0%]
     - Object [0%]
     - Function [0%]
-    - Array [33%]: `push()`, `pop()`, `shift()`, `unshift()`, `indexOf()`, `length`
+    - Array [36%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `indexOf()`, `length`
     - String [10%]: `indexOf()`, `length`
     - Boolean [0%]
     - Number [0%]

@@ -2,7 +2,8 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
 import {IScope} from '../program';
-import {CExpression, CCallExpression} from './expressions';
+import {CExpression} from './expressions';
+import {CCallExpression} from './call';
 import {CVariable} from './variable';
 
 export class PrintfHelper {
