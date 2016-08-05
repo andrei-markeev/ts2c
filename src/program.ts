@@ -118,7 +118,7 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.array_remove}
     #define ARRAY_REMOVE(array, pos) {\\
-        memmove(array[pos], array[pos + 1], array-size - pos - 1); \\
+        memmove(&(array->data[pos]), &(array->data[pos + 1]), (array->size - pos - 1) * sizeof(*array->data)); \\
         array->size--; \\
     }
 {/if}

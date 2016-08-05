@@ -92,7 +92,7 @@ Overview of currently supported language features (compared to ES3 Standard):
     - Global [0%]
     - Object [0%]
     - Function [0%]
-    - Array [26%]: `push()`, `pop()`, `indexOf()`, `length`
+    - Array [33%]: `push()`, `pop()`, `shift()`, `unshift()`, `indexOf()`, `length`
     - String [10%]: `indexOf()`, `length`
     - Boolean [0%]
     - Number [0%]

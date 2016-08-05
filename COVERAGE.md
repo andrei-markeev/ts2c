@@ -130,11 +130,11 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **pop**
      - [x] **push** _(partial: only one parameter)_
      - [ ] reverse
-     - [ ] shift
+     - [x] **shift**
      - [ ] slice
      - [ ] sort
      - [ ] splice
-     - [ ] unshift
+     - [x] **unshift** _(partial: only one parameter)_
      - [x] **length**
      - [x] **indexOf**
      - [ ] lastIndexOf

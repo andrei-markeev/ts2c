@@ -227,17 +227,18 @@ export class TypeHelper {
                     let call = <ts.CallExpression>node;
                     if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                         let propAccess = <ts.PropertyAccessExpression>call.expression;
-                        if (propAccess.name.getText() == 'pop' && call.arguments.length == 0) {
+                        let propName = propAccess.name.getText(); 
+                        if ((propName == "pop" || propName == "shift") && call.arguments.length == 0) {
                             let arrType = this.getCType(propAccess.expression);
                             if (arrType && arrType instanceof ArrayType)
                                 return arrType.elementType;
                         }
-                        else if (propAccess.name.getText() == 'push' && call.arguments.length == 1) {
+                        else if ((propName == "push" || propName == "unshift") && call.arguments.length == 1) {
                             let arrType = this.getCType(propAccess.expression);
                             if (arrType && arrType instanceof ArrayType)
                                 return NumberVarType;
                         }
-                        else if (propAccess.name.getText() == 'indexOf' && call.arguments.length == 1) {
+                        else if (propAccess.name.getText() == "indexOf" && call.arguments.length == 1) {
                             let arrType = this.getCType(propAccess.expression);
                             if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
                                 return NumberVarType;
@@ -488,6 +489,7 @@ export class TypeHelper {
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
                     let propAccess = <ts.PropertyAccessExpression>node.parent;
+                    let propName = propAccess.name.getText(); 
                     if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>propAccess.parent;
                         if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
@@ -495,7 +497,7 @@ export class TypeHelper {
                             this.addTypePromise(varPos, binExpr.right, TypePromiseKind.propertyType, propAccess.name.getText());
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "push" || propName == "unshift")) {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             let call = <ts.CallExpression>propAccess.parent;
@@ -503,7 +505,7 @@ export class TypeHelper {
                                 this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "pop" || propName == "shift")) {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             let call = <ts.CallExpression>propAccess.parent;

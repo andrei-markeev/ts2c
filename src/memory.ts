@@ -201,8 +201,9 @@ export class MemoryManager {
                                 let isPush = false;
                                 if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                                     let propAccess = <ts.PropertyAccessExpression>call.expression;
+                                    let propName = propAccess.name.getText();
                                     let type = this.typeHelper.getCType(propAccess.expression);
-                                    if (type && (type instanceof ArrayType) && propAccess.name.getText() == "push") {
+                                    if (type && (type instanceof ArrayType) && (propName == "push" || propName == "unshift")) {
                                         isPush = true;
                                         console.log(heapNode.getText() + " is pushed to array '" + propAccess.expression.getText() + "'.");
                                         queue.push(propAccess.expression);

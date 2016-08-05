@@ -14,6 +14,12 @@ export interface CExpression { }
     {#if propName == "push" && tempVarName}
         ARRAY_PUSH({varAccess}, {arguments});
         {tempVarName} = {varAccess}->size;
+    {#elseif propName == "unshift" && tempVarName}
+        ARRAY_INSERT({varAccess}, 0, {arguments});
+        {tempVarName} = {varAccess}->size;
+    {#elseif propName == "shift" && tempVarName}
+        {tempVarName} = {varAccess}->data[0];
+        ARRAY_REMOVE({varAccess}, 0);
     {#elseif propName == "indexOf" && tempVarName && staticArraySize}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
@@ -34,6 +40,8 @@ export interface CExpression { }
 {/statements}
 {#if propName == "push" && arguments.length == 1 && topExpressionOfStatement}
     ARRAY_PUSH({varAccess}, {arguments})
+{#elseif propName == "unshift" && arguments.length == 1 && topExpressionOfStatement}
+    ARRAY_INSERT({varAccess}, 0, {arguments})
 {#elseif tempVarName}
     {tempVarName}
 {#elseif propName == "indexOf" && arguments.length == 1}
@@ -82,19 +90,28 @@ export class CCallExpression {
                 }
                 scope.root.headerFlags.printf = true;
             }
-            else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
+            else if ((this.propName == "push" || this.propName == "unshift") && this.arguments.length == 1) {
                 if (!this.topExpressionOfStatement)
                 {
                     this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
                     scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
                 }
                 scope.root.headerFlags.array = true;
+                if (propAccess.name.getText() == "unshift")
+                    scope.root.headerFlags.array_insert = true;
             }
-            else if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
+            else if (this.propName == "pop" && this.arguments.length == 0) {
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_pop = true;
             }
-            else if (propAccess.name.getText() == 'indexOf' && this.arguments.length == 1) {
+            else if (this.propName == "shift" && this.arguments.length == 0) {
+                this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "value");
+                let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
+                scope.variables.push(new CVariable(scope, this.tempVarName, type.elementType));
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.array_remove = true;
+            }
+            else if (this.propName == "indexOf" && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);
                 if (type == StringVarType) {
                     this.funcName = "str_pos";
@@ -102,7 +119,7 @@ export class CCallExpression {
                 } else if (type instanceof ArrayType) {
                     this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    this.staticArraySize = type.isDynamicArray ? '' : type.capacity+"";
+                    this.staticArraySize = type.isDynamicArray ? "" : type.capacity+"";
                     scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
                     scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
                     scope.root.headerFlags.array = true;
