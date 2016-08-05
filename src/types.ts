@@ -404,10 +404,17 @@ export class TypeHelper {
             let parentFunc = this.findParentFunction(node);
             let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
             let promiseId = node.pos + "_" + node.end;
+            if (!this.functionReturnsData[scopeId])
+                this.functionReturnsData[scopeId] = {};
             if (ret.expression) {
-                if (!this.functionReturnsData[scopeId])
-                    this.functionReturnsData[scopeId] = {};
-                this.functionReturnsData[scopeId][promiseId] = new TypePromise(ret.expression);
+                if (ret.expression.kind == ts.SyntaxKind.ConditionalExpression) {
+                    let ternary = <ts.ConditionalExpression>ret.expression;
+                    let whenTrueId = ternary.whenTrue.pos + "_" + ternary.whenTrue.end;
+                    let whenFalseId = ternary.whenFalse.pos + "_" + ternary.whenFalse.end;
+                    this.functionReturnsData[scopeId][whenTrueId] = new TypePromise(ternary.whenTrue);
+                    this.functionReturnsData[scopeId][whenFalseId] = new TypePromise(ternary.whenFalse);
+                } else
+                    this.functionReturnsData[scopeId][promiseId] = new TypePromise(ret.expression);
             } else {
                 this.functionReturnsData[scopeId][promiseId] = "void";
             }

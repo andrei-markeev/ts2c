@@ -1,4 +1,4 @@
-function tail(arr, pos, max): number {
+function tail(arr, pos, max) {
     if (pos === arr.length - 1) {
         return arr[pos] > arr[max] ? arr[pos] : arr[max];
     }
