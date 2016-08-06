@@ -7,4 +7,5 @@ ts2c.bundle.js
 *.js.map
 .vscode/.browse.*
 .vscode/c_cpp_properties.json
+tests/coverage
 tests_esp
