@@ -100,6 +100,7 @@ export class VariableInfo {
 }
 
 // forOfIterator ====> for <var> of <array_variable> ---> <var>.type = (type of <array_variable>).elementType
+// forInIterator ====> for <var> in <dict_variable> ---> <var>.type = StringVarType
 // dynamicArrayOf ====> <var>.push(<value>) ---> <var>.elementType = (type of <value>)
 // propertyType ====> <var>[<string>] = <value> ---> <var>.properties[<string>] = (type of <value>)
 // propertyType ====> <var>.<ident> = <value> ---> <var>.properties[<ident>] = (type of <value>)
@@ -109,6 +110,7 @@ export class VariableInfo {
 enum TypePromiseKind {
     variable,
     forOfIterator,
+    forInIterator,
     propertyType,
     dynamicArrayOf,
     arrayOf,
@@ -238,7 +240,7 @@ export class TypeHelper {
                             if (arrType && arrType instanceof ArrayType)
                                 return NumberVarType;
                         }
-                        else if (propAccess.name.getText() == "indexOf" && call.arguments.length == 1) {
+                        else if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
                             let arrType = this.getCType(propAccess.expression);
                             if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
                                 return NumberVarType;
@@ -466,6 +468,15 @@ export class TypeHelper {
                                 }
                             }
                         }
+                        else if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForInStatement) {
+                            let forInStatement = <ts.ForInStatement>varDecl.parent.parent;
+                            if (forInStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+                                let forInInitializer = <ts.VariableDeclarationList>forInStatement.initializer;
+                                if (forInInitializer.declarations[0].pos == varDecl.pos) {
+                                    this.addTypePromise(varPos, forInStatement.expression, TypePromiseKind.forInIterator);
+                                }
+                            }
+                        }
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
@@ -568,6 +579,12 @@ export class TypeHelper {
                         this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
                     }
                 }
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.ForInStatement) {
+                    let forInStatement = <ts.ForInStatement>node.parent;
+                    if (forInStatement.initializer.kind == ts.SyntaxKind.Identifier && forInStatement.initializer.pos == node.pos) {
+                        this.addTypePromise(varPos, forInStatement.expression, TypePromiseKind.forInIterator);
+                    }
+                }
             }
         }
         node.getChildren().forEach(c => this.findVariablesRecursively(c));
@@ -602,8 +619,7 @@ export class TypeHelper {
                         this.variables[k].requiresAllocation = true;
                     for (let addPropKey in this.variablesData[k].addedProperties) {
                         let addPropType = this.variablesData[k].addedProperties[addPropKey];
-                        if (!(addPropType instanceof TypePromise))
-                            varType.properties[addPropKey] = addPropType;
+                        varType.properties[addPropKey] = addPropType;
                     }
                 }
                 else if (varType instanceof DictType) {
@@ -703,8 +719,15 @@ export class TypeHelper {
                 else if (resolvedType instanceof ArrayType && promise.promiseKind == TypePromiseKind.forOfIterator) {
                     finalType = resolvedType.elementType;
                 }
+                else if (resolvedType instanceof DictType && promise.promiseKind == TypePromiseKind.forInIterator) {
+                    finalType = StringVarType;
+                }
 
-                let mergeResult = this.mergeTypes(promise.bestType, finalType);
+                let bestType = promise.bestType;
+                if (promise.promiseKind == TypePromiseKind.propertyType)
+                    bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
+
+                let mergeResult = this.mergeTypes(bestType, finalType);
                 if (mergeResult.replaced)
                     somePromisesAreResolved = true;
                 promise.bestType = mergeResult.type;
@@ -737,7 +760,7 @@ export class TypeHelper {
         for (let prop of tsType.getProperties()) {
             let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
             let propType = this.convertType(propTsType, <ts.Identifier>prop.valueDeclaration.name);
-            if (propType == UniversalVarType && prop.valueDeclaration.kind == ts.SyntaxKind.PropertyAssignment) {
+            if (propType == PointerVarType && prop.valueDeclaration.kind == ts.SyntaxKind.PropertyAssignment) {
                 let propAssignment = <ts.PropertyAssignment>prop.valueDeclaration;
                 if (propAssignment.initializer && propAssignment.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
                     propType = this.determineArrayType(<ts.ArrayLiteralExpression>propAssignment.initializer);
@@ -855,6 +878,9 @@ export class TypeHelper {
         else if (currentType instanceof ArrayType && newType instanceof DictType) {
             if (newType.elementType == currentType.elementType || newType.elementType == PointerVarType)
                 return currentResult;
+        }
+        else if (currentType instanceof StructType && newType instanceof DictType) {
+            return newResult;
         }
         else if (currentType instanceof DictType && newType instanceof DictType) {
             if (newType.elementType != PointerVarType && currentType.elementType == PointerVarType)

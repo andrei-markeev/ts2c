@@ -2,8 +2,8 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StringVarType, NumberVarType} from '../types';
-import {CElementAccess} from './elementaccess';
-import {CExpression} from './expressions';
+import {CElementAccess, CSimpleElementAccess} from './elementaccess';
+import {CExpression, CSimpleBinaryExpression} from './expressions';
 import {CVariable} from './variable';
 import {PrintfHelper} from './printf';
 
@@ -27,7 +27,7 @@ import {PrintfHelper} from './printf';
     {#elseif propName == "indexOf" && tempVarName && staticArraySize}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
-            if ({varAccess}[{iteratorVarName}] == {arg1}) {
+            if ({comparison}) {
                 {tempVarName} = {iteratorVarName};
                 break;
             }
@@ -35,7 +35,23 @@ import {PrintfHelper} from './printf';
     {#elseif propName == "indexOf" && tempVarName}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {
-            if ({varAccess}->data[{iteratorVarName}] == {arg1}) {
+            if ({comparison}) {
+                {tempVarName} = {iteratorVarName};
+                break;
+            }
+        }
+    {#elseif propName == "lastIndexOf" && tempVarName && staticArraySize}
+        {tempVarName} = -1;
+        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {
+            if ({comparison}) {
+                {tempVarName} = {iteratorVarName};
+                break;
+            }
+        }
+    {#elseif propName == "lastIndexOf" && tempVarName}
+        {tempVarName} = -1;
+        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {
+            if ({comparison}) {
                 {tempVarName} = {iteratorVarName};
                 break;
             }
@@ -54,6 +70,8 @@ import {PrintfHelper} from './printf';
 {#elseif tempVarName}
     {tempVarName}
 {#elseif propName == "indexOf" && arguments.length == 1}
+    {funcName}({varAccess}, {arg1})
+{#elseif propName == "lastIndexOf" && arguments.length == 1}
     {funcName}({varAccess}, {arg1})
 {#elseif propName == "pop" && arguments.length == 0}
     ARRAY_POP({varAccess})
@@ -80,6 +98,7 @@ export class CCallExpression {
     public arg2: CExpression;
     public insertValues: CInsertValue[] = [];
     public spliceNeedsRemove: boolean = true;
+    public comparison: CExpression;
     constructor(scope: IScope, call: ts.CallExpression) {
         this.funcName = call.expression.getText();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
@@ -95,15 +114,13 @@ export class CCallExpression {
             this.varAccess = new CElementAccess(scope, propAccess.expression);
 
             if (this.funcName == "console.log") {
-                for (let i=0;i<call.arguments.length; i++)
-                {
+                for (let i = 0; i < call.arguments.length; i++) {
                     this.printfCalls.push(PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
                 }
                 scope.root.headerFlags.printf = true;
             }
             else if ((this.propName == "push" || this.propName == "unshift") && this.arguments.length == 1) {
-                if (!this.topExpressionOfStatement)
-                {
+                if (!this.topExpressionOfStatement) {
                     this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
                     scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
                 }
@@ -123,37 +140,39 @@ export class CCallExpression {
                 scope.root.headerFlags.array_remove = true;
             }
             else if (this.propName == "splice" && this.arguments.length >= 2) {
-                if (!this.topExpressionOfStatement)
-                {
+                if (!this.topExpressionOfStatement) {
                     this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "removed_values");
                     let type = scope.root.typeHelper.getCType(propAccess.expression);
                     scope.variables.push(new CVariable(scope, this.tempVarName, type));
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType)); 
+                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
                 }
-                if (this.arguments.length > 2)
-                {
+                if (this.arguments.length > 2) {
                     this.insertValues = this.arguments.slice(2).reverse().map(a => new CInsertValue(scope, this.varAccess, this.arg1, a));
                     scope.root.headerFlags.array_insert = true;
                 }
-                if (call.arguments[1].kind == ts.SyntaxKind.NumericLiteral)
-                {
+                if (call.arguments[1].kind == ts.SyntaxKind.NumericLiteral) {
                     this.spliceNeedsRemove = call.arguments[1].getText() != "0";
                 }
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_remove = true;
             }
-            else if (this.propName == "indexOf" && this.arguments.length == 1) {
+            else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);
-                if (type == StringVarType) {
+                if (type == StringVarType && this.propName == "indexOf") {
                     this.funcName = "str_pos";
                     scope.root.headerFlags.str_pos = true;
+                } else if (type == StringVarType && this.propName == "lastIndexOf") {
+                    this.funcName = "str_rpos";
+                    scope.root.headerFlags.str_rpos = true;
                 } else if (type instanceof ArrayType) {
                     this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    this.staticArraySize = type.isDynamicArray ? "" : type.capacity+"";
+                    this.staticArraySize = type.isDynamicArray ? "" : type.capacity + "";
                     scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
                     scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+                    let arrayElementAccess = new CSimpleElementAccess(scope, type, this.varAccess, this.iteratorVarName); 
+                    this.comparison = new CSimpleBinaryExpression(scope, arrayElementAccess, type.elementType, this.arg1, type.elementType, ts.SyntaxKind.EqualsEqualsToken, call);
                     scope.root.headerFlags.array = true;
                 }
             }
@@ -163,5 +182,5 @@ export class CCallExpression {
 
 @CodeTemplate(`ARRAY_INSERT({varAccess}, {startIndex}, {value});\n`)
 class CInsertValue {
-    constructor(scope: IScope, public varAccess: CElementAccess, public startIndex: CExpression, public value: CExpression) {}
+    constructor(scope: IScope, public varAccess: CElementAccess, public startIndex: CExpression, public value: CExpression) { }
 }

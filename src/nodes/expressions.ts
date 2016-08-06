@@ -7,6 +7,19 @@ import {CElementAccess} from './elementaccess';
 
 export interface CExpression { }
 
+@CodeTemplate(`{expression}`, ts.SyntaxKind.BinaryExpression)
+class CBinaryExpression {
+    public expression: CSimpleBinaryExpression;
+    constructor(scope: IScope, node: ts.BinaryExpression)
+    {
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        let left = CodeTemplateFactory.createForNode(scope, node.left);
+        let right = CodeTemplateFactory.createForNode(scope, node.right);
+        this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
+    }
+}
+
 @CodeTemplate(`
 {#statements}
     {#if replacedWithVar && strPlusStr}
@@ -40,8 +53,8 @@ export interface CExpression { }
     {replacementVarName}
 {#else}
     /* unsupported expression {nodeText} */
-{/if}`, ts.SyntaxKind.BinaryExpression)
-class CBinaryExpression {
+{/if}`)
+export class CSimpleBinaryExpression {
     public nodeText: string;
     public operator: string;
     public replacedWithCall: boolean = false;
@@ -53,15 +66,9 @@ class CBinaryExpression {
     public strPlusStr: boolean = false;
     public strPlusNumber: boolean = false;
     public numberPlusStr: boolean = false;
-    public left: CExpression;
-    public right: CExpression;
-    constructor(scope: IScope, node: ts.BinaryExpression) {
+    constructor(scope: IScope, public left: CExpression, leftType: CType, public right: CExpression, rightType: CType, operatorKind: ts.SyntaxKind, node: ts.Node) {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
-        let leftType = scope.root.typeHelper.getCType(node.left);
-        let rightType = scope.root.typeHelper.getCType(node.right);
-        this.left = CodeTemplateFactory.createForNode(scope, node.left);
-        this.right = CodeTemplateFactory.createForNode(scope, node.right);
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
         if (leftType == NumberVarType && rightType == NumberVarType) {
@@ -84,10 +91,10 @@ class CBinaryExpression {
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['strcmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['strcmp', ' == 0'];
 
-            if (callReplaceMap[node.operatorToken.kind])
+            if (callReplaceMap[operatorKind])
                 scope.root.headerFlags.strings = true;
 
-            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -106,7 +113,7 @@ class CBinaryExpression {
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
 
-            if (callReplaceMap[node.operatorToken.kind]) {
+            if (callReplaceMap[operatorKind]) {
                 scope.root.headerFlags.str_int16_t_cmp = true;
                 // str_int16_t_cmp expects certain order of arguments (string, number)
                 if (leftType == NumberVarType) {
@@ -116,7 +123,7 @@ class CBinaryExpression {
                 }
             }
 
-            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -132,10 +139,10 @@ class CBinaryExpression {
             }
 
         }
-        this.operator = operatorMap[node.operatorToken.kind];
-        if (callReplaceMap[node.operatorToken.kind]) {
+        this.operator = operatorMap[operatorKind];
+        if (callReplaceMap[operatorKind]) {
             this.replacedWithCall = true;
-            [this.call, this.callCondition] = callReplaceMap[node.operatorToken.kind];
+            [this.call, this.callCondition] = callReplaceMap[operatorKind];
         }
         this.nodeText = node.getText();
 

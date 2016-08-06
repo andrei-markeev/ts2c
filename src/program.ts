@@ -36,13 +36,16 @@ class HeaderFlags {
     str_int16_t_cmp: boolean = false;
     str_int16_t_cat: boolean = false;
     str_pos: boolean = false;
+    str_rpos: boolean = false;
     str_len: boolean = false;
     atoi: boolean = false;
 }
 
 
 @CodeTemplate(`
-{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
+{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
+    || headerFlags.str_pos || headerFlags.str_rpos
+    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
@@ -190,6 +193,28 @@ class HeaderFlags {
         int16_t pos = 0;
         if (found == 0)
             return -1;
+        while (*str && str < found) {
+            i = 1;
+            if ((*str & 0xE0) == 0xC0) i=2;
+            else if ((*str & 0xF0) == 0xE0) i=3;
+            else if ((*str & 0xF8) == 0xF0) i=4;
+            str += i;
+            pos += i == 4 ? 2 : 1;
+        }
+        return pos;
+    }
+{/if}
+{#if headerFlags.str_rpos}
+    int16_t str_rpos(const char * str, const char *search) {
+        int16_t i;
+        const char * found = strstr(str, search);
+        int16_t pos = 0;
+        const char * end = str + (strlen(str) - strlen(search));
+        if (found == 0)
+            return -1;
+        found = 0;
+        while (end > str && found == 0)
+            found = strstr(end--, search);
         while (*str && str < found) {
             i = 1;
             if ((*str & 0xE0) == 0xC0) i=2;
