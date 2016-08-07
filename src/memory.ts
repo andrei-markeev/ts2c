@@ -221,8 +221,13 @@ export class MemoryManager {
                             let funcDecl = <ts.FunctionDeclaration>symbol.valueDeclaration;
                             for (let i = 0; i < call.arguments.length; i++) {
                                 if (call.arguments[i].pos <= ref.pos && call.arguments[i].end >= ref.end) {
-                                    console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
-                                    queue.push(<ts.Identifier>funcDecl.parameters[i].name);
+                                    if (funcDecl.pos + 1 == topScope) {
+                                        console.log(heapNode.getText() + " -> Found recursive call with parameter " + funcDecl.parameters[i].name.getText());
+                                        queue.push(funcDecl.name);
+                                    } else {
+                                        console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
+                                        queue.push(<ts.Identifier>funcDecl.parameters[i].name);
+                                    }
                                     isSimple = false;
                                 }
                             }

@@ -4,7 +4,7 @@ ELF = $(TS:.ts=.elf)
 RES = $(TS:.ts=.res)
 COVER = $(TS:%.ts=coverage/%)
 
-.PHONY: all clean
+.PHONY: all clean cover
 
 %.c: %.ts
 	node ../ts2c.js $<
@@ -13,6 +13,9 @@ COVER = $(TS:%.ts=coverage/%)
 %.res: %.elf
 	valgrind --error-exitcode=1 --leak-check=yes --quiet ./$< > $@
 	diff $@.expect $@
+
+all: $(RES) $(ELF) $(C)
+
 coverage/%: %.ts
 	cd .. && istanbul cover --dir tests/$@ ts2c.js -- tests/$<
 coverage/lcov-report/index.html: $(COVER)
@@ -20,10 +23,8 @@ coverage/lcov-report/index.html: $(COVER)
 
 cover: coverage/lcov-report/index.html
 
-all: $(RES) $(ELF) $(C)
-
 clean: 
-	rm -f *.elf
-	rm -f *.res
-	rm -f *.c
+	rm -f **/*.elf
+	rm -f **/*.res
+	rm -f **/*.c
 	rm -rf coverage

@@ -610,7 +610,7 @@ export class TypeHelper {
                 varType = varType || PointerVarType;
 
                 if (varType instanceof ArrayType) {
-                    if (this.variablesData[k].isDynamicArray)
+                    if (this.variablesData[k].isDynamicArray && !this.variablesData[k].parameterFuncDeclPos)
                         this.variables[k].requiresAllocation = true;
                     varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
                 }
