@@ -246,12 +246,13 @@ var MemoryManager = (function () {
             isSimple = false;
         var scopeTree = {};
         scopeTree[topScope] = true;
-        // TODO:
-        // - circular references
         var queue = [heapNode];
         queue.push();
+        var visited = {};
         while (queue.length > 0) {
             var node = queue.shift();
+            if (visited[node.pos + "_" + node.end])
+                continue;
             var refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
                 var varIdent = node;
@@ -265,6 +266,7 @@ var MemoryManager = (function () {
             var returned = false;
             for (var _i = 0, refs_1 = refs; _i < refs_1.length; _i++) {
                 var ref = refs_1[_i];
+                visited[ref.pos + "_" + ref.end] = true;
                 var parentNode = this.findParentFunctionNode(ref);
                 if (!parentNode)
                     topScope = "main";
@@ -297,8 +299,9 @@ var MemoryManager = (function () {
                                 var isPush = false;
                                 if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                                     var propAccess = call.expression;
+                                    var propName = propAccess.name.getText();
                                     var type_1 = this.typeHelper.getCType(propAccess.expression);
-                                    if (type_1 && (type_1 instanceof types_1.ArrayType) && propAccess.name.getText() == "push") {
+                                    if (type_1 && (type_1 instanceof types_1.ArrayType) && (propName == "push" || propName == "unshift")) {
                                         isPush = true;
                                         console.log(heapNode.getText() + " is pushed to array '" + propAccess.expression.getText() + "'.");
                                         queue.push(propAccess.expression);
@@ -314,9 +317,15 @@ var MemoryManager = (function () {
                         else {
                             var funcDecl = symbol.valueDeclaration;
                             for (var i = 0; i < call.arguments.length; i++) {
-                                if (call.arguments[i].kind == ts.SyntaxKind.Identifier && call.arguments[i].getText() == node.getText()) {
-                                    console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
-                                    queue.push(funcDecl.parameters[i].name);
+                                if (call.arguments[i].pos <= ref.pos && call.arguments[i].end >= ref.end) {
+                                    if (funcDecl.pos + 1 == topScope) {
+                                        console.log(heapNode.getText() + " -> Found recursive call with parameter " + funcDecl.parameters[i].name.getText());
+                                        queue.push(funcDecl.name);
+                                    }
+                                    else {
+                                        console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
+                                        queue.push(funcDecl.parameters[i].name);
+                                    }
                                     isSimple = false;
                                 }
                             }
@@ -405,7 +414,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./types":13}],4:[function(require,module,exports){
+},{"./types":15}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -504,7 +513,129 @@ var CAssignment = (function () {
 exports.CAssignment = CAssignment;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./elementaccess":5}],5:[function(require,module,exports){
+},{"../template":14,"../types":15,"./elementaccess":6}],5:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require('../template');
+var types_1 = require('../types');
+var elementaccess_1 = require('./elementaccess');
+var expressions_1 = require('./expressions');
+var variable_1 = require('./variable');
+var printf_1 = require('./printf');
+var CCallExpression = (function () {
+    function CCallExpression(scope, call) {
+        var _this = this;
+        this.propName = null;
+        this.tempVarName = '';
+        this.staticArraySize = '';
+        this.printfCalls = [];
+        this.insertValues = [];
+        this.spliceNeedsRemove = true;
+        this.funcName = call.expression.getText();
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (this.funcName != "console.log") {
+            this.arguments = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
+            this.arg1 = this.arguments[0];
+            this.arg2 = this.arguments[1];
+        }
+        if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
+            var propAccess = call.expression;
+            this.propName = propAccess.name.getText();
+            this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+            if (this.funcName == "console.log") {
+                for (var i = 0; i < call.arguments.length; i++) {
+                    this.printfCalls.push(printf_1.PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
+                }
+                scope.root.headerFlags.printf = true;
+            }
+            else if ((this.propName == "push" || this.propName == "unshift") && this.arguments.length == 1) {
+                if (!this.topExpressionOfStatement) {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
+                }
+                scope.root.headerFlags.array = true;
+                if (propAccess.name.getText() == "unshift")
+                    scope.root.headerFlags.array_insert = true;
+            }
+            else if (this.propName == "pop" && this.arguments.length == 0) {
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.array_pop = true;
+            }
+            else if (this.propName == "shift" && this.arguments.length == 0) {
+                this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "value");
+                var type = scope.root.typeHelper.getCType(propAccess.expression);
+                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type.elementType));
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.array_remove = true;
+            }
+            else if (this.propName == "splice" && this.arguments.length >= 2) {
+                if (!this.topExpressionOfStatement) {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "removed_values");
+                    var type = scope.root.typeHelper.getCType(propAccess.expression);
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type));
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
+                }
+                if (this.arguments.length > 2) {
+                    this.insertValues = this.arguments.slice(2).reverse().map(function (a) { return new CInsertValue(scope, _this.varAccess, _this.arg1, a); });
+                    scope.root.headerFlags.array_insert = true;
+                }
+                if (call.arguments[1].kind == ts.SyntaxKind.NumericLiteral) {
+                    this.spliceNeedsRemove = call.arguments[1].getText() != "0";
+                }
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.array_remove = true;
+            }
+            else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
+                var type = scope.root.typeHelper.getCType(propAccess.expression);
+                if (type == types_1.StringVarType && this.propName == "indexOf") {
+                    this.funcName = "str_pos";
+                    scope.root.headerFlags.str_pos = true;
+                }
+                else if (type == types_1.StringVarType && this.propName == "lastIndexOf") {
+                    this.funcName = "str_rpos";
+                    scope.root.headerFlags.str_rpos = true;
+                }
+                else if (type instanceof types_1.ArrayType) {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    this.staticArraySize = type.isDynamicArray ? "" : type.capacity + "";
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
+                    scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
+                    var arrayElementAccess = new elementaccess_1.CSimpleElementAccess(scope, type, this.varAccess, this.iteratorVarName);
+                    this.comparison = new expressions_1.CSimpleBinaryExpression(scope, arrayElementAccess, type.elementType, this.arg1, type.elementType, ts.SyntaxKind.EqualsEqualsToken, call);
+                    scope.root.headerFlags.array = true;
+                }
+            }
+        }
+    }
+    CCallExpression = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if propName == \"push\" && tempVarName}\n        ARRAY_PUSH({varAccess}, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"unshift\" && tempVarName}\n        ARRAY_INSERT({varAccess}, 0, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"shift\" && tempVarName}\n        {tempVarName} = {varAccess}->data[0];\n        ARRAY_REMOVE({varAccess}, 0, 1);\n    {#elseif propName == \"splice\" && !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {arg2}, {arg2});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arg2}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}))];\n        ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n        {insertValues}\n    {#elseif propName == \"indexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"indexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && propName == \"push\" && arguments.length == 1}\n    ARRAY_PUSH({varAccess}, {arguments})\n{#elseif topExpressionOfStatement && propName == \"splice\" && spliceNeedsRemove}\n    ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"splice\" && !spliceNeedsRemove}\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"unshift\" && arguments.length == 1}\n    ARRAY_INSERT({varAccess}, 0, {arguments})\n{#elseif tempVarName}\n    {tempVarName}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"lastIndexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"pop\" && arguments.length == 0}\n    ARRAY_POP({varAccess})\n{#elseif printfCalls.length == 1}\n    {printfCalls}\n{#elseif printfCalls.length > 1}\n    {\n        {printfCalls {    }=>{this}\n}\n    }\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
+    ], CCallExpression);
+    return CCallExpression;
+}());
+exports.CCallExpression = CCallExpression;
+var CInsertValue = (function () {
+    function CInsertValue(scope, varAccess, startIndex, value) {
+        this.varAccess = varAccess;
+        this.startIndex = startIndex;
+        this.value = value;
+    }
+    CInsertValue = __decorate([
+        template_1.CodeTemplate("ARRAY_INSERT({varAccess}, {startIndex}, {value});\n")
+    ], CInsertValue);
+    return CInsertValue;
+}());
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../template":14,"../types":15,"./elementaccess":6,"./expressions":7,"./printf":10,"./variable":12}],6:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -586,7 +717,7 @@ var CSimpleElementAccess = (function () {
 exports.CSimpleElementAccess = CSimpleElementAccess;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13}],6:[function(require,module,exports){
+},{"../template":14,"../types":15}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -598,69 +729,24 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var template_1 = require('../template');
 var types_1 = require('../types');
-var assignment_1 = require('./assignment');
-var printf_1 = require('./printf');
 var variable_1 = require('./variable');
-var elementaccess_1 = require('./elementaccess');
-var CCallExpression = (function () {
-    function CCallExpression(scope, call) {
-        this.propName = null;
-        this.tempVarName = '';
-        this.staticArraySize = '';
-        this.printfCalls = [];
-        this.funcName = call.expression.getText();
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (this.funcName != "console.log") {
-            this.arguments = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-            this.arg1 = this.arguments[0];
-            this.arg2 = this.arguments[1];
-        }
-        if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
-            var propAccess = call.expression;
-            this.propName = propAccess.name.getText();
-            this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-            if (this.funcName == "console.log") {
-                for (var i = 0; i < call.arguments.length; i++) {
-                    this.printfCalls.push(printf_1.PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
-                }
-                scope.root.headerFlags.printf = true;
-            }
-            else if (propAccess.name.getText() == 'push' && this.arguments.length == 1) {
-                if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
-                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
-                }
-                scope.root.headerFlags.array = true;
-            }
-            else if (propAccess.name.getText() == 'pop' && this.arguments.length == 0) {
-                scope.root.headerFlags.array = true;
-                scope.root.headerFlags.array_pop = true;
-            }
-            else if (propAccess.name.getText() == 'indexOf' && this.arguments.length == 1) {
-                var type = scope.root.typeHelper.getCType(propAccess.expression);
-                if (type == types_1.StringVarType) {
-                    this.funcName = "str_pos";
-                    scope.root.headerFlags.str_pos = true;
-                }
-                else if (type instanceof types_1.ArrayType) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
-                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    this.staticArraySize = type.isDynamicArray ? '' : type.capacity + "";
-                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
-                    scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
-                    scope.root.headerFlags.array = true;
-                }
-            }
-        }
-    }
-    CCallExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if propName == \"push\" && tempVarName}\n        ARRAY_PUSH({varAccess}, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"indexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({varAccess}[{iteratorVarName}] == {arg1}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"indexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({varAccess}->data[{iteratorVarName}] == {arg1}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if propName == \"push\" && arguments.length == 1 && topExpressionOfStatement}\n    ARRAY_PUSH({varAccess}, {arguments})\n{#elseif tempVarName}\n    {tempVarName}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"pop\" && arguments.length == 0}\n    ARRAY_POP({varAccess})\n{#elseif printfCalls.length == 1}\n    {printfCalls}\n{#elseif printfCalls.length > 1}\n    {\n        {printfCalls {    }=>{this}\n}\n    }\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
-    ], CCallExpression);
-    return CCallExpression;
-}());
-exports.CCallExpression = CCallExpression;
 var CBinaryExpression = (function () {
     function CBinaryExpression(scope, node) {
+        var leftType = scope.root.typeHelper.getCType(node.left);
+        var rightType = scope.root.typeHelper.getCType(node.right);
+        var left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+        var right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
+    }
+    CBinaryExpression = __decorate([
+        template_1.CodeTemplate("{expression}", ts.SyntaxKind.BinaryExpression)
+    ], CBinaryExpression);
+    return CBinaryExpression;
+}());
+var CSimpleBinaryExpression = (function () {
+    function CSimpleBinaryExpression(scope, left, leftType, right, rightType, operatorKind, node) {
+        this.left = left;
+        this.right = right;
         this.replacedWithCall = false;
         this.replacedWithVar = false;
         this.gcVarName = null;
@@ -669,10 +755,6 @@ var CBinaryExpression = (function () {
         this.numberPlusStr = false;
         var operatorMap = {};
         var callReplaceMap = {};
-        var leftType = scope.root.typeHelper.getCType(node.left);
-        var rightType = scope.root.typeHelper.getCType(node.right);
-        this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
-        this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
         if (leftType == types_1.NumberVarType && rightType == types_1.NumberVarType) {
@@ -694,9 +776,9 @@ var CBinaryExpression = (function () {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['strcmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['strcmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['strcmp', ' == 0'];
-            if (callReplaceMap[node.operatorToken.kind])
+            if (callReplaceMap[operatorKind])
                 scope.root.headerFlags.strings = true;
-            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken) {
                 var tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new variable_1.CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -713,7 +795,7 @@ var CBinaryExpression = (function () {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
-            if (callReplaceMap[node.operatorToken.kind]) {
+            if (callReplaceMap[operatorKind]) {
                 scope.root.headerFlags.str_int16_t_cmp = true;
                 // str_int16_t_cmp expects certain order of arguments (string, number)
                 if (leftType == types_1.NumberVarType) {
@@ -722,7 +804,7 @@ var CBinaryExpression = (function () {
                     this.right = tmp;
                 }
             }
-            if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken) {
                 var tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new variable_1.CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -737,10 +819,10 @@ var CBinaryExpression = (function () {
                 scope.root.headerFlags.str_int16_t_cat = true;
             }
         }
-        this.operator = operatorMap[node.operatorToken.kind];
-        if (callReplaceMap[node.operatorToken.kind]) {
+        this.operator = operatorMap[operatorKind];
+        if (callReplaceMap[operatorKind]) {
             this.replacedWithCall = true;
-            _a = callReplaceMap[node.operatorToken.kind], this.call = _a[0], this.callCondition = _a[1];
+            _a = callReplaceMap[operatorKind], this.call = _a[0], this.callCondition = _a[1];
         }
         this.nodeText = node.getText();
         if (this.gcVarName) {
@@ -749,11 +831,12 @@ var CBinaryExpression = (function () {
         }
         var _a;
     }
-    CBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", ts.SyntaxKind.BinaryExpression)
-    ], CBinaryExpression);
-    return CBinaryExpression;
+    CSimpleBinaryExpression = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
+    ], CSimpleBinaryExpression);
+    return CSimpleBinaryExpression;
 }());
+exports.CSimpleBinaryExpression = CSimpleBinaryExpression;
 var CUnaryExpression = (function () {
     function CUnaryExpression(scope, node) {
         this.replacedWithCall = false;
@@ -804,6 +887,85 @@ var CGroupingExpression = (function () {
     ], CGroupingExpression);
     return CGroupingExpression;
 }());
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../template":14,"../types":15,"./variable":12}],8:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require('../template');
+var variable_1 = require('./variable');
+var CFunctionPrototype = (function () {
+    function CFunctionPrototype(scope, node) {
+        this.parameters = [];
+        this.returnType = scope.root.typeHelper.getTypeString(node);
+        this.name = node.name.getText();
+        this.parameters = node.parameters.map(function (p) { return new variable_1.CVariable(scope, p.name.getText(), p.name, { removeStorageSpecifier: true }); });
+    }
+    CFunctionPrototype = __decorate([
+        template_1.CodeTemplate("{returnType} {name}({parameters {, }=> {this}});")
+    ], CFunctionPrototype);
+    return CFunctionPrototype;
+}());
+exports.CFunctionPrototype = CFunctionPrototype;
+var CFunction = (function () {
+    function CFunction(root, funcDecl) {
+        var _this = this;
+        this.root = root;
+        this.func = this;
+        this.parameters = [];
+        this.variables = [];
+        this.statements = [];
+        this.parent = root;
+        this.returnType = root.typeHelper.getTypeString(funcDecl);
+        this.name = funcDecl.name.getText();
+        this.parameters = funcDecl.parameters.map(function (p) { return new variable_1.CVariable(_this, p.name.getText(), p.name, { removeStorageSpecifier: true }); });
+        this.variables = [];
+        this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
+        var _loop_1 = function(gcVarName) {
+            if (root.variables.filter(function (v) { return v.name == gcVarName; }).length)
+                return "continue";
+            var gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
+            root.variables.push(new variable_1.CVariable(root, gcVarName, gcType));
+        };
+        for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
+            var gcVarName = _a[_i];
+            var state_1 = _loop_1(gcVarName);
+            if (state_1 === "continue") continue;
+        }
+        funcDecl.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
+        if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
+            this.destructors = new variable_1.CVariableDestructors(this, funcDecl);
+        }
+    }
+    CFunction = __decorate([
+        template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
+    ], CFunction);
+    return CFunction;
+}());
+exports.CFunction = CFunction;
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../template":14,"./variable":12}],9:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require('../template');
+var types_1 = require('../types');
+var variable_1 = require('./variable');
+var assignment_1 = require('./assignment');
 var CArrayLiteralExpression = (function () {
     function CArrayLiteralExpression(scope, node) {
         var arrSize = node.elements.length;
@@ -912,62 +1074,7 @@ var CNumber = (function () {
 exports.CNumber = CNumber;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./assignment":4,"./elementaccess":5,"./printf":8,"./variable":10}],7:[function(require,module,exports){
-(function (global){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var variable_1 = require('./variable');
-var CFunction = (function () {
-    function CFunction(root, funcDecl) {
-        var _this = this;
-        this.root = root;
-        this.func = this;
-        this.parameters = [];
-        this.variables = [];
-        this.statements = [];
-        this.parent = root;
-        var signature = root.typeChecker.getSignatureFromDeclaration(funcDecl);
-        this.name = funcDecl.name.getText();
-        this.returnType = root.typeHelper.getTypeString(signature.getReturnType());
-        this.parameters = signature.parameters.map(function (p) { return new variable_1.CVariable(_this, p.name, p, { removeStorageSpecifier: true }); });
-        this.variables = [];
-        this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
-        var _loop_1 = function(gcVarName) {
-            if (root.variables.filter(function (v) { return v.name == gcVarName; }).length)
-                return "continue";
-            var pointerType = new types_1.ArrayType("void *", 0, true);
-            if (gcVarName.indexOf("arrays") == -1)
-                root.variables.push(new variable_1.CVariable(root, gcVarName, pointerType));
-            else
-                root.variables.push(new variable_1.CVariable(root, gcVarName, new types_1.ArrayType(pointerType, 0, true)));
-        };
-        for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
-            var gcVarName = _a[_i];
-            var state_1 = _loop_1(gcVarName);
-            if (state_1 === "continue") continue;
-        }
-        funcDecl.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
-        if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
-            this.destructors = new variable_1.CVariableDestructors(this, funcDecl);
-        }
-    }
-    CFunction = __decorate([
-        template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
-    ], CFunction);
-    return CFunction;
-}());
-exports.CFunction = CFunction;
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./variable":10}],8:[function(require,module,exports){
+},{"../template":14,"../types":15,"./assignment":4,"./variable":12}],10:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1060,7 +1167,7 @@ var CPrintf = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./variable":10}],9:[function(require,module,exports){
+},{"../template":14,"../types":15,"./variable":12}],11:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1106,12 +1213,9 @@ var CReturnStatement = (function () {
     function CReturnStatement(scope, node) {
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new variable_1.CVariableDestructors(scope, node);
-        this.needBlock = node.parent && (node.parent.kind == ts.SyntaxKind.IfStatement
-            || node.parent.kind == ts.SyntaxKind.ForStatement
-            || node.parent.kind == ts.SyntaxKind.WhileStatement);
     }
     CReturnStatement = __decorate([
-        template_1.CodeTemplate("\n{#if needBlock}\n    {\n        {destructors}\n        return {expression};\n    }\n{/if}\n{#if !needBlock}\n    {destructors}\n    return {expression};\n{/if}\n", ts.SyntaxKind.ReturnStatement)
+        template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
     ], CReturnStatement);
     return CReturnStatement;
 }());
@@ -1297,7 +1401,7 @@ var CBlock = (function () {
 exports.CBlock = CBlock;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./assignment":4,"./elementaccess":5,"./variable":10}],10:[function(require,module,exports){
+},{"../template":14,"../types":15,"./assignment":4,"./elementaccess":6,"./variable":12}],12:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1406,7 +1510,7 @@ var CVariableDestructors = (function () {
         });
     }
     CVariableDestructors = __decorate([
-        template_1.CodeTemplate("\n{destructors {    }=> free({this});\n}\n{#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n{/if}\n{#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n{/if}\n{#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n{/if}")
+        template_1.CodeTemplate("\n{#statements}\n    {destructors => free({this});\n}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
     ], CVariableDestructors);
     return CVariableDestructors;
 }());
@@ -1440,7 +1544,7 @@ var CVariable = (function () {
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":12,"../types":13,"./assignment":4}],11:[function(require,module,exports){
+},{"../template":14,"../types":15,"./assignment":4}],13:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1458,6 +1562,8 @@ var variable_1 = require('./nodes/variable');
 // these imports are here only because it is necessary to run decorators
 require('./nodes/statements');
 require('./nodes/expressions');
+require('./nodes/call');
+require('./nodes/literals');
 var HeaderFlags = (function () {
     function HeaderFlags() {
         this.strings = false;
@@ -1476,6 +1582,7 @@ var HeaderFlags = (function () {
         this.str_int16_t_cmp = false;
         this.str_int16_t_cat = false;
         this.str_pos = false;
+        this.str_rpos = false;
         this.str_len = false;
         this.atoi = false;
     }
@@ -1490,35 +1597,34 @@ var CProgram = (function () {
         this.variables = [];
         this.statements = [];
         this.functions = [];
+        this.functionPrototypes = [];
         this.headerFlags = new HeaderFlags();
         this.typeChecker = tsProgram.getTypeChecker();
         this.typeHelper = new types_1.TypeHelper(this.typeChecker);
         this.memoryManager = new memory_1.MemoryManager(this.typeChecker, this.typeHelper);
-        var structs = this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
+        var _a = this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles()), structs = _a[0], functionPrototypes = _a[1];
         this.userStructs = structs.map(function (s) {
             return {
                 name: s.name,
                 properties: s.properties.map(function (p) { return new variable_1.CVariable(_this, p.name, p.type, { removeStorageSpecifier: true }); })
             };
         });
+        this.functionPrototypes = functionPrototypes.map(function (fp) { return new function_1.CFunctionPrototype(_this, fp); });
         this.memoryManager.preprocessVariables();
-        for (var _i = 0, _a = tsProgram.getSourceFiles(); _i < _a.length; _i++) {
-            var source = _a[_i];
+        for (var _i = 0, _b = tsProgram.getSourceFiles(); _i < _b.length; _i++) {
+            var source = _b[_i];
             this.memoryManager.preprocessTemporaryVariables(source);
         }
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
-        for (var _b = 0, _c = this.gcVarNames; _b < _c.length; _b++) {
-            var gcVarName = _c[_b];
-            var pointerType = new types_1.ArrayType("void *", 0, true);
-            if (gcVarName.indexOf("arrays") == -1)
-                this.variables.push(new variable_1.CVariable(this, gcVarName, pointerType));
-            else
-                this.variables.push(new variable_1.CVariable(this, gcVarName, new types_1.ArrayType(pointerType, 0, true)));
+        for (var _c = 0, _d = this.gcVarNames; _c < _d.length; _c++) {
+            var gcVarName = _d[_c];
+            var gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
+            this.variables.push(new variable_1.CVariable(this, gcVarName, gcType));
         }
-        for (var _d = 0, _e = tsProgram.getSourceFiles(); _d < _e.length; _d++) {
-            var source = _e[_d];
-            for (var _f = 0, _g = source.statements; _f < _g.length; _f++) {
-                var s = _g[_f];
+        for (var _e = 0, _f = tsProgram.getSourceFiles(); _e < _f.length; _e++) {
+            var source = _f[_e];
+            for (var _g = 0, _h = source.statements; _g < _h.length; _g++) {
+                var s = _h[_g];
                 if (s.kind == ts.SyntaxKind.FunctionDeclaration)
                     this.functions.push(new function_1.CFunction(this, s));
                 else
@@ -1528,14 +1634,14 @@ var CProgram = (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.str_pos || headerFlags.array_insert || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[pos + 1]), &(array->data[pos]), (array->size - pos - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos) {\\\n        memmove(array[pos], array[pos + 1], array-size - pos - 1); \\\n        array->size--; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc(init_capacity * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
     ], CProgram);
     return CProgram;
 }());
 exports.CProgram = CProgram;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./memory":3,"./nodes/expressions":6,"./nodes/function":7,"./nodes/statements":9,"./nodes/variable":10,"./template":12,"./types":13}],12:[function(require,module,exports){
+},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":11,"./nodes/variable":12,"./template":14,"./types":15}],14:[function(require,module,exports){
 "use strict";
 ;
 var nodeKindTemplates = {};
@@ -1750,7 +1856,7 @@ function processTemplate(template, args) {
     return [template, statements];
 }
 
-},{}],13:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
@@ -1759,12 +1865,30 @@ exports.PointerVarType = "void *";
 exports.StringVarType = "const char *";
 exports.NumberVarType = "int16_t";
 exports.BooleanVarType = "uint8_t";
+/** Type that represents static or dynamic array */
 var ArrayType = (function () {
     function ArrayType(elementType, capacity, isDynamicArray) {
         this.elementType = elementType;
         this.capacity = capacity;
         this.isDynamicArray = isDynamicArray;
     }
+    ArrayType.getArrayStructName = function (elementTypeText) {
+        while (elementTypeText.indexOf(exports.NumberVarType) > -1)
+            elementTypeText = elementTypeText.replace(exports.NumberVarType, "number");
+        while (elementTypeText.indexOf(exports.StringVarType) > -1)
+            elementTypeText = elementTypeText.replace(exports.StringVarType, "string");
+        while (elementTypeText.indexOf(exports.PointerVarType) > -1)
+            elementTypeText = elementTypeText.replace(exports.PointerVarType, "pointer");
+        while (elementTypeText.indexOf(exports.BooleanVarType) > -1)
+            elementTypeText = elementTypeText.replace(exports.BooleanVarType, "bool");
+        elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, function (all, g1) { return "array_" + g1; });
+        return "array_" +
+            elementTypeText
+                .replace(/^static /, '').replace('{var}', '').replace(/[\[\]]/g, '')
+                .replace(/ /g, '_')
+                .replace(/const char */g, 'string')
+                .replace(/\*/g, '8') + "_t";
+    };
     ArrayType.prototype.getText = function () {
         var elementType = this.elementType;
         var elementTypeText;
@@ -1772,14 +1896,16 @@ var ArrayType = (function () {
             elementTypeText = elementType;
         else
             elementTypeText = elementType.getText();
+        this.structName = ArrayType.getArrayStructName(elementTypeText);
         if (this.isDynamicArray)
-            return "ARRAY(" + elementTypeText + ")";
+            return "struct " + this.structName + " *";
         else
             return "static " + elementTypeText + " {var}[" + this.capacity + "]";
     };
     return ArrayType;
 }());
 exports.ArrayType = ArrayType;
+/** Type that represents JS object with static properties (implemented as C struct) */
 var StructType = (function () {
     function StructType(structName, properties) {
         this.structName = structName;
@@ -1791,6 +1917,7 @@ var StructType = (function () {
     return StructType;
 }());
 exports.StructType = StructType;
+/** Type that represents JS object with dynamic properties (implemented as dynamic dictionary) */
 var DictType = (function () {
     function DictType(elementType) {
         this.elementType = elementType;
@@ -1807,6 +1934,7 @@ var DictType = (function () {
     return DictType;
 }());
 exports.DictType = DictType;
+/** Information about a variable */
 var VariableInfo = (function () {
     function VariableInfo() {
         /** Contains all references to this variable */
@@ -1815,19 +1943,36 @@ var VariableInfo = (function () {
     return VariableInfo;
 }());
 exports.VariableInfo = VariableInfo;
+// forOfIterator ====> for <var> of <array_variable> ---> <var>.type = (type of <array_variable>).elementType
+// forInIterator ====> for <var> in <dict_variable> ---> <var>.type = StringVarType
+// dynamicArrayOf ====> <var>.push(<value>) ---> <var>.elementType = (type of <value>)
+// propertyType ====> <var>[<string>] = <value> ---> <var>.properties[<string>] = (type of <value>)
+// propertyType ====> <var>.<ident> = <value> ---> <var>.properties[<ident>] = (type of <value>)
+// arrayOf ====> <var>[<number>] = <value> ---> <var>.elementType = (type of <value>)
+// dictOf ====> <var>[<something>] = <value> ---> <var>.elementType = (type of <value>)
+var TypePromiseKind;
+(function (TypePromiseKind) {
+    TypePromiseKind[TypePromiseKind["variable"] = 0] = "variable";
+    TypePromiseKind[TypePromiseKind["forOfIterator"] = 1] = "forOfIterator";
+    TypePromiseKind[TypePromiseKind["forInIterator"] = 2] = "forInIterator";
+    TypePromiseKind[TypePromiseKind["propertyType"] = 3] = "propertyType";
+    TypePromiseKind[TypePromiseKind["dynamicArrayOf"] = 4] = "dynamicArrayOf";
+    TypePromiseKind[TypePromiseKind["arrayOf"] = 5] = "arrayOf";
+    TypePromiseKind[TypePromiseKind["dictOf"] = 6] = "dictOf";
+})(TypePromiseKind || (TypePromiseKind = {}));
 var TypePromise = (function () {
-    function TypePromise(associatedNode, element) {
+    function TypePromise(associatedNode, promiseKind, propertyName) {
+        if (promiseKind === void 0) { promiseKind = TypePromiseKind.variable; }
+        if (propertyName === void 0) { propertyName = null; }
         this.associatedNode = associatedNode;
-        this.element = element;
-        this.resolved = false;
-        this.arrayOf = false;
+        this.promiseKind = promiseKind;
+        this.propertyName = propertyName;
     }
     return TypePromise;
 }());
 var VariableData = (function () {
     function VariableData() {
-        this.assignmentTypes = {};
-        this.typePromises = [];
+        this.typePromises = {};
         this.addedProperties = {};
         this.objLiteralAssigned = false;
     }
@@ -1836,10 +1981,13 @@ var VariableData = (function () {
 var TypeHelper = (function () {
     function TypeHelper(typeChecker) {
         this.typeChecker = typeChecker;
-        this.variables = {};
         this.userStructs = {};
         this.variablesData = {};
         this.functionCallsData = {};
+        this.functionReturnsData = {};
+        this.variables = {};
+        this.functionReturnTypes = {};
+        this.functionPrototypes = {};
         this.arrayLiteralsTypes = {};
         this.objectLiteralsTypes = {};
         this.temporaryVariables = {};
@@ -1854,7 +2002,7 @@ var TypeHelper = (function () {
             this.findVariablesRecursively(source);
         }
         this.resolvePromisesAndFinalizeTypes();
-        return Object.keys(this.userStructs)
+        var structs = Object.keys(this.userStructs)
             .filter(function (k) { return Object.keys(_this.userStructs[k].properties).length > 0; })
             .map(function (k) {
             return {
@@ -1868,6 +2016,8 @@ var TypeHelper = (function () {
                 })
             };
         });
+        var functionPrototypes = Object.keys(this.functionPrototypes).map(function (k) { return _this.functionPrototypes[k]; });
+        return [structs, functionPrototypes];
     };
     TypeHelper.prototype.getCType = function (node) {
         if (!node.kind)
@@ -1914,20 +2064,33 @@ var TypeHelper = (function () {
                     var call = node;
                     if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                         var propAccess = call.expression;
-                        if (propAccess.name.getText() == 'pop' && call.arguments.length == 0) {
+                        var propName = propAccess.name.getText();
+                        if ((propName == "pop" || propName == "shift") && call.arguments.length == 0) {
                             var arrType = this.getCType(propAccess.expression);
                             if (arrType && arrType instanceof ArrayType)
                                 return arrType.elementType;
                         }
-                        else if (propAccess.name.getText() == 'push' && call.arguments.length == 1) {
+                        else if ((propName == "push" || propName == "unshift") && call.arguments.length == 1) {
                             var arrType = this.getCType(propAccess.expression);
                             if (arrType && arrType instanceof ArrayType)
                                 return exports.NumberVarType;
                         }
-                        else if (propAccess.name.getText() == 'indexOf' && call.arguments.length == 1) {
+                        else if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
                             var arrType = this.getCType(propAccess.expression);
                             if (arrType && (arrType == exports.StringVarType || arrType instanceof ArrayType))
                                 return exports.NumberVarType;
+                        }
+                        else if (propName == "splice" && call.arguments.length >= 2) {
+                            var arrType = this.getCType(propAccess.expression);
+                            if (arrType && arrType instanceof ArrayType)
+                                return arrType;
+                        }
+                    }
+                    else if (call.expression.kind == ts.SyntaxKind.Identifier) {
+                        var funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
+                        if (funcSymbol != null) {
+                            var funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
+                            return this.functionReturnTypes[funcDeclPos];
                         }
                     }
                     return null;
@@ -1936,6 +2099,8 @@ var TypeHelper = (function () {
                 return this.arrayLiteralsTypes[node.pos];
             case ts.SyntaxKind.ObjectLiteralExpression:
                 return this.objectLiteralsTypes[node.pos];
+            case ts.SyntaxKind.FunctionDeclaration:
+                return this.functionReturnTypes[node.pos + 1] || 'void';
             default:
                 {
                     var tsType = this.typeChecker.getTypeAtLocation(node);
@@ -1993,7 +2158,7 @@ var TypeHelper = (function () {
         if (tsType.flags == ts.TypeFlags.Any)
             return exports.PointerVarType;
         console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
-        return exports.UniversalVarType;
+        return exports.PointerVarType;
     };
     TypeHelper.prototype.addNewIteratorVariable = function (scopeNode) {
         var parentFunc = this.findParentFunction(scopeNode);
@@ -2048,14 +2213,40 @@ var TypeHelper = (function () {
                 var funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                 if (funcSymbol != null) {
                     var funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
+                    if (funcDeclPos > call.pos)
+                        this.functionPrototypes[funcDeclPos] = funcSymbol.valueDeclaration;
                     for (var i = 0; i < call.arguments.length; i++) {
-                        var determinedType = this.determineType(null, call.arguments[i]);
-                        var callData = this.functionCallsData[funcDeclPos] || [];
-                        this.functionCallsData[funcDeclPos] = callData;
-                        if (!callData[i] || callData[i] == exports.UniversalVarType || callData[i] instanceof TypePromise)
-                            callData[i] = determinedType;
+                        if (!this.functionCallsData[funcDeclPos])
+                            this.functionCallsData[funcDeclPos] = [];
+                        var callData = this.functionCallsData[funcDeclPos];
+                        var argId = call.arguments[i].pos + "_" + call.arguments[i].end;
+                        if (!callData[i])
+                            callData[i] = {};
+                        callData[i][argId] = new TypePromise(call.arguments[i]);
                     }
                 }
+            }
+        }
+        else if (node.kind == ts.SyntaxKind.ReturnStatement) {
+            var ret = node;
+            var parentFunc = this.findParentFunction(node);
+            var scopeId = parentFunc && parentFunc.pos + 1 || 'main';
+            var promiseId = node.pos + "_" + node.end;
+            if (!this.functionReturnsData[scopeId])
+                this.functionReturnsData[scopeId] = {};
+            if (ret.expression) {
+                if (ret.expression.kind == ts.SyntaxKind.ConditionalExpression) {
+                    var ternary = ret.expression;
+                    var whenTrueId = ternary.whenTrue.pos + "_" + ternary.whenTrue.end;
+                    var whenFalseId = ternary.whenFalse.pos + "_" + ternary.whenFalse.end;
+                    this.functionReturnsData[scopeId][whenTrueId] = new TypePromise(ternary.whenTrue);
+                    this.functionReturnsData[scopeId][whenFalseId] = new TypePromise(ternary.whenFalse);
+                }
+                else
+                    this.functionReturnsData[scopeId][promiseId] = new TypePromise(ret.expression);
+            }
+            else {
+                this.functionReturnsData[scopeId][promiseId] = "void";
             }
         }
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
@@ -2085,7 +2276,7 @@ var TypeHelper = (function () {
                 if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
                     var varDecl = node.parent;
                     if (varDecl.name.getText() == node.getText()) {
-                        this.addTypeToVariable(varPos, varDecl.name, varDecl.initializer);
+                        this.addTypePromise(varPos, varDecl.initializer);
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
                         if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
@@ -2093,7 +2284,16 @@ var TypeHelper = (function () {
                             if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
                                 var forOfInitializer = forOfStatement.initializer;
                                 if (forOfInitializer.declarations[0].pos == varDecl.pos) {
-                                    varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                                    this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
+                                }
+                            }
+                        }
+                        else if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForInStatement) {
+                            var forInStatement = varDecl.parent.parent;
+                            if (forInStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
+                                var forInInitializer = forInStatement.initializer;
+                                if (forInInitializer.declarations[0].pos == varDecl.pos) {
+                                    this.addTypePromise(varPos, forInStatement.expression, TypePromiseKind.forInIterator);
                                 }
                             }
                         }
@@ -2106,7 +2306,8 @@ var TypeHelper = (function () {
                             var param = funcDecl.parameters[i];
                             varData.parameterIndex = i;
                             varData.parameterFuncDeclPos = funcDecl.pos + 1;
-                            this.addTypeToVariable(varPos, node, param.initializer);
+                            this.addTypePromise(varPos, param.name);
+                            this.addTypePromise(varPos, param.initializer);
                             break;
                         }
                     }
@@ -2116,107 +2317,78 @@ var TypeHelper = (function () {
                     if (binExpr.left.kind == ts.SyntaxKind.Identifier
                         && binExpr.left.getText() == node.getText()
                         && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                        this.addTypeToVariable(varPos, binExpr.left, binExpr.right);
+                        this.addTypePromise(varPos, binExpr.left);
+                        this.addTypePromise(varPos, binExpr.right);
                         if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
                     var propAccess = node.parent;
+                    var propName = propAccess.name.getText();
                     if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         var binExpr = propAccess.parent;
                         if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                            var determinedType = this.determineType(propAccess.name, binExpr.right);
-                            if (!(determinedType instanceof TypePromise))
-                                varData.addedProperties[propAccess.name.getText()] = determinedType;
+                            this.addTypePromise(varPos, binExpr.left, TypePromiseKind.propertyType, propAccess.name.getText());
+                            this.addTypePromise(varPos, binExpr.right, TypePromiseKind.propertyType, propAccess.name.getText());
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "push") {
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "push" || propName == "unshift")) {
                         varData.isDynamicArray = true;
-                        var determinedType = exports.UniversalVarType;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             var call = propAccess.parent;
-                            if (call.arguments.length == 1)
-                                determinedType = this.determineType(propAccess.expression, call.arguments[0]);
-                        }
-                        if (determinedType instanceof TypePromise) {
-                            determinedType.arrayOf = true;
-                            varData.typePromises.push(determinedType);
-                        }
-                        else {
-                            if (determinedType instanceof ArrayType)
-                                determinedType.isDynamicArray = true;
-                            var dtString = typeof determinedType === 'string' ? determinedType : determinedType.getText();
-                            var found = false;
-                            for (var _i = 0, _a = Object.keys(varData.assignmentTypes); _i < _a.length; _i++) {
-                                var tk = _a[_i];
-                                var at = varData.assignmentTypes[tk];
-                                if (at instanceof ArrayType) {
-                                    var atElementType = at.elementType;
-                                    var atElementTypeString = typeof atElementType === 'string' ? atElementType : atElementType.getText();
-                                    if (atElementTypeString === dtString) {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!found) {
-                                var arrayOfType = new ArrayType(determinedType, 0, true);
-                                varData.assignmentTypes[arrayOfType.getText()] = arrayOfType;
+                            for (var _i = 0, _a = call.arguments; _i < _a.length; _i++) {
+                                var arg = _a[_i];
+                                this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
                             }
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propAccess.name.getText() == "pop") {
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "pop" || propName == "shift")) {
                         varData.isDynamicArray = true;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            var call = propAccess.parent;
+                            if (call.arguments.length == 0)
+                                this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
+                        }
+                    }
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
+                        varData.isDynamicArray = true;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            var call = propAccess.parent;
+                            if (call.arguments.length > 2) {
+                                for (var _b = 0, _c = call.arguments.slice(2); _b < _c.length; _b++) {
+                                    var arg = _c[_b];
+                                    this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
+                                }
+                            }
+                            if (call.arguments.length >= 2) {
+                                this.addTypePromise(varPos, call);
+                            }
+                        }
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
                     var elemAccess = node.parent;
                     if (elemAccess.expression.pos == node.pos) {
-                        var determinedType = exports.UniversalVarType;
-                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                            var binExpr = elemAccess.parent;
-                            if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                                determinedType = this.determineType(elemAccess.expression, binExpr.right);
-                            }
-                        }
+                        var propName = void 0;
+                        var promiseKind = void 0;
                         if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                            var propName = elemAccess.argumentExpression.getText().slice(1, -1);
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.associatedProperty = propName;
-                                varData.typePromises.push(determinedType);
-                            }
-                            varData.addedProperties[propName] = varData.addedProperties[propName] || exports.UniversalVarType;
-                            if (!(determinedType instanceof TypePromise) && varData.addedProperties[propName] == exports.UniversalVarType)
-                                varData.addedProperties[propName] = determinedType;
+                            propName = elemAccess.argumentExpression.getText().slice(1, -1);
+                            promiseKind = TypePromiseKind.propertyType;
                         }
                         else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.NumericLiteral) {
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.arrayOf = true;
-                                varData.typePromises.push(determinedType);
-                            }
-                            else {
-                                for (var atKey in varData.assignmentTypes) {
-                                    var at = varData.assignmentTypes[atKey];
-                                    if (at instanceof ArrayType && at.elementType == exports.UniversalVarType)
-                                        at.elementType = determinedType;
-                                }
-                            }
+                            promiseKind = TypePromiseKind.arrayOf;
                         }
                         else {
                             varData.isDict = true;
-                            if (determinedType instanceof TypePromise) {
-                                determinedType.arrayOf = true;
-                                varData.typePromises.push(determinedType);
-                            }
-                            else {
-                                for (var atKey in varData.assignmentTypes) {
-                                    var at = varData.assignmentTypes[atKey];
-                                    if (at instanceof StructType) {
-                                        delete varData.assignmentTypes[atKey];
-                                        var dictType = new DictType(determinedType);
-                                        varData.assignmentTypes[dictType.getText()] = dictType;
-                                    }
+                            promiseKind = TypePromiseKind.dictOf;
+                        }
+                        this.addTypePromise(varPos, elemAccess, promiseKind, propName);
+                        if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                            var binExpr = elemAccess.parent;
+                            if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+                                if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                                    this.addTypePromise(varPos, binExpr.right, promiseKind, propName);
                                 }
                             }
                         }
@@ -2225,7 +2397,13 @@ var TypeHelper = (function () {
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
                     var forOfStatement = node.parent;
                     if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
-                        varData.typePromises.push(new TypePromise(forOfStatement.expression, true));
+                        this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
+                    }
+                }
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.ForInStatement) {
+                    var forInStatement = node.parent;
+                    if (forInStatement.initializer.kind == ts.SyntaxKind.Identifier && forInStatement.initializer.pos == node.pos) {
+                        this.addTypePromise(varPos, forInStatement.expression, TypePromiseKind.forInIterator);
                     }
                 }
             }
@@ -2233,121 +2411,140 @@ var TypeHelper = (function () {
         node.getChildren().forEach(function (c) { return _this.findVariablesRecursively(c); });
     };
     TypeHelper.prototype.resolvePromisesAndFinalizeTypes = function () {
+        var _this = this;
         var somePromisesAreResolved;
         do {
-            somePromisesAreResolved = false;
+            somePromisesAreResolved = this.tryResolvePromises();
+            var _loop_1 = function(k) {
+                var promises = Object.keys(this_1.variablesData[k].typePromises)
+                    .map(function (p) { return _this.variablesData[k].typePromises[p]; });
+                var variableBestTypes = promises
+                    .filter(function (p) { return p.promiseKind != TypePromiseKind.propertyType; })
+                    .map(function (p) { return p.bestType; });
+                var varType = variableBestTypes.length ? variableBestTypes.reduce(function (c, n) { return _this.mergeTypes(c, n).type; }) : null;
+                varType = varType || exports.PointerVarType;
+                if (varType instanceof ArrayType) {
+                    if (this_1.variablesData[k].isDynamicArray && !this_1.variablesData[k].parameterFuncDeclPos)
+                        this_1.variables[k].requiresAllocation = true;
+                    varType.isDynamicArray = varType.isDynamicArray || this_1.variablesData[k].isDynamicArray;
+                }
+                else if (varType instanceof StructType) {
+                    if (this_1.variablesData[k].objLiteralAssigned)
+                        this_1.variables[k].requiresAllocation = true;
+                    for (var addPropKey in this_1.variablesData[k].addedProperties) {
+                        var addPropType = this_1.variablesData[k].addedProperties[addPropKey];
+                        varType.properties[addPropKey] = addPropType;
+                    }
+                }
+                else if (varType instanceof DictType) {
+                    this_1.variables[k].requiresAllocation = true;
+                    var elemType = varType.elementType;
+                    for (var addPropKey in this_1.variablesData[k].addedProperties) {
+                        var addPropType = this_1.variablesData[k].addedProperties[addPropKey];
+                        var mergeResult = this_1.mergeTypes(elemType, addPropType);
+                        elemType = mergeResult.type;
+                    }
+                    varType.elementType = elemType;
+                }
+                this_1.variables[k].type = varType;
+            };
+            var this_1 = this;
             for (var _i = 0, _a = Object.keys(this.variables).map(function (k) { return +k; }); _i < _a.length; _i++) {
                 var k = _a[_i];
-                var types = Object.keys(this.variablesData[k].assignmentTypes).filter(function (t) { return t != exports.PointerVarType && t != exports.UniversalVarType; });
-                if (types.length == 1) {
-                    var varType = this.variablesData[k].assignmentTypes[types[0]];
-                    if (varType instanceof ArrayType) {
-                        varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
-                        if (this.variablesData[k].isDynamicArray)
-                            this.variables[k].requiresAllocation = true;
-                    }
-                    else if (varType instanceof StructType && this.variablesData[k].objLiteralAssigned) {
-                        this.variables[k].requiresAllocation = true;
-                    }
-                    else if (varType instanceof DictType) {
-                        this.variables[k].requiresAllocation = true;
-                    }
-                    if (varType instanceof StructType) {
-                        for (var addPropKey in this.variablesData[k].addedProperties) {
-                            var addPropType = this.variablesData[k].addedProperties[addPropKey];
-                            if (!(addPropType instanceof TypePromise))
-                                varType.properties[addPropKey] = addPropType;
-                        }
-                    }
-                    this.variables[k].type = varType;
-                }
-                else if (types.length == 0) {
-                    this.variables[k].type = exports.PointerVarType;
-                }
-                else {
-                    this.variables[k].requiresAllocation = true;
-                    this.variables[k].type = exports.UniversalVarType;
-                }
-                somePromisesAreResolved = somePromisesAreResolved || this.tryResolvePromises(k);
+                _loop_1(k);
             }
         } while (somePromisesAreResolved);
+        for (var _b = 0, _c = Object.keys(this.variables).map(function (k) { return +k; }); _b < _c.length; _b++) {
+            var k = _c[_b];
+            this.postProcessArrays(this.variables[k].type);
+        }
     };
-    TypeHelper.prototype.tryResolvePromises = function (varPos) {
-        var somePromisesAreResolved = false;
-        var funcDeclPos = this.variablesData[varPos].parameterFuncDeclPos;
-        if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
-            var paramIndex = this.variablesData[varPos].parameterIndex;
-            var type = this.functionCallsData[funcDeclPos][paramIndex];
-            var finalType = !(type instanceof TypePromise) && type;
-            if (type instanceof TypePromise) {
-                finalType = this.getCType(type.associatedNode) || finalType;
-                if (finalType) {
-                    type.resolved = true;
-                }
-            }
-            if (finalType && !this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)]) {
-                somePromisesAreResolved = true;
-                this.variablesData[varPos].assignmentTypes[this.getTypeString(finalType)] = finalType;
+    TypeHelper.prototype.postProcessArrays = function (varType) {
+        if (varType instanceof ArrayType && varType.isDynamicArray) {
+            this.ensureArrayStruct(varType.elementType);
+            this.postProcessArrays(varType.elementType);
+        }
+        else if (varType instanceof DictType) {
+            this.postProcessArrays(varType.elementType);
+        }
+        else if (varType instanceof StructType) {
+            for (var k in varType.properties) {
+                this.postProcessArrays(varType.properties[k]);
             }
         }
-        if (this.variablesData[varPos].typePromises.length > 0) {
-            var promises = this.variablesData[varPos].typePromises.filter(function (p) { return !p.resolved; });
-            for (var _i = 0, promises_1 = promises; _i < promises_1.length; _i++) {
-                var promise = promises_1[_i];
-                var resolvedType = this.getCType(promise.associatedNode);
-                if (resolvedType != null) {
-                    var finalType = resolvedType;
-                    promise.resolved = true;
-                    somePromisesAreResolved = true;
-                    if (promise.arrayOf)
-                        finalType = new ArrayType(resolvedType, 0, true);
-                    else if (resolvedType instanceof StructType && promise.element) {
-                        var propName = promise.element;
-                        if (typeof propName === 'string') {
-                            finalType = resolvedType.properties[propName];
-                        }
+    };
+    TypeHelper.prototype.tryResolvePromises = function () {
+        var somePromisesAreResolved = false;
+        /** Function parameters */
+        for (var _i = 0, _a = Object.keys(this.variables).map(function (k) { return +k; }); _i < _a.length; _i++) {
+            var varPos = _a[_i];
+            var funcDeclPos = this.variablesData[varPos].parameterFuncDeclPos;
+            if (funcDeclPos && this.functionCallsData[funcDeclPos]) {
+                var paramIndex = this.variablesData[varPos].parameterIndex;
+                var functionCallsPromises = this.functionCallsData[funcDeclPos][paramIndex];
+                var variablePromises = this.variablesData[varPos].typePromises;
+                for (var id in functionCallsPromises) {
+                    if (!variablePromises[id]) {
+                        variablePromises[id] = functionCallsPromises[id];
+                        somePromisesAreResolved = true;
                     }
-                    else if (resolvedType instanceof ArrayType && promise.element) {
-                        finalType = resolvedType.elementType;
-                    }
-                    if (promise.associatedProperty) {
-                        this.variablesData[varPos].addedProperties[promise.associatedProperty] = finalType;
-                    }
-                    else {
-                        if (typeof finalType === 'string')
-                            this.variablesData[varPos].assignmentTypes[finalType] = finalType;
-                        else
-                            this.variablesData[varPos].assignmentTypes[finalType.getText()] = finalType;
-                    }
+                    var currentType = variablePromises[id].bestType || exports.PointerVarType;
+                    var resolvedType = this.getCType(functionCallsPromises[id].associatedNode);
+                    var mergeResult = this.mergeTypes(currentType, resolvedType);
+                    if (mergeResult.replaced)
+                        somePromisesAreResolved = true;
+                    variablePromises[id].bestType = mergeResult.type;
                 }
+            }
+        }
+        /** Function return types */
+        for (var funcDeclPos in this.functionReturnsData) {
+            var promises = this.functionReturnsData[funcDeclPos];
+            for (var id in promises) {
+                var resolvedType = this.getCType(promises[id].associatedNode) || exports.PointerVarType;
+                var mergeResult = this.mergeTypes(this.functionReturnTypes[funcDeclPos], resolvedType);
+                if (mergeResult.replaced)
+                    somePromisesAreResolved = true;
+                this.functionReturnTypes[funcDeclPos] = mergeResult.type;
+            }
+        }
+        /** Variables */
+        for (var _b = 0, _c = Object.keys(this.variables).map(function (k) { return +k; }); _b < _c.length; _b++) {
+            var varPos = _c[_b];
+            for (var promiseId in this.variablesData[varPos].typePromises) {
+                var promise = this.variablesData[varPos].typePromises[promiseId];
+                var resolvedType = this.getCType(promise.associatedNode) || exports.PointerVarType;
+                var finalType = resolvedType;
+                if (promise.promiseKind == TypePromiseKind.dynamicArrayOf) {
+                    // nested arrays should also be dynamic
+                    if (resolvedType instanceof ArrayType)
+                        resolvedType.isDynamicArray = true;
+                    finalType = new ArrayType(resolvedType, 0, true);
+                }
+                else if (promise.promiseKind == TypePromiseKind.arrayOf) {
+                    finalType = new ArrayType(resolvedType, 0, false);
+                }
+                else if (promise.promiseKind == TypePromiseKind.dictOf) {
+                    finalType = new DictType(resolvedType);
+                }
+                else if (resolvedType instanceof ArrayType && promise.promiseKind == TypePromiseKind.forOfIterator) {
+                    finalType = resolvedType.elementType;
+                }
+                else if (resolvedType instanceof DictType && promise.promiseKind == TypePromiseKind.forInIterator) {
+                    finalType = exports.StringVarType;
+                }
+                var bestType = promise.bestType;
+                if (promise.promiseKind == TypePromiseKind.propertyType)
+                    bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
+                var mergeResult = this.mergeTypes(bestType, finalType);
+                if (mergeResult.replaced)
+                    somePromisesAreResolved = true;
+                promise.bestType = mergeResult.type;
+                if (promise.promiseKind == TypePromiseKind.propertyType && mergeResult.replaced)
+                    this.variablesData[varPos].addedProperties[promise.propertyName] = mergeResult.type;
             }
         }
         return somePromisesAreResolved;
-    };
-    TypeHelper.prototype.addTypeToVariable = function (varPos, left, right) {
-        var determinedType = this.determineType(left, right);
-        if (determinedType instanceof TypePromise)
-            this.variablesData[varPos].typePromises.push(determinedType);
-        else
-            this.variablesData[varPos].assignmentTypes[this.getTypeString(determinedType)] = determinedType;
-    };
-    TypeHelper.prototype.determineType = function (left, right) {
-        var tsType = right ? this.typeChecker.getTypeAtLocation(right) : this.typeChecker.getTypeAtLocation(left);
-        if (right && right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
-            var type = this.generateStructure(tsType, left);
-            this.objectLiteralsTypes[right.pos] = type;
-            return type;
-        }
-        else if (right && right.kind == ts.SyntaxKind.ArrayLiteralExpression)
-            return this.determineArrayType(right);
-        else if (right && (right.kind == ts.SyntaxKind.PropertyAccessExpression
-            || right.kind == ts.SyntaxKind.ElementAccessExpression
-            || right.kind == ts.SyntaxKind.Identifier)) {
-            return new TypePromise(right, false);
-        }
-        else {
-            return this.convertType(tsType, left);
-        }
     };
     TypeHelper.prototype.generateStructure = function (tsType, ident) {
         var structName = "struct_" + Object.keys(this.userStructs).length + "_t";
@@ -2367,7 +2564,7 @@ var TypeHelper = (function () {
             var prop = _a[_i];
             var propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
             var propType = this.convertType(propTsType, prop.valueDeclaration.name);
-            if (propType == exports.UniversalVarType && prop.valueDeclaration.kind == ts.SyntaxKind.PropertyAssignment) {
+            if (propType == exports.PointerVarType && prop.valueDeclaration.kind == ts.SyntaxKind.PropertyAssignment) {
                 var propAssignment = prop.valueDeclaration;
                 if (propAssignment.initializer && propAssignment.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
                     propType = this.determineArrayType(propAssignment.initializer);
@@ -2421,12 +2618,80 @@ var TypeHelper = (function () {
         this.arrayLiteralsTypes[arrLiteral.pos] = type;
         return type;
     };
+    TypeHelper.prototype.ensureArrayStruct = function (elementType) {
+        var elementTypeText = this.getTypeString(elementType);
+        var structName = ArrayType.getArrayStructName(elementTypeText);
+        this.userStructs[structName] = new StructType(structName, {
+            size: exports.NumberVarType,
+            capacity: exports.NumberVarType,
+            data: elementTypeText + "*"
+        });
+    };
+    TypeHelper.prototype.addTypePromise = function (varPos, associatedNode, promiseKind, propName) {
+        if (promiseKind === void 0) { promiseKind = TypePromiseKind.variable; }
+        if (propName === void 0) { propName = null; }
+        if (!associatedNode)
+            return;
+        var promiseId = associatedNode.pos + "_" + associatedNode.end;
+        var promise = new TypePromise(associatedNode, promiseKind, propName);
+        this.variablesData[varPos].typePromises[promiseId] = promise;
+    };
+    TypeHelper.prototype.mergeTypes = function (currentType, newType) {
+        var newResult = { type: newType, replaced: true };
+        var currentResult = { type: currentType, replaced: false };
+        if (!currentType && newType)
+            return newResult;
+        else if (!newType)
+            return currentResult;
+        else if (this.getTypeString(currentType) == this.getTypeString(newType))
+            return currentResult;
+        else if (currentType == exports.PointerVarType)
+            return newResult;
+        else if (newType == exports.PointerVarType)
+            return currentResult;
+        else if (currentType == exports.UniversalVarType)
+            return newResult;
+        else if (newType == exports.UniversalVarType)
+            return currentResult;
+        else if (currentType instanceof ArrayType && newType instanceof ArrayType) {
+            var cap = Math.max(newType.capacity, currentType.capacity);
+            newType.capacity = cap;
+            currentType.capacity = cap;
+            var isDynamicArray = newType.isDynamicArray || currentType.isDynamicArray;
+            newType.isDynamicArray = isDynamicArray;
+            currentType.isDynamicArray = isDynamicArray;
+            var mergeResult = this.mergeTypes(currentType.elementType, newType.elementType);
+            newType.elementType = mergeResult.type;
+            currentType.elementType = mergeResult.type;
+            if (mergeResult.replaced)
+                return newResult;
+            return currentResult;
+        }
+        else if (currentType instanceof DictType && newType instanceof ArrayType) {
+            if (newType.elementType == currentType.elementType || currentType.elementType == exports.PointerVarType)
+                return newResult;
+        }
+        else if (currentType instanceof ArrayType && newType instanceof DictType) {
+            if (newType.elementType == currentType.elementType || newType.elementType == exports.PointerVarType)
+                return currentResult;
+        }
+        else if (currentType instanceof StructType && newType instanceof DictType) {
+            return newResult;
+        }
+        else if (currentType instanceof DictType && newType instanceof DictType) {
+            if (newType.elementType != exports.PointerVarType && currentType.elementType == exports.PointerVarType)
+                return newResult;
+            return currentResult;
+        }
+        console.log("WARNING: candidate for UniversalVarType! Current: " + this.getTypeString(currentType) + ", new: " + this.getTypeString(newType));
+        return currentResult;
+    };
     return TypeHelper;
 }());
 exports.TypeHelper = TypeHelper;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],14:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 (function (process,global){
 "use strict";
 var program_1 = require('./src/program');
@@ -2467,4 +2732,4 @@ if (typeof window !== 'undefined')
 })();
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./src/program":11,"_process":2,"fs":1}]},{},[14]);
+},{"./src/program":13,"_process":2,"fs":1}]},{},[16]);
