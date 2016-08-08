@@ -17,7 +17,7 @@ COVER = $(TS:%.ts=coverage/%)
 all: $(RES) $(ELF) $(C)
 
 coverage/%: %.ts
-	cd .. && istanbul cover --dir tests/$@ ts2c.js -- tests/$<
+	cd .. && istanbul cover --print none --dir tests/$@ ts2c.js -- tests/$<
 coverage/lcov-report/index.html: $(COVER)
 	istanbul report
 

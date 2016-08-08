@@ -181,6 +181,9 @@ class CUnaryExpression {
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
+            operatorMap[ts.SyntaxKind.PlusToken] = '+';
+        }
+        if (type == StringVarType) {
             callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
             if (callReplaceMap[node.operator])
                 scope.root.headerFlags.atoi = true;
