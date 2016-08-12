@@ -17,11 +17,13 @@ COVER = $(TS:%.ts=coverage/%)
 all: $(RES) $(ELF) $(C)
 
 coverage/%: %.ts
-	cd .. && istanbul cover --print none --dir tests/$@ ts2c.js -- tests/$<
-coverage/lcov-report/index.html: $(COVER)
-	istanbul report
+	cd .. && istanbul cover --print none --report=json --dir tests/$@ ts2c.js -- tests/$<
+coverage/coverage-final.json: $(COVER)
+	istanbul report json
+coverage/html/index.html: coverage/coverage-final.json
+	cd .. && ./node_modules/.bin/remap-istanbul -i tests/coverage/coverage-final.json -o tests/coverage/html -t html
 
-cover: coverage/lcov-report/index.html
+cover: coverage/html/index.html
 
 clean: 
 	rm -f **/*.elf

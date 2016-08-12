@@ -11,10 +11,13 @@
   },
   "devDependencies": {
     "browserify": "^13.0.1",
-    "browserify-shim": "^3.8.12"
+    "browserify-shim": "^3.8.12",
+    "remap-istanbul": "^0.6.4"
   },
   "browserify": {
-    "transform": [ "browserify-shim" ]
+    "transform": [
+      "browserify-shim"
+    ]
   },
   "browserify-shim": {
     "typescript": "global:ts"
@@ -23,6 +26,10 @@
     "build": "browserify ts2c.js -x typescript > ts2c.bundle.js",
     "cover": "cd tests && make -B cover",
     "test": "cd tests && make -B"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/andrei-markeev/ts2c.git"
   },
   "author": "Andrei Markeev",
   "license": "ISC"
