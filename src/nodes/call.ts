@@ -24,6 +24,19 @@ import {PrintfHelper} from './printf';
             {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}))];
         ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});
         {insertValues}
+    {#elseif propName == "slice" && !topExpressionOfStatement && arguments.length == 1}
+        {tempVar2Name} = ({arg1}) < 0 ? -({arg1}) : {varAccess}->size - ({arg1});
+        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});
+        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});
+        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)
+            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];
+    {#elseif propName == "slice" && !topExpressionOfStatement && arguments.length == 2}
+        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});
+        {tempVar4Name} = ({arg2}) < 0 ? {varAccess}->size + ({arg2}) : ({arg2});
+        {tempVar2Name} = {tempVar4Name} - {tempVar3Name};
+        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});
+        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)
+            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];
     {#elseif propName == "indexOf" && tempVarName && staticArraySize}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
@@ -60,6 +73,8 @@ import {PrintfHelper} from './printf';
 {/statements}
 {#if topExpressionOfStatement && propName == "push" && arguments.length == 1}
     ARRAY_PUSH({varAccess}, {arguments})
+{#elseif topExpressionOfStatement && propName == "slice"}
+    /* slice doesn't have side effects, skipping */
 {#elseif topExpressionOfStatement && propName == "splice" && spliceNeedsRemove}
     ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});
     {insertValues}
@@ -90,6 +105,9 @@ export class CCallExpression {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess;
     public tempVarName: string = '';
+    public tempVar2Name: string;
+    public tempVar3Name: string;
+    public tempVar4Name: string;
     public iteratorVarName: string;
     public staticArraySize: string = '';
     public arguments: CExpression[];
@@ -156,6 +174,22 @@ export class CCallExpression {
                 }
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_remove = true;
+            }
+            else if (this.propName == "slice" && this.arguments.length >= 1) {
+                if (!this.topExpressionOfStatement) {
+                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_slice");
+                    let type = scope.root.typeHelper.getCType(propAccess.expression);
+                    scope.variables.push(new CVariable(scope, this.tempVarName, type));
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+                    this.tempVar2Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_size");
+                    scope.variables.push(new CVariable(scope, this.tempVar2Name, NumberVarType));
+                    this.tempVar3Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_start");
+                    scope.variables.push(new CVariable(scope, this.tempVar3Name, NumberVarType));
+                    this.tempVar4Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_end");
+                    if (this.arguments.length == 2)
+                        scope.variables.push(new CVariable(scope, this.tempVar4Name, NumberVarType));
+                }
             }
             else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);
