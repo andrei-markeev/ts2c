@@ -149,7 +149,7 @@ node ts2c.js <files to transpile>
 
 In browser (also see **index.html** file):
 ```html
-<script src="https://npmcdn.com/typescript"></script>
+<script src="https://unpkg.com/typescript"></script>
 <script src="ts2c.bundle.js"></script>
 <script>
     var cCode = ts2c.transpile("console.log('Hello world!')");
