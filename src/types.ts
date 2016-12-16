@@ -135,6 +135,7 @@ class VariableData {
     parameterIndex: number;
     parameterFuncDeclPos: number;
     objLiteralAssigned: boolean = false;
+    arrLiteralAssigned: boolean = false;
     isDynamicArray: boolean;
     isDict: boolean;
 }
@@ -163,21 +164,7 @@ export class TypeHelper {
             this.findVariablesRecursively(source);
         this.resolvePromisesAndFinalizeTypes();
 
-        let structs = Object.keys(this.userStructs)
-            .filter(k => Object.keys(this.userStructs[k].properties).length > 0)
-            .map(k => {
-                return {
-                    name: k,
-                    properties: Object.keys(this.userStructs[k].properties)
-                        .map(pk => {
-                            return {
-                                name: pk,
-                                type: this.userStructs[k].properties[pk]
-                            };
-                        })
-                };
-            });
-
+        let structs = this.getUserStructs();
         let functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
 
         return [structs, functionPrototypes];
@@ -315,32 +302,11 @@ export class TypeHelper {
             throw new Error("Unrecognized type source");
     }
 
-    /** Convert ts.Type to CType */
-    /** Used mostly during type preprocessing stage */
-    private convertType(tsType: ts.Type, ident?: ts.Identifier): CType {
-        if (!tsType || tsType.flags == ts.TypeFlags.Void)
-            return "void";
-
-        if (tsType.flags == ts.TypeFlags.String)
-            return StringVarType;
-        if (tsType.flags == ts.TypeFlags.Number)
-            return NumberVarType;
-        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
-            return BooleanVarType;
-
-        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
-            return this.generateStructure(tsType, ident);
-        }
-
-        if (tsType.flags == ts.TypeFlags.Any)
-            return PointerVarType;
-
-        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
-        return PointerVarType;
-    }
-
     private temporaryVariables: { [scopeId: string]: string[] } = {};
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
+    /** Generate name for a new iterator variable and register it in temporaryVariables table.
+     * Generated name is guarantied not to conflict with any existing names in specified scope.
+     */
     public addNewIteratorVariable(scopeNode: ts.Node): string {
         let parentFunc = this.findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
@@ -365,6 +331,9 @@ export class TypeHelper {
         return iteratorVarName;
     }
 
+    /** Generate name for a new temporary variable and register it in temporaryVariables table.
+     * Generated name is guarantied not to conflict with any existing names in specified scope.
+     */
     public addNewTemporaryVariable(scopeNode: ts.Node, proposedName: string): string {
         let parentFunc = this.findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
@@ -381,6 +350,47 @@ export class TypeHelper {
 
         this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
+    }
+
+    private getUserStructs() {
+        return Object.keys(this.userStructs)
+            .filter(k => Object.keys(this.userStructs[k].properties).length > 0)
+            .map(k => {
+                return {
+                    name: k,
+                    properties: Object.keys(this.userStructs[k].properties)
+                        .map(pk => {
+                            return {
+                                name: pk,
+                                type: this.userStructs[k].properties[pk]
+                            };
+                        })
+                };
+            });
+    }
+
+    /** Convert ts.Type to CType */
+    /** Used mostly during type preprocessing stage */
+    private convertType(tsType: ts.Type, ident?: ts.Identifier): CType {
+        if (!tsType || tsType.flags == ts.TypeFlags.Void)
+            return "void";
+
+        if (tsType.flags == ts.TypeFlags.String)
+            return StringVarType;
+        if (tsType.flags == ts.TypeFlags.Number)
+            return NumberVarType;
+        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
+            return BooleanVarType;
+
+        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
+            return this.generateStructure(tsType, ident);
+        }
+
+        if (tsType.flags == ts.TypeFlags.Any)
+            return PointerVarType;
+
+        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
+        return PointerVarType;
     }
 
     private findParentFunction(node: ts.Node) {
@@ -464,6 +474,8 @@ export class TypeHelper {
                         this.addTypePromise(varPos, varDecl.initializer);
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
+                        if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            varData.arrLiteralAssigned = true;
                         if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                             let forOfStatement = <ts.ForOfStatement>varDecl.parent.parent;
                             if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -506,6 +518,8 @@ export class TypeHelper {
                         this.addTypePromise(varPos, binExpr.right);
                         if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
+                        if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            varData.arrLiteralAssigned = true;
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -624,9 +638,7 @@ export class TypeHelper {
                 varType = varType || PointerVarType;
 
                 if (varType instanceof ArrayType) {
-                    let initializer = this.variables[k].declaration.initializer;
-                    let isAssignment = initializer && initializer.kind == ts.SyntaxKind.CallExpression;
-                    if (this.variablesData[k].isDynamicArray && !this.variablesData[k].parameterFuncDeclPos && !isAssignment)
+                    if (this.variablesData[k].isDynamicArray && !this.variablesData[k].parameterFuncDeclPos && this.variablesData[k].arrLiteralAssigned)
                         this.variables[k].requiresAllocation = true;
                     varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
                 }

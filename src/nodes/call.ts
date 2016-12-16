@@ -159,7 +159,7 @@ export class CCallExpression {
             }
             else if (this.propName == "splice" && this.arguments.length >= 2) {
                 if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "removed_values");
+                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                     let type = scope.root.typeHelper.getCType(propAccess.expression);
                     scope.variables.push(new CVariable(scope, this.tempVarName, type));
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
@@ -177,7 +177,7 @@ export class CCallExpression {
             }
             else if (this.propName == "slice" && this.arguments.length >= 1) {
                 if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_slice");
+                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                     let type = scope.root.typeHelper.getCType(propAccess.expression);
                     scope.variables.push(new CVariable(scope, this.tempVarName, type));
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);

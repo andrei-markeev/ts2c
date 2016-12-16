@@ -104,7 +104,6 @@ Note: some of these features supported only partially.
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md). 
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
-Recursion or indirect recursion aren't supported yet, but otherwise this works relatively well.
 
 Live demo
 ---------
