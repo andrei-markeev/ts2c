@@ -2246,9 +2246,9 @@ var TypeHelper = (function () {
     TypeHelper.prototype.convertType = function (tsType, ident) {
         if (!tsType || tsType.flags == ts.TypeFlags.Void)
             return "void";
-        if (tsType.flags == ts.TypeFlags.String)
+        if (tsType.flags == ts.TypeFlags.String || tsType.flags == ts.TypeFlags.StringLiteral)
             return exports.StringVarType;
-        if (tsType.flags == ts.TypeFlags.Number)
+        if (tsType.flags == ts.TypeFlags.Number || tsType.flags == ts.TypeFlags.NumberLiteral)
             return exports.NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
             return exports.BooleanVarType;
