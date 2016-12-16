@@ -187,6 +187,23 @@ var MemoryManager = (function () {
                     }
                 }
                 break;
+            case ts.SyntaxKind.CallExpression:
+                {
+                    var call = node;
+                    if (call.parent.kind == ts.SyntaxKind.ExpressionStatement)
+                        break;
+                    if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                        var propAccess = call.expression;
+                        var propName = propAccess.name.getText();
+                        var exprType = this.typeHelper.getCType(propAccess.expression);
+                        var retType = this.typeHelper.getCType(call);
+                        if (propName == "splice" || propName == "slice") {
+                            if (exprType instanceof types_1.ArrayType && retType instanceof types_1.ArrayType && retType.isDynamicArray)
+                                this.scheduleNodeDisposal(call);
+                        }
+                    }
+                }
+                break;
         }
         node.getChildren().forEach(function (c) { return _this.preprocessTemporaryVariables(c); });
     };
@@ -350,6 +367,18 @@ var MemoryManager = (function () {
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
         else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
+        else if (heapNode.kind == ts.SyntaxKind.CallExpression) {
+            var call = heapNode;
+            var propAccess = call.expression.kind == ts.SyntaxKind.PropertyAccessExpression && call.expression;
+            if (propAccess.name.getText() == "splice")
+                varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_removed_values");
+            else if (propAccess.name.getText() == "slice")
+                varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_slice");
+            else {
+                console.log("Internal error when registering temporary variable " + call.getText() + ": unexpected property name " + propAccess.name.getText());
+                return;
+            }
+        }
         else
             varName = heapNode.getText();
         var foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
@@ -465,7 +494,6 @@ var CAssignment = (function () {
     function CAssignment(scope, accessor, argumentExpression, type, right) {
         this.accessor = accessor;
         this.argumentExpression = argumentExpression;
-        this.allocator = '';
         this.isObjLiteralAssignment = false;
         this.isArrayLiteralAssignment = false;
         this.isDynamicArray = false;
@@ -506,7 +534,7 @@ var CAssignment = (function () {
             this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
     }
     CAssignment = __decorate([
-        template_1.CodeTemplate("\n{allocator}\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
+        template_1.CodeTemplate("\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
     ], CAssignment);
     return CAssignment;
 }());
@@ -577,7 +605,7 @@ var CCallExpression = (function () {
             }
             else if (this.propName == "splice" && this.arguments.length >= 2) {
                 if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "removed_values");
+                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                     var type = scope.root.typeHelper.getCType(propAccess.expression);
                     scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type));
                     this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
@@ -592,6 +620,22 @@ var CCallExpression = (function () {
                 }
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_remove = true;
+            }
+            else if (this.propName == "slice" && this.arguments.length >= 1) {
+                if (!this.topExpressionOfStatement) {
+                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                    var type = scope.root.typeHelper.getCType(propAccess.expression);
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type));
+                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+                    scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
+                    this.tempVar2Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_size");
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVar2Name, types_1.NumberVarType));
+                    this.tempVar3Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_start");
+                    scope.variables.push(new variable_1.CVariable(scope, this.tempVar3Name, types_1.NumberVarType));
+                    this.tempVar4Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_end");
+                    if (this.arguments.length == 2)
+                        scope.variables.push(new variable_1.CVariable(scope, this.tempVar4Name, types_1.NumberVarType));
+                }
             }
             else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
                 var type = scope.root.typeHelper.getCType(propAccess.expression);
@@ -617,7 +661,7 @@ var CCallExpression = (function () {
         }
     }
     CCallExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if propName == \"push\" && tempVarName}\n        ARRAY_PUSH({varAccess}, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"unshift\" && tempVarName}\n        ARRAY_INSERT({varAccess}, 0, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"shift\" && tempVarName}\n        {tempVarName} = {varAccess}->data[0];\n        ARRAY_REMOVE({varAccess}, 0, 1);\n    {#elseif propName == \"splice\" && !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {arg2}, {arg2});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arg2}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}))];\n        ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n        {insertValues}\n    {#elseif propName == \"indexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"indexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && propName == \"push\" && arguments.length == 1}\n    ARRAY_PUSH({varAccess}, {arguments})\n{#elseif topExpressionOfStatement && propName == \"splice\" && spliceNeedsRemove}\n    ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"splice\" && !spliceNeedsRemove}\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"unshift\" && arguments.length == 1}\n    ARRAY_INSERT({varAccess}, 0, {arguments})\n{#elseif tempVarName}\n    {tempVarName}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"lastIndexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"pop\" && arguments.length == 0}\n    ARRAY_POP({varAccess})\n{#elseif printfCalls.length == 1}\n    {printfCalls}\n{#elseif printfCalls.length > 1}\n    {\n        {printfCalls {    }=>{this}\n}\n    }\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
+        template_1.CodeTemplate("\n{#statements}\n    {#if propName == \"push\" && tempVarName}\n        ARRAY_PUSH({varAccess}, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"unshift\" && tempVarName}\n        ARRAY_INSERT({varAccess}, 0, {arguments});\n        {tempVarName} = {varAccess}->size;\n    {#elseif propName == \"shift\" && tempVarName}\n        {tempVarName} = {varAccess}->data[0];\n        ARRAY_REMOVE({varAccess}, 0, 1);\n    {#elseif propName == \"splice\" && !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {arg2}, {arg2});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arg2}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}))];\n        ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n        {insertValues}\n    {#elseif propName == \"slice\" && !topExpressionOfStatement && arguments.length == 1}\n        {tempVar2Name} = ({arg1}) < 0 ? -({arg1}) : {varAccess}->size - ({arg1});\n        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});\n        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];\n    {#elseif propName == \"slice\" && !topExpressionOfStatement && arguments.length == 2}\n        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});\n        {tempVar4Name} = ({arg2}) < 0 ? {varAccess}->size + ({arg2}) : ({arg2});\n        {tempVar2Name} = {tempVar4Name} - {tempVar3Name};\n        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];\n    {#elseif propName == \"indexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"indexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif propName == \"lastIndexOf\" && tempVarName}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && propName == \"push\" && arguments.length == 1}\n    ARRAY_PUSH({varAccess}, {arguments})\n{#elseif topExpressionOfStatement && propName == \"slice\"}\n    /* slice doesn't have side effects, skipping */\n{#elseif topExpressionOfStatement && propName == \"splice\" && spliceNeedsRemove}\n    ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"splice\" && !spliceNeedsRemove}\n    {insertValues}\n{#elseif topExpressionOfStatement && propName == \"unshift\" && arguments.length == 1}\n    ARRAY_INSERT({varAccess}, 0, {arguments})\n{#elseif tempVarName}\n    {tempVarName}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"lastIndexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"pop\" && arguments.length == 0}\n    ARRAY_POP({varAccess})\n{#elseif printfCalls.length == 1}\n    {printfCalls}\n{#elseif printfCalls.length > 1}\n    {\n        {printfCalls {    }=>{this}\n}\n    }\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
     ], CCallExpression);
     return CCallExpression;
 }());
@@ -848,6 +892,9 @@ var CUnaryExpression = (function () {
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
+            operatorMap[ts.SyntaxKind.PlusToken] = '+';
+        }
+        if (type == types_1.StringVarType) {
             callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
             if (callReplaceMap[node.operator])
                 scope.root.headerFlags.atoi = true;
@@ -936,8 +983,7 @@ var CFunction = (function () {
         };
         for (var _i = 0, _a = this.gcVarNames; _i < _a.length; _i++) {
             var gcVarName = _a[_i];
-            var state_1 = _loop_1(gcVarName);
-            if (state_1 === "continue") continue;
+            _loop_1(gcVarName);
         }
         funcDecl.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
         if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
@@ -1975,6 +2021,7 @@ var VariableData = (function () {
         this.typePromises = {};
         this.addedProperties = {};
         this.objLiteralAssigned = false;
+        this.arrLiteralAssigned = false;
     }
     return VariableData;
 }());
@@ -2002,20 +2049,7 @@ var TypeHelper = (function () {
             this.findVariablesRecursively(source);
         }
         this.resolvePromisesAndFinalizeTypes();
-        var structs = Object.keys(this.userStructs)
-            .filter(function (k) { return Object.keys(_this.userStructs[k].properties).length > 0; })
-            .map(function (k) {
-            return {
-                name: k,
-                properties: Object.keys(_this.userStructs[k].properties)
-                    .map(function (pk) {
-                    return {
-                        name: pk,
-                        type: _this.userStructs[k].properties[pk]
-                    };
-                })
-            };
-        });
+        var structs = this.getUserStructs();
         var functionPrototypes = Object.keys(this.functionPrototypes).map(function (k) { return _this.functionPrototypes[k]; });
         return [structs, functionPrototypes];
     };
@@ -2085,6 +2119,11 @@ var TypeHelper = (function () {
                             if (arrType && arrType instanceof ArrayType)
                                 return arrType;
                         }
+                        else if (propName == "slice" && call.arguments.length >= 1) {
+                            var arrType = this.getCType(propAccess.expression);
+                            if (arrType && arrType instanceof ArrayType)
+                                return arrType;
+                        }
                     }
                     else if (call.expression.kind == ts.SyntaxKind.Identifier) {
                         var funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
@@ -2141,25 +2180,9 @@ var TypeHelper = (function () {
         else
             throw new Error("Unrecognized type source");
     };
-    /** Convert ts.Type to CType */
-    /** Used mostly during type preprocessing stage */
-    TypeHelper.prototype.convertType = function (tsType, ident) {
-        if (!tsType || tsType.flags == ts.TypeFlags.Void)
-            return "void";
-        if (tsType.flags == ts.TypeFlags.String)
-            return exports.StringVarType;
-        if (tsType.flags == ts.TypeFlags.Number)
-            return exports.NumberVarType;
-        if (tsType.flags == ts.TypeFlags.Boolean)
-            return exports.BooleanVarType;
-        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
-            return this.generateStructure(tsType, ident);
-        }
-        if (tsType.flags == ts.TypeFlags.Any)
-            return exports.PointerVarType;
-        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
-        return exports.PointerVarType;
-    };
+    /** Generate name for a new iterator variable and register it in temporaryVariables table.
+     * Generated name is guarantied not to conflict with any existing names in specified scope.
+     */
     TypeHelper.prototype.addNewIteratorVariable = function (scopeNode) {
         var parentFunc = this.findParentFunction(scopeNode);
         var scopeId = parentFunc && parentFunc.pos + 1 || 'main';
@@ -2182,6 +2205,9 @@ var TypeHelper = (function () {
         this.temporaryVariables[scopeId].push(iteratorVarName);
         return iteratorVarName;
     };
+    /** Generate name for a new temporary variable and register it in temporaryVariables table.
+     * Generated name is guarantied not to conflict with any existing names in specified scope.
+     */
     TypeHelper.prototype.addNewTemporaryVariable = function (scopeNode, proposedName) {
         var parentFunc = this.findParentFunction(scopeNode);
         var scopeId = parentFunc && parentFunc.pos + 1 || 'main';
@@ -2197,6 +2223,42 @@ var TypeHelper = (function () {
         }
         this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
+    };
+    TypeHelper.prototype.getUserStructs = function () {
+        var _this = this;
+        return Object.keys(this.userStructs)
+            .filter(function (k) { return Object.keys(_this.userStructs[k].properties).length > 0; })
+            .map(function (k) {
+            return {
+                name: k,
+                properties: Object.keys(_this.userStructs[k].properties)
+                    .map(function (pk) {
+                    return {
+                        name: pk,
+                        type: _this.userStructs[k].properties[pk]
+                    };
+                })
+            };
+        });
+    };
+    /** Convert ts.Type to CType */
+    /** Used mostly during type preprocessing stage */
+    TypeHelper.prototype.convertType = function (tsType, ident) {
+        if (!tsType || tsType.flags == ts.TypeFlags.Void)
+            return "void";
+        if (tsType.flags == ts.TypeFlags.String)
+            return exports.StringVarType;
+        if (tsType.flags == ts.TypeFlags.Number)
+            return exports.NumberVarType;
+        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
+            return exports.BooleanVarType;
+        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
+            return this.generateStructure(tsType, ident);
+        }
+        if (tsType.flags == ts.TypeFlags.Any)
+            return exports.PointerVarType;
+        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
+        return exports.PointerVarType;
     };
     TypeHelper.prototype.findParentFunction = function (node) {
         var parentFunc = node;
@@ -2279,6 +2341,8 @@ var TypeHelper = (function () {
                         this.addTypePromise(varPos, varDecl.initializer);
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
+                        if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            varData.arrLiteralAssigned = true;
                         if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
                             var forOfStatement = varDecl.parent.parent;
                             if (forOfStatement.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
@@ -2321,6 +2385,8 @@ var TypeHelper = (function () {
                         this.addTypePromise(varPos, binExpr.right);
                         if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
                             varData.objLiteralAssigned = true;
+                        if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            varData.arrLiteralAssigned = true;
                     }
                 }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -2362,6 +2428,15 @@ var TypeHelper = (function () {
                                 }
                             }
                             if (call.arguments.length >= 2) {
+                                this.addTypePromise(varPos, call);
+                            }
+                        }
+                    }
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "slice") {
+                        varData.isDynamicArray = true;
+                        if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
+                            var call = propAccess.parent;
+                            if (call.arguments.length >= 1) {
                                 this.addTypePromise(varPos, call);
                             }
                         }
@@ -2424,7 +2499,7 @@ var TypeHelper = (function () {
                 var varType = variableBestTypes.length ? variableBestTypes.reduce(function (c, n) { return _this.mergeTypes(c, n).type; }) : null;
                 varType = varType || exports.PointerVarType;
                 if (varType instanceof ArrayType) {
-                    if (this_1.variablesData[k].isDynamicArray && !this_1.variablesData[k].parameterFuncDeclPos)
+                    if (this_1.variablesData[k].isDynamicArray && !this_1.variablesData[k].parameterFuncDeclPos && this_1.variablesData[k].arrLiteralAssigned)
                         this_1.variables[k].requiresAllocation = true;
                     varType.isDynamicArray = varType.isDynamicArray || this_1.variablesData[k].isDynamicArray;
                 }
@@ -2708,6 +2783,7 @@ if (typeof window !== 'undefined')
                 useCaseSensitiveFileNames: function () { return false; },
                 getCanonicalFileName: function (fileName) { return fileName; },
                 getCurrentDirectory: function () { return ""; },
+                getDirectories: function () { return []; },
                 getNewLine: function () { return "\n"; },
                 fileExists: function (fileName) { return fileName == 'source.ts'; },
                 readFile: function (fileName) { return fileName == 'source.ts' ? source : null; },
