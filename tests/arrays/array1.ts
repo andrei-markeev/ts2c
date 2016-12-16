@@ -1,4 +1,3 @@
-var int_array = [10, 20, 30];
-console.log(int_array);
-var string_array = ["Hello", "World!"];
-console.log(string_array);
+var a = ["Hello", "world!"];
+var b = a.slice(1,1);
+console.log(b);

@@ -375,9 +375,9 @@ export class TypeHelper {
         if (!tsType || tsType.flags == ts.TypeFlags.Void)
             return "void";
 
-        if (tsType.flags == ts.TypeFlags.String)
+        if (tsType.flags == ts.TypeFlags.String || tsType.flags == ts.TypeFlags.StringLiteral)
             return StringVarType;
-        if (tsType.flags == ts.TypeFlags.Number)
+        if (tsType.flags == ts.TypeFlags.Number || tsType.flags == ts.TypeFlags.NumberLiteral)
             return NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
             return BooleanVarType;
