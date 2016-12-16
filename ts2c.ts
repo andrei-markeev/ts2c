@@ -16,6 +16,7 @@ if (typeof window !== 'undefined')
                 useCaseSensitiveFileNames: () => { return false; },
                 getCanonicalFileName: fileName => fileName,
                 getCurrentDirectory: () => "",
+                getDirectories: () => [],
                 getNewLine: () => "\n",
                 fileExists: fileName => fileName == 'source.ts',
                 readFile: fileName => fileName == 'source.ts' ? source : null,

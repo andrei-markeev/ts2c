@@ -325,7 +325,7 @@ export class TypeHelper {
             return StringVarType;
         if (tsType.flags == ts.TypeFlags.Number)
             return NumberVarType;
-        if (tsType.flags == ts.TypeFlags.Boolean)
+        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
             return BooleanVarType;
 
         if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
@@ -624,7 +624,9 @@ export class TypeHelper {
                 varType = varType || PointerVarType;
 
                 if (varType instanceof ArrayType) {
-                    if (this.variablesData[k].isDynamicArray && !this.variablesData[k].parameterFuncDeclPos)
+                    let initializer = this.variables[k].declaration.initializer;
+                    let isAssignment = initializer && initializer.kind == ts.SyntaxKind.CallExpression;
+                    if (this.variablesData[k].isDynamicArray && !this.variablesData[k].parameterFuncDeclPos && !isAssignment)
                         this.variables[k].requiresAllocation = true;
                     varType.isDynamicArray = varType.isDynamicArray || this.variablesData[k].isDynamicArray;
                 }

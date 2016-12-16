@@ -38,7 +38,6 @@ export class AssignmentHelper {
 }
 
 @CodeTemplate(`
-{allocator}
 {#if isObjLiteralAssignment}
     {objInitializers}
 {#elseif isArrayLiteralAssignment}
@@ -60,7 +59,6 @@ export class AssignmentHelper {
 {/if}`
 )
 export class CAssignment {
-    public allocator: CVariableAllocation | string = '';
     public isObjLiteralAssignment: boolean = false;
     public objInitializers: CAssignment[];
     public isArrayLiteralAssignment: boolean = false;
