@@ -128,7 +128,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toLocaleString
      - [ ] concat
      - [x] **pop**
-     - [x] **push** _(partial: only one parameter)_
+     - [x] **push**
      - [ ] reverse
      - [x] **shift**
      - [ ] slice

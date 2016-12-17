@@ -5,7 +5,8 @@ import {ArrayType, StringVarType, NumberVarType} from '../types';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression, CSimpleBinaryExpression} from './expressions';
 import {CVariable} from './variable';
-import {PrintfHelper} from './printf';
+import {ConsoleLogHelper} from '../standard/console/log';
+import {StandardCallHelper} from '../resolver';
 
 @CodeTemplate(`
 {#statements}
@@ -71,8 +72,8 @@ import {PrintfHelper} from './printf';
         }
     {/if}
 {/statements}
-{#if topExpressionOfStatement && propName == "push" && arguments.length == 1}
-    ARRAY_PUSH({varAccess}, {arguments})
+{#if standardCall}
+    {standardCall}
 {#elseif topExpressionOfStatement && propName == "slice"}
     /* slice doesn't have side effects, skipping */
 {#elseif topExpressionOfStatement && propName == "splice" && spliceNeedsRemove}
@@ -102,6 +103,7 @@ import {PrintfHelper} from './printf';
 export class CCallExpression {
     public funcName: string;
     public propName: string = null;
+    public standardCall: CExpression;
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess;
     public tempVarName: string = '';
@@ -120,12 +122,16 @@ export class CCallExpression {
     constructor(scope: IScope, call: ts.CallExpression) {
         this.funcName = call.expression.getText();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.standardCall = StandardCallHelper.createTemplate(scope, call);
+
+        if (this.standardCall)
+            return;
+
         if (this.funcName != "console.log") {
             this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
             this.arg1 = this.arguments[0];
             this.arg2 = this.arguments[1];
         }
-
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
             this.propName = propAccess.name.getText();
@@ -133,7 +139,7 @@ export class CCallExpression {
 
             if (this.funcName == "console.log") {
                 for (let i = 0; i < call.arguments.length; i++) {
-                    this.printfCalls.push(PrintfHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
+                    this.printfCalls.push(ConsoleLogHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
                 }
                 scope.root.headerFlags.printf = true;
             }

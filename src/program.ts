@@ -10,6 +10,8 @@ import './nodes/statements';
 import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
+import './standard/array/push';
+
 
 export interface IScope {
     parent: IScope;

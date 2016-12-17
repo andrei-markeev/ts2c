@@ -1,12 +1,12 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../types';
-import {IScope} from '../program';
-import {CExpression} from './expressions';
-import {CCallExpression} from './call';
-import {CVariable} from './variable';
+import {CodeTemplate, CodeTemplateFactory} from '../../template';
+import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../../types';
+import {IScope} from '../../program';
+import {CExpression} from '../../nodes/expressions';
+import {CCallExpression} from '../../nodes/call';
+import {CVariable} from '../../nodes/variable';
 
-export class PrintfHelper {
+export class ConsoleLogHelper {
     public static create(scope: IScope, printNode: ts.Expression, emitCR: boolean = true) {
         let type = scope.root.typeHelper.getCType(printNode);
         let nodeExpression = CodeTemplateFactory.createForNode(scope, printNode);

@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import {StandardCallHelper} from './resolver';
 
 export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var *";
@@ -214,6 +215,10 @@ export class TypeHelper {
             case ts.SyntaxKind.CallExpression:
                 {
                     let call = <ts.CallExpression>node;
+                    let retType = StandardCallHelper.getReturnType(this, call);
+                    if (retType)
+                        return retType;
+
                     if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                         let propAccess = <ts.PropertyAccessExpression>call.expression;
                         let propName = propAccess.name.getText(); 
@@ -222,7 +227,7 @@ export class TypeHelper {
                             if (arrType && arrType instanceof ArrayType)
                                 return arrType.elementType;
                         }
-                        else if ((propName == "push" || propName == "unshift") && call.arguments.length == 1) {
+                        else if ((propName == "unshift") && call.arguments.length == 1) {
                             let arrType = this.getCType(propAccess.expression);
                             if (arrType && arrType instanceof ArrayType)
                                 return NumberVarType;
