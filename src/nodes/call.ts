@@ -19,25 +19,6 @@ import {StandardCallHelper} from '../resolver';
     {#elseif propName == "shift" && tempVarName}
         {tempVarName} = {varAccess}->data[0];
         ARRAY_REMOVE({varAccess}, 0, 1);
-    {#elseif propName == "splice" && !topExpressionOfStatement}
-        ARRAY_CREATE({tempVarName}, {arg2}, {arg2});
-        for ({iteratorVarName} = 0; {iteratorVarName} < {arg2}; {iteratorVarName}++)
-            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}))];
-        ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});
-        {insertValues}
-    {#elseif propName == "slice" && !topExpressionOfStatement && arguments.length == 1}
-        {tempVar2Name} = ({arg1}) < 0 ? -({arg1}) : {varAccess}->size - ({arg1});
-        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});
-        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});
-        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)
-            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];
-    {#elseif propName == "slice" && !topExpressionOfStatement && arguments.length == 2}
-        {tempVar3Name} = ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1});
-        {tempVar4Name} = ({arg2}) < 0 ? {varAccess}->size + ({arg2}) : ({arg2});
-        {tempVar2Name} = {tempVar4Name} - {tempVar3Name};
-        ARRAY_CREATE({tempVarName}, {tempVar2Name}, {tempVar2Name});
-        for ({iteratorVarName} = 0; {iteratorVarName} < {tempVar2Name}; {iteratorVarName}++)
-            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {tempVar3Name}];
     {#elseif propName == "indexOf" && tempVarName && staticArraySize}
         {tempVarName} = -1;
         for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
@@ -74,13 +55,6 @@ import {StandardCallHelper} from '../resolver';
 {/statements}
 {#if standardCall}
     {standardCall}
-{#elseif topExpressionOfStatement && propName == "slice"}
-    /* slice doesn't have side effects, skipping */
-{#elseif topExpressionOfStatement && propName == "splice" && spliceNeedsRemove}
-    ARRAY_REMOVE({varAccess}, ({arg1}) < 0 ? {varAccess}->size + ({arg1}) : ({arg1}), {arg2});
-    {insertValues}
-{#elseif topExpressionOfStatement && propName == "splice" && !spliceNeedsRemove}
-    {insertValues}
 {#elseif topExpressionOfStatement && propName == "unshift" && arguments.length == 1}
     ARRAY_INSERT({varAccess}, 0, {arguments})
 {#elseif tempVarName}
@@ -162,40 +136,6 @@ export class CCallExpression {
                 scope.variables.push(new CVariable(scope, this.tempVarName, type.elementType));
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.array_remove = true;
-            }
-            else if (this.propName == "splice" && this.arguments.length >= 2) {
-                if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                    let type = scope.root.typeHelper.getCType(propAccess.expression);
-                    scope.variables.push(new CVariable(scope, this.tempVarName, type));
-                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-                }
-                if (this.arguments.length > 2) {
-                    this.insertValues = this.arguments.slice(2).reverse().map(a => new CInsertValue(scope, this.varAccess, this.arg1, a));
-                    scope.root.headerFlags.array_insert = true;
-                }
-                if (call.arguments[1].kind == ts.SyntaxKind.NumericLiteral) {
-                    this.spliceNeedsRemove = call.arguments[1].getText() != "0";
-                }
-                scope.root.headerFlags.array = true;
-                scope.root.headerFlags.array_remove = true;
-            }
-            else if (this.propName == "slice" && this.arguments.length >= 1) {
-                if (!this.topExpressionOfStatement) {
-                    this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                    let type = scope.root.typeHelper.getCType(propAccess.expression);
-                    scope.variables.push(new CVariable(scope, this.tempVarName, type));
-                    this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
-                    scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-                    this.tempVar2Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_size");
-                    scope.variables.push(new CVariable(scope, this.tempVar2Name, NumberVarType));
-                    this.tempVar3Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_start");
-                    scope.variables.push(new CVariable(scope, this.tempVar3Name, NumberVarType));
-                    this.tempVar4Name = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_end");
-                    if (this.arguments.length == 2)
-                        scope.variables.push(new CVariable(scope, this.tempVar4Name, NumberVarType));
-                }
             }
             else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
                 let type = scope.root.typeHelper.getCType(propAccess.expression);

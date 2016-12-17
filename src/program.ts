@@ -11,6 +11,8 @@ import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
 import './standard/array/push';
+import './standard/array/splice';
+import './standard/array/slice';
 
 
 export interface IScope {

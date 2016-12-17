@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
+import {StandardCallHelper} from './resolver';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -82,22 +83,8 @@ export class MemoryManager {
                 break;
             case ts.SyntaxKind.CallExpression:
                 {
-                    let call = <ts.CallExpression>node;
-                    if (call.parent.kind == ts.SyntaxKind.ExpressionStatement)
-                        break;
-                    if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
-                        let propAccess = <ts.PropertyAccessExpression>call.expression;
-                        let propName = propAccess.name.getText();
-                        let exprType = this.typeHelper.getCType(propAccess.expression); 
-                        let retType = this.typeHelper.getCType(call);
-
-                        if (propName == "splice" || propName == "slice") { 
-
-                            if (exprType instanceof ArrayType && retType instanceof ArrayType && retType.isDynamicArray)
-                                this.scheduleNodeDisposal(call);
-
-                        }
-                    }
+                    if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
+                        this.scheduleNodeDisposal(node);
                 }
                 break;
         }
@@ -275,16 +262,7 @@ export class MemoryManager {
         else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
         else if (heapNode.kind == ts.SyntaxKind.CallExpression) {
-            let call = <ts.CallExpression>heapNode;
-            let propAccess = call.expression.kind == ts.SyntaxKind.PropertyAccessExpression && <ts.PropertyAccessExpression>call.expression;
-            if (propAccess.name.getText() == "splice")
-                varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_removed_values");
-            else if (propAccess.name.getText() == "slice")
-                varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_slice");
-            else {
-                console.log("Internal error when registering temporary variable " + call.getText() + ": unexpected property name " + propAccess.name.getText());
-                return;
-            }
+            varName = this.typeHelper.addNewTemporaryVariable(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         } else
             varName = heapNode.getText();
 

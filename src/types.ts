@@ -237,16 +237,6 @@ export class TypeHelper {
                             if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
                                 return NumberVarType;
                         }
-                        else if (propName == "splice" && call.arguments.length >= 2) {
-                            let arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return arrType;
-                        }
-                        else if (propName == "slice" && call.arguments.length >= 1) {
-                            let arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return arrType;
-                        }
                     } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
                         let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (funcSymbol != null) {

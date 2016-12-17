@@ -4,7 +4,9 @@ import {CType, TypeHelper} from './types';
 
 export interface IResolver {
     matchesNode(s: TypeHelper, n: ts.Node): boolean;
-    returnType(): CType;
+    returnType(s: TypeHelper, n: ts.Node): CType;
+    needsDisposal(s: TypeHelper, n: ts.Node): boolean;
+    getTempVarName(s: TypeHelper, n: ts.Node): string;
     createTemplate(s: IScope, n: ts.Node): any;
 }
 
@@ -24,6 +26,20 @@ export class StandardCallHelper {
     public static getReturnType(typeHelper: TypeHelper, node: ts.Node) {
         for (var resolver of standardCallResolvers)
             if (resolver.matchesNode(typeHelper, node))
-                return resolver.returnType();
+                return resolver.returnType(typeHelper, node);
+        return null;
+    }
+    public static needsDisposal(typeHelper: TypeHelper, node: ts.Node) {
+        for (var resolver of standardCallResolvers)
+            if (resolver.matchesNode(typeHelper, node))
+                return resolver.needsDisposal(typeHelper, node);
+        return false;
+    }
+    public static getTempVarName(typeHelper: TypeHelper, node: ts.Node) {
+        for (var resolver of standardCallResolvers)
+            if (resolver.matchesNode(typeHelper, node))
+                return resolver.getTempVarName(typeHelper, node);
+        console.log("Internal error: cannot find matching resolver for node '" + node.getText() + "' in StandardCallHelper.getTempVarName");
+        return "tmp";
     }
 }

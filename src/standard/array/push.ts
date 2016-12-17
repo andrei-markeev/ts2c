@@ -16,11 +16,17 @@ class ArrayPushResolver implements IResolver {
         let objType = typeHelper.getCType(propAccess.expression);
         return propAccess.name.getText() == "push" && objType instanceof ArrayType && objType.isDynamicArray;
     }
-    public returnType() {
+    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return NumberVarType;
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
         return new CArrayPush(scope, node);
+    }
+    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return false;
+    }
+    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
     }
 }
 
