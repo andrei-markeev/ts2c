@@ -84,6 +84,7 @@ class CArraySplice {
             this.needsRemove = call.arguments[1].getText() != "0";
         }
         scope.root.headerFlags.array = true;
+        scope.root.headerFlags.array_insert = true;
         scope.root.headerFlags.array_remove = true;
     }
 

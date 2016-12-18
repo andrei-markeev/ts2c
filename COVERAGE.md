@@ -131,13 +131,13 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **push**
      - [ ] reverse
      - [x] **shift**
-     - [ ] slice
+     - [x] **slice** _(partial: no bounds checking)_
      - [ ] sort
      - [x] **splice** _(partial: no bounds checking)_
-     - [x] **unshift** _(partial: only one parameter)_
+     - [x] **unshift**
      - [x] **length**
      - [x] **indexOf**
-     - [ ] lastIndexOf
+     - [x] **lastIndexOf**
  - [ ] String
      - [ ] new
      - [ ] toString
@@ -146,7 +146,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] charCodeAt
      - [ ] concat
      - [x] **indexOf**
-     - [ ] lastIndexOf
+     - [x] **lastIndexOf**
      - [ ] localeCompare
      - [ ] match
      - [ ] replace

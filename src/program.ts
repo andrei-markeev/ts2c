@@ -10,9 +10,15 @@ import './nodes/statements';
 import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
+
 import './standard/array/push';
+import './standard/array/pop';
+import './standard/array/unshift';
+import './standard/array/shift';
 import './standard/array/splice';
 import './standard/array/slice';
+import './standard/array/indexOf';
+import './standard/array/lastIndexOf';
 
 
 export interface IScope {
