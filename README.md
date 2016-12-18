@@ -68,7 +68,7 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only about 42% of ES3 syntax is currently supported.
+__**Work in progress:**__ it works, but only about 43% of ES3 syntax is currently supported.
 
 Overview of currently supported language features (compared to ES3 Standard):
 
@@ -88,11 +88,11 @@ Overview of currently supported language features (compared to ES3 Standard):
     - conditional operator [100%]: `?`-`:`
     - assignment operators [25%]: `=`
     - comma operator [0%]
- - built-in objects [5%]:
+ - built-in objects [7%]:
     - Global [0%]
     - Object [0%]
     - Function [0%]
-    - Array [36%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `indexOf()`, `length`
+    - Array [63%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `indexOf()`, `lastIndexOf()`, `length`
     - String [10%]: `indexOf()`, `length`
     - Boolean [0%]
     - Number [0%]

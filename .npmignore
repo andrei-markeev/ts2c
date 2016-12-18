@@ -1,0 +1,6 @@
+ts2c.bundle.js
+*.ts
+*.js.map
+.vscode
+tests
+tests_esp
