@@ -546,6 +546,9 @@ export class TypeHelper {
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "concat") {
                         varData.isDynamicArray = true;
                     }
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "join") {
+                        varData.isDynamicArray = true;
+                    }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {

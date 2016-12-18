@@ -110,7 +110,7 @@ class CConcatValue {
     constructor(scope: IScope, public varAccess: string, valueNode: ts.Node, public value: CExpression, public indexVarName: string) {
         let type = scope.root.typeHelper.getCType(valueNode);
         this.isArray = type instanceof ArrayType;
-        this.staticArraySize = type instanceof ArrayType && type.capacity;
+        this.staticArraySize = type instanceof ArrayType && !type.isDynamicArray && type.capacity;
         if (this.isArray) {
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(valueNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));

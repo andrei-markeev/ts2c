@@ -5,4 +5,4 @@ arr1.push("stuff");
 var arr2 = ["hello","world"];
 var arr3 = [];
 arr3.push("banana")
-console.log(arr1.concat("one", arr2, "two", arr3, "three"));
+console.log(arr1.concat("one", arr2, ["static"], "two", arr3, "three"));

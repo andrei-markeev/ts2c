@@ -18,6 +18,7 @@ import './standard/array/shift';
 import './standard/array/splice';
 import './standard/array/slice';
 import './standard/array/concat';
+import './standard/array/join';
 import './standard/array/indexOf';
 import './standard/array/lastIndexOf';
 

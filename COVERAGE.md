@@ -127,7 +127,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] toLocaleString
      - [x] **concat**
-     - [ ] join
+     - [x] **join**
      - [x] **pop**
      - [x] **push**
      - [ ] reverse
