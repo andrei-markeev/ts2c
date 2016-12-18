@@ -41,8 +41,7 @@ class ArrayUnshiftResolver implements IResolver {
     {unshiftValues}
 {#else}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArrayUnshift {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';

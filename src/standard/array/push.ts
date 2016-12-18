@@ -41,8 +41,7 @@ class ArrayPushResolver implements IResolver {
     {pushValues}
 {#else}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArrayPush {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';

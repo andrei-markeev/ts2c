@@ -37,8 +37,7 @@ class ArrayShiftResolver implements IResolver {
 {/statements}
 {#if !topExpressionOfStatement}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArrayShift {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';

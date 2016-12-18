@@ -24,8 +24,8 @@ class ArrayConcatResolver implements IResolver {
         return new CArrayConcat(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
-        // if parent is expression statement, this means concat is the top expression
-        // and thus it's value is not used, so the temporary variable will not be created
+        // if parent is expression statement, then this is the top expression
+        // and thus return value is not used, so the temporary variable will not be created
         return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
@@ -44,8 +44,7 @@ class ArrayConcatResolver implements IResolver {
 {/statements}
 {#if !topExpressionOfStatement}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArrayConcat {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';

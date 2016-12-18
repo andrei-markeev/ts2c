@@ -52,8 +52,7 @@ class ArrayIndexOfResolver implements IResolver {
 {/statements}
 {#if !topExpressionOfStatement}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArrayIndexOf {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';

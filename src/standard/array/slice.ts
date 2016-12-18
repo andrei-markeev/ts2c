@@ -24,8 +24,8 @@ class ArraySliceResolver implements IResolver {
         return new CArraySlice(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
-        // if parent is expression statement, this means slice is the top expression
-        // and thus it's value is not used, so the temporary variable will not be created
+        // if parent is expression statement, then this is the top expression
+        // and thus return value is not used, so the temporary variable will not be created
         return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
@@ -54,8 +54,7 @@ class ArraySliceResolver implements IResolver {
     /* slice doesn't have side effects, skipping */
 {#else}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 class CArraySlice {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
