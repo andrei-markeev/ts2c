@@ -17,6 +17,7 @@ import './standard/array/unshift';
 import './standard/array/shift';
 import './standard/array/splice';
 import './standard/array/slice';
+import './standard/array/concat';
 import './standard/array/indexOf';
 import './standard/array/lastIndexOf';
 
@@ -105,7 +106,7 @@ class HeaderFlags {
 {#if headerFlags.array || headerFlags.dict}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
-        array->data = malloc(init_capacity * sizeof(*array->data)); \\
+        array->data = malloc((init_capacity) * sizeof(*array->data)); \\
         assert(array->data != NULL); \\
         array->capacity = init_capacity; \\
         array->size = init_size; \\

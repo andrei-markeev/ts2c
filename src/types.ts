@@ -543,6 +543,9 @@ export class TypeHelper {
                                 this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
                         }
                     }
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "concat") {
+                        varData.isDynamicArray = true;
+                    }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
