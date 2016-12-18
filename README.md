@@ -72,10 +72,10 @@ __**Work in progress:**__ it works, but only about 42% of ES3 syntax is currentl
 
 Overview of currently supported language features (compared to ES3 Standard):
 
- - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement 
+ - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
  - expressions [47%]:
-    - primary expressions [78%]: variables, number, string and boolean literals, array and object initializers, grouping operator 
-    - left-hand-side expressions [60%]: property accessors, function calls  
+    - primary expressions [78%]: variables, number, string and boolean literals, array and object initializers, grouping operator
+    - left-hand-side expressions [60%]: property accessors, function calls
     - postfix expressions [100%]: `++`, `--`
     - unary operators [44%]: `++`, `--`, `+`, `!`
     - multiplicative operators [16%]: `*`
@@ -101,7 +101,7 @@ Overview of currently supported language features (compared to ES3 Standard):
     - RegExp [0%]
 
 Note: some of these features supported only partially.
-Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md). 
+Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
 
@@ -122,19 +122,19 @@ The thing is, for sustainable IoT devices that can work for a *long time* on sin
 Raspberry Pi won't do. You'll have to use low-power microcontrollers, which usually have very little memory available.
 
 RAM ranges literally **from 512 bytes** to 120KB, and ROM/Flash **from 1KB** to 4MB. In such conditions, even
-optimized JS interpreters like [JerryScript](https://github.com/Samsung/jerryscript), 
-[Espruino](https://github.com/espruino/Espruino) or [V7](https://github.com/cesanta/v7) are sometimes too 
-much of an overhead and usually lead to the increased battery drain and/or don't leave a lot of system 
+optimized JS interpreters like [JerryScript](https://github.com/Samsung/jerryscript),
+[Espruino](https://github.com/espruino/Espruino) or [V7](https://github.com/cesanta/v7) are sometimes too
+much of an overhead and usually lead to the increased battery drain and/or don't leave a lot of system
 resources to your program.
 
 Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out,
 for example `eval` and `try`-`catch`. Still, current conclusion is, that it is possible to transpile most of the
-language. 
+language.
 
 These are some examples of planned target platforms for using with TS2C:
  - [ESP8266](https://en.wikipedia.org/wiki/ESP8266)
  - [Pebble watch](https://en.wikipedia.org/wiki/Pebble_(watch))
- - [Atmel AVR](https://en.wikipedia.org/wiki/Atmel_AVR#Basic_families) family (used in Arduino boards)   
+ - [Atmel AVR](https://en.wikipedia.org/wiki/Atmel_AVR#Basic_families) family (used in Arduino boards)
  - [TI MSP430](https://en.wikipedia.org/wiki/TI_MSP430) family
 
 
@@ -143,7 +143,7 @@ Usage
 
 Syntax:
 ```sh
-node ts2c.js <files to transpile>
+ts2c <files to transpile>
 ```
 
 In browser (also see **index.html** file):
