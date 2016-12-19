@@ -39,6 +39,9 @@ export class CElementAccess {
                     argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
             } else
                 argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+        } else {
+            type = scope.root.typeHelper.getCType(node);
+            elementAccess = CodeTemplateFactory.createForNode(scope, node);
         }
 
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);

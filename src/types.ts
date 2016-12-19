@@ -222,19 +222,9 @@ export class TypeHelper {
                     if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                         let propAccess = <ts.PropertyAccessExpression>call.expression;
                         let propName = propAccess.name.getText(); 
-                        if ((propName == "pop" || propName == "shift") && call.arguments.length == 0) {
-                            let arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return arrType.elementType;
-                        }
-                        else if ((propName == "unshift") && call.arguments.length == 1) {
-                            let arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return NumberVarType;
-                        }
-                        else if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
-                            let arrType = this.getCType(propAccess.expression);
-                            if (arrType && (arrType == StringVarType || arrType instanceof ArrayType))
+                        if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
+                            let exprType = this.getCType(propAccess.expression);
+                            if (exprType && exprType == StringVarType)
                                 return NumberVarType;
                         }
                     } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
@@ -440,6 +430,18 @@ export class TypeHelper {
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
             if (!this.arrayLiteralsTypes[node.pos])
                 this.determineArrayType(<ts.ArrayLiteralExpression>node);
+            
+            let arrType = this.arrayLiteralsTypes[node.pos];
+            if (arrType instanceof ArrayType
+                && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression
+                && node.parent.parent.kind == ts.SyntaxKind.CallExpression)
+            {
+                let propAccess = <ts.PropertyAccessExpression>node.parent;
+                // if array literal is concated, we need to ensure that we
+                // have corresponding dynamic array type for the temporary variable
+                if (propAccess.name.getText() == "concat")
+                    this.ensureArrayStruct(arrType.elementType);
+            }
         }
         else if (node.kind == ts.SyntaxKind.ObjectLiteralExpression) {
             if (!this.objectLiteralsTypes[node.pos]) {
@@ -542,9 +544,6 @@ export class TypeHelper {
                             if (call.arguments.length == 0)
                                 this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
                         }
-                    }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "concat") {
-                        varData.isDynamicArray = true;
                     }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;

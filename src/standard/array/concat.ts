@@ -14,11 +14,12 @@ class ArrayConcatResolver implements IResolver {
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "concat" && objType instanceof ArrayType && objType.isDynamicArray;
+        return propAccess.name.getText() == "concat" && objType instanceof ArrayType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
-        return typeHelper.getCType(propAccess.expression);
+        let type = <ArrayType>typeHelper.getCType(propAccess.expression);
+        return new ArrayType(type.elementType, 0, true);
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
         return new CArrayConcat(scope, node);
@@ -36,7 +37,7 @@ class ArrayConcatResolver implements IResolver {
 @CodeTemplate(`
 {#statements}
     {#if !topExpressionOfStatement}
-        ARRAY_CREATE({tempVarName}, {varAccess}->size+{sizes{+}=>{this}}, 0);
+        ARRAY_CREATE({tempVarName}, {sizes{+}=>{this}}, 0);
         {tempVarName}->size = {tempVarName}->capacity;
         {indexVarName} = 0;
         {concatValues}
@@ -59,13 +60,13 @@ class CArrayConcat {
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-            let type = scope.root.typeHelper.getCType(propAccess.expression);
-            scope.variables.push(new CVariable(scope, this.tempVarName, type));
+            let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
+            scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(type.elementType, 0, true)));
             this.indexVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new CVariable(scope, this.indexVarName, NumberVarType));
             let args = call.arguments.map(a => ({ node: a, template: CodeTemplateFactory.createForNode(scope, a) }));
-            this.sizes = args.map(a => new CGetSize(scope, a.node, a.template))
             let toConcatenate = [{node: <ts.Node>propAccess.expression, template: this.varAccess}].concat(args);
+            this.sizes = toConcatenate.map(a => new CGetSize(scope, a.node, a.template))
             this.concatValues = toConcatenate.map(a => new CConcatValue(scope, this.tempVarName, a.node, a.template, this.indexVarName))
         }
         scope.root.headerFlags.array = true;

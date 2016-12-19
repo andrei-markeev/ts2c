@@ -11,3 +11,5 @@ console.log(arr3.join());
 
 var arr4 = [1,2,3,7];
 console.log(arr4.join("_"));
+
+console.log([1,2,5,2].join());
