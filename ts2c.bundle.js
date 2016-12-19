@@ -424,7 +424,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":13,"./types":26}],4:[function(require,module,exports){
+},{"./resolver":13,"./types":27}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -522,7 +522,7 @@ var CAssignment = (function () {
 exports.CAssignment = CAssignment;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26,"./elementaccess":6}],5:[function(require,module,exports){
+},{"../template":26,"../types":27,"./elementaccess":6}],5:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -581,7 +581,7 @@ var CCallExpression = (function () {
 exports.CCallExpression = CCallExpression;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../resolver":13,"../standard/console/log":24,"../template":25,"../types":26,"./elementaccess":6}],6:[function(require,module,exports){
+},{"../resolver":13,"../standard/console/log":25,"../template":26,"../types":27,"./elementaccess":6}],6:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -628,6 +628,10 @@ var CElementAccess = (function () {
             else
                 argumentExpression = template_1.CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
         }
+        else {
+            type = scope.root.typeHelper.getCType(node);
+            elementAccess = template_1.CodeTemplateFactory.createForNode(scope, node);
+        }
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
     CElementAccess = __decorate([
@@ -663,7 +667,7 @@ var CSimpleElementAccess = (function () {
 exports.CSimpleElementAccess = CSimpleElementAccess;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26}],7:[function(require,module,exports){
+},{"../template":26,"../types":27}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -838,7 +842,7 @@ var CGroupingExpression = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26,"./variable":11}],8:[function(require,module,exports){
+},{"../template":26,"../types":27,"./variable":11}],8:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -900,7 +904,7 @@ var CFunction = (function () {
 exports.CFunction = CFunction;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"./variable":11}],9:[function(require,module,exports){
+},{"../template":26,"./variable":11}],9:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1022,7 +1026,7 @@ var CNumber = (function () {
 exports.CNumber = CNumber;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26,"./assignment":4,"./variable":11}],10:[function(require,module,exports){
+},{"../template":26,"../types":27,"./assignment":4,"./variable":11}],10:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1256,7 +1260,7 @@ var CBlock = (function () {
 exports.CBlock = CBlock;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26,"./assignment":4,"./elementaccess":6,"./variable":11}],11:[function(require,module,exports){
+},{"../template":26,"../types":27,"./assignment":4,"./elementaccess":6,"./variable":11}],11:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1399,7 +1403,7 @@ var CVariable = (function () {
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":25,"../types":26,"./assignment":4}],12:[function(require,module,exports){
+},{"../template":26,"../types":27,"./assignment":4}],12:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1429,6 +1433,7 @@ require('./standard/array/concat');
 require('./standard/array/join');
 require('./standard/array/indexOf');
 require('./standard/array/lastIndexOf');
+require('./standard/array/sort');
 var HeaderFlags = (function () {
     function HeaderFlags() {
         this.strings = false;
@@ -1442,6 +1447,8 @@ var HeaderFlags = (function () {
         this.array_pop = false;
         this.array_insert = false;
         this.array_remove = false;
+        this.array_int16_t_cmp = false;
+        this.array_str_cmp = false;
         this.gc_iterator = false;
         this.dict = false;
         this.str_int16_t_cmp = false;
@@ -1499,14 +1506,14 @@ var CProgram = (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int*)a - *(int*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
     ], CProgram);
     return CProgram;
 }());
 exports.CProgram = CProgram;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":10,"./nodes/variable":11,"./standard/array/concat":14,"./standard/array/indexOf":15,"./standard/array/join":16,"./standard/array/lastIndexOf":17,"./standard/array/pop":18,"./standard/array/push":19,"./standard/array/shift":20,"./standard/array/slice":21,"./standard/array/splice":22,"./standard/array/unshift":23,"./template":25,"./types":26}],13:[function(require,module,exports){
+},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":10,"./nodes/variable":11,"./standard/array/concat":14,"./standard/array/indexOf":15,"./standard/array/join":16,"./standard/array/lastIndexOf":17,"./standard/array/pop":18,"./standard/array/push":19,"./standard/array/shift":20,"./standard/array/slice":21,"./standard/array/sort":22,"./standard/array/splice":23,"./standard/array/unshift":24,"./template":26,"./types":27}],13:[function(require,module,exports){
 "use strict";
 var standardCallResolvers = [];
 function StandardCallResolver(target) {
@@ -1576,11 +1583,12 @@ var ArrayConcatResolver = (function () {
             return false;
         var propAccess = call.expression;
         var objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "concat" && objType instanceof types_1.ArrayType && objType.isDynamicArray;
+        return propAccess.name.getText() == "concat" && objType instanceof types_1.ArrayType;
     };
     ArrayConcatResolver.prototype.returnType = function (typeHelper, call) {
         var propAccess = call.expression;
-        return typeHelper.getCType(propAccess.expression);
+        var type = typeHelper.getCType(propAccess.expression);
+        return new types_1.ArrayType(type.elementType, 0, true);
     };
     ArrayConcatResolver.prototype.createTemplate = function (scope, node) {
         return new CArrayConcat(scope, node);
@@ -1611,18 +1619,18 @@ var CArrayConcat = (function () {
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             var type = scope.root.typeHelper.getCType(propAccess.expression);
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type));
+            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, new types_1.ArrayType(type.elementType, 0, true)));
             this.indexVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new variable_1.CVariable(scope, this.indexVarName, types_1.NumberVarType));
             var args = call.arguments.map(function (a) { return ({ node: a, template: template_1.CodeTemplateFactory.createForNode(scope, a) }); });
-            this.sizes = args.map(function (a) { return new CGetSize(scope, a.node, a.template); });
             var toConcatenate = [{ node: propAccess.expression, template: this.varAccess }].concat(args);
+            this.sizes = toConcatenate.map(function (a) { return new CGetSize(scope, a.node, a.template); });
             this.concatValues = toConcatenate.map(function (a) { return new CConcatValue(scope, _this.tempVarName, a.node, a.template, _this.indexVarName); });
         }
         scope.root.headerFlags.array = true;
     }
     CArrayConcat = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {varAccess}->size+{sizes{+}=>{this}}, 0);\n        {tempVarName}->size = {tempVarName}->capacity;\n        {indexVarName} = 0;\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {sizes{+}=>{this}}, 0);\n        {tempVarName}->size = {tempVarName}->capacity;\n        {indexVarName} = 0;\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayConcat);
     return CArrayConcat;
 }());
@@ -1658,7 +1666,7 @@ var CConcatValue = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],15:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],15:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1729,7 +1737,7 @@ var CArrayIndexOf = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],16:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],16:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1851,7 +1859,7 @@ var CCalculateStringSize = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],17:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],17:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1922,7 +1930,7 @@ var CArrayLastIndexOf = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],18:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],18:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1981,7 +1989,7 @@ var CArrayPop = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../resolver":13,"../../template":25,"../../types":26}],19:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":13,"../../template":26,"../../types":27}],19:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2057,7 +2065,7 @@ var CPushValue = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],20:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],20:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2119,7 +2127,7 @@ var CArrayShift = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],21:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],21:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2201,7 +2209,72 @@ var CArraySlice = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],22:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],22:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require('../../template');
+var resolver_1 = require('../../resolver');
+var types_1 = require('../../types');
+var elementaccess_1 = require('../../nodes/elementaccess');
+var ArraySortResolver = (function () {
+    function ArraySortResolver() {
+    }
+    ArraySortResolver.prototype.matchesNode = function (typeHelper, call) {
+        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+            return false;
+        var propAccess = call.expression;
+        var objType = typeHelper.getCType(propAccess.expression);
+        return propAccess.name.getText() == "sort" && objType instanceof types_1.ArrayType && objType.isDynamicArray;
+    };
+    ArraySortResolver.prototype.returnType = function (typeHelper, call) {
+        var propAccess = call.expression;
+        return typeHelper.getCType(propAccess.expression);
+    };
+    ArraySortResolver.prototype.createTemplate = function (scope, node) {
+        return new CArraySort(scope, node);
+    };
+    ArraySortResolver.prototype.needsDisposal = function (typeHelper, node) {
+        return false;
+    };
+    ArraySortResolver.prototype.getTempVarName = function (typeHelper, node) {
+        return "";
+    };
+    ArraySortResolver = __decorate([
+        resolver_1.StandardCallResolver
+    ], ArraySortResolver);
+    return ArraySortResolver;
+}());
+var CArraySort = (function () {
+    function CArraySort(scope, call) {
+        this.varAccess = null;
+        this.arrayOfInts = false;
+        this.arrayOfStrings = false;
+        var propAccess = call.expression;
+        var type = scope.root.typeHelper.getCType(propAccess.expression);
+        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.arrayOfInts = type.elementType == types_1.NumberVarType;
+        this.arrayOfStrings = type.elementType == types_1.StringVarType;
+        if (this.arrayOfInts)
+            scope.root.headerFlags.array_int16_t_cmp = true;
+        else if (this.arrayOfStrings)
+            scope.root.headerFlags.array_str_cmp = true;
+    }
+    CArraySort = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && arrayOfInts}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n    {#elseif !topExpressionOfStatement && arrayOfStrings}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{#elseif arrayOfInts}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n{#elseif arrayOfStrings}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n{/if}")
+    ], CArraySort);
+    return CArraySort;
+}());
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../nodes/elementaccess":6,"../../resolver":13,"../../template":26,"../../types":27}],23:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2295,7 +2368,7 @@ var CInsertValue = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],23:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],24:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2372,7 +2445,7 @@ var CUnshiftValue = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":25,"../../types":26}],24:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],25:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2465,7 +2538,7 @@ var CPrintf = (function () {
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/variable":11,"../../template":25,"../../types":26}],25:[function(require,module,exports){
+},{"../../nodes/variable":11,"../../template":26,"../../types":27}],26:[function(require,module,exports){
 "use strict";
 ;
 var nodeKindTemplates = {};
@@ -2639,7 +2712,7 @@ function processTemplate(template, args) {
                     else {
                         if (elementsResolved != "")
                             elementsResolved += separator;
-                        if (statements.search(/^[\n\s]*$/) == -1)
+                        if (resolvedElement.search(/^[\n\s]*$/) == -1)
                             elementsResolved += resolvedElement + '\n';
                     }
                 }
@@ -2680,7 +2753,7 @@ function processTemplate(template, args) {
     return [template, statements];
 }
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
@@ -2881,19 +2954,9 @@ var TypeHelper = (function () {
                     if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
                         var propAccess = call.expression;
                         var propName = propAccess.name.getText();
-                        if ((propName == "pop" || propName == "shift") && call.arguments.length == 0) {
-                            var arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return arrType.elementType;
-                        }
-                        else if ((propName == "unshift") && call.arguments.length == 1) {
-                            var arrType = this.getCType(propAccess.expression);
-                            if (arrType && arrType instanceof ArrayType)
-                                return exports.NumberVarType;
-                        }
-                        else if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
-                            var arrType = this.getCType(propAccess.expression);
-                            if (arrType && (arrType == exports.StringVarType || arrType instanceof ArrayType))
+                        if ((propName == "indexOf" || propName == "lastIndexOf") && call.arguments.length == 1) {
+                            var exprType = this.getCType(propAccess.expression);
+                            if (exprType && exprType == exports.StringVarType)
                                 return exports.NumberVarType;
                         }
                     }
@@ -3086,6 +3149,16 @@ var TypeHelper = (function () {
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
             if (!this.arrayLiteralsTypes[node.pos])
                 this.determineArrayType(node);
+            var arrType = this.arrayLiteralsTypes[node.pos];
+            if (arrType instanceof ArrayType
+                && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression
+                && node.parent.parent.kind == ts.SyntaxKind.CallExpression) {
+                var propAccess = node.parent;
+                // if array literal is concated, we need to ensure that we
+                // have corresponding dynamic array type for the temporary variable
+                if (propAccess.name.getText() == "concat")
+                    this.ensureArrayStruct(arrType.elementType);
+            }
         }
         else if (node.kind == ts.SyntaxKind.ObjectLiteralExpression) {
             if (!this.objectLiteralsTypes[node.pos]) {
@@ -3189,9 +3262,8 @@ var TypeHelper = (function () {
                                 this.addTypePromise(varPos, call, TypePromiseKind.dynamicArrayOf);
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "concat") {
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "sort")
                         varData.isDynamicArray = true;
-                    }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
@@ -3541,7 +3613,7 @@ var TypeHelper = (function () {
 exports.TypeHelper = TypeHelper;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":13}],27:[function(require,module,exports){
+},{"./resolver":13}],28:[function(require,module,exports){
 (function (process,global){
 "use strict";
 var program_1 = require('./src/program');
@@ -3583,4 +3655,4 @@ if (typeof window !== 'undefined')
 })();
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./src/program":12,"_process":2,"fs":1}]},{},[27]);
+},{"./src/program":12,"_process":2,"fs":1}]},{},[28]);
