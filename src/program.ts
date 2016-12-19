@@ -21,6 +21,7 @@ import './standard/array/concat';
 import './standard/array/join';
 import './standard/array/indexOf';
 import './standard/array/lastIndexOf';
+import './standard/array/sort';
 
 
 export interface IScope {
@@ -43,6 +44,8 @@ class HeaderFlags {
     array_pop: boolean = false;
     array_insert: boolean = false;
     array_remove: boolean = false;
+    array_int16_t_cmp: boolean = false;
+    array_str_cmp: boolean = false;
     gc_iterator: boolean = false;
     dict: boolean = false;
     str_int16_t_cmp: boolean = false;
@@ -56,7 +59,7 @@ class HeaderFlags {
 
 @CodeTemplate(`
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
-    || headerFlags.str_pos || headerFlags.str_rpos
+    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
@@ -260,6 +263,18 @@ class HeaderFlags {
         strcat(str, numstr);
     }
 {/if}
+
+{#if headerFlags.array_int16_t_cmp}
+    int array_int16_t_cmp(const void* a, const void* b) {
+        return ( *(int*)a - *(int*)b );
+    }
+{/if}
+{#if headerFlags.array_str_cmp}
+    int array_str_cmp(const void* a, const void* b) { 
+        return strcmp(*(const char **)a, *(const char **)b);
+    }
+{/if}
+
 
 {#if headerFlags.gc_iterator}
     int16_t gc_i;

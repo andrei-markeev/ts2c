@@ -177,7 +177,7 @@ function processTemplate(template: string, args: any): [string, string] {
                     else {
                         if (elementsResolved != "")
                             elementsResolved += separator;
-                        if (statements.search(/^[\n\s]*$/) == -1)
+                        if (resolvedElement.search(/^[\n\s]*$/) == -1)
                             elementsResolved += resolvedElement + '\n';
                     }
                 }
