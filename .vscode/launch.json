@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/ts2c.js",
             "stopOnEntry": false,
-            "args": ["tests/arrays/array18.ts"],
+            "args": ["tests/strings/string6.ts"],
             "cwd": "${workspaceRoot}",
             "preLaunchTask": null,
             "runtimeExecutable": null,

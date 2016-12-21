@@ -22,6 +22,7 @@ import './standard/array/join';
 import './standard/array/indexOf';
 import './standard/array/lastIndexOf';
 import './standard/array/sort';
+import './standard/string/search';
 
 
 export interface IScope {

@@ -367,7 +367,7 @@ export class TypeHelper {
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
             return BooleanVarType;
 
-        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
+        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0) {
             return this.generateStructure(tsType, ident);
         }
 
