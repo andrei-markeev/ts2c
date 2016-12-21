@@ -125,8 +125,8 @@ process.umask = function() { return 0; };
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var types_1 = require('./types');
-var resolver_1 = require('./resolver');
+var types_1 = require("./types");
+var resolver_1 = require("./resolver");
 var MemoryManager = (function () {
     function MemoryManager(typeChecker, typeHelper) {
         this.typeChecker = typeChecker;
@@ -424,7 +424,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":13,"./types":27}],4:[function(require,module,exports){
+},{"./resolver":14,"./types":29}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -434,9 +434,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var elementaccess_1 = require('./elementaccess');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var elementaccess_1 = require("./elementaccess");
 var AssignmentHelper = (function () {
     function AssignmentHelper() {
     }
@@ -471,7 +471,7 @@ var AssignmentHelper = (function () {
     return AssignmentHelper;
 }());
 exports.AssignmentHelper = AssignmentHelper;
-var CAssignment = (function () {
+var CAssignment = CAssignment_1 = (function () {
     function CAssignment(scope, accessor, argumentExpression, type, right) {
         this.accessor = accessor;
         this.argumentExpression = argumentExpression;
@@ -503,26 +503,27 @@ var CAssignment = (function () {
             this.objInitializers = objLiteral.properties
                 .filter(function (p) { return p.kind == ts.SyntaxKind.PropertyAssignment; })
                 .map(function (p) { return p; })
-                .map(function (p) { return new CAssignment(scope, argAccessor, p.name.getText(), argType, p.initializer); });
+                .map(function (p) { return new CAssignment_1(scope, argAccessor, p.name.getText(), argType, p.initializer); });
         }
         else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression && !isTempVar) {
             this.isArrayLiteralAssignment = true;
             var arrLiteral = right;
             this.arrayLiteralSize = arrLiteral.elements.length;
-            this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment(scope, argAccessor, "" + i, argType, e); });
+            this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment_1(scope, argAccessor, "" + i, argType, e); });
         }
         else
             this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
     }
-    CAssignment = __decorate([
-        template_1.CodeTemplate("\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
-    ], CAssignment);
     return CAssignment;
 }());
+CAssignment = CAssignment_1 = __decorate([
+    template_1.CodeTemplate("\n{#if isObjLiteralAssignment}\n    {objInitializers}\n{#elseif isArrayLiteralAssignment}\n    {arrInitializers}\n{#elseif isDynamicArray && argumentExpression == null}\n    {accessor} = ((void *){expression});\n\n{#elseif argumentExpression == null}\n    {accessor} = {expression};\n\n{#elseif isStruct}\n    {accessor}->{argumentExpression} = {expression};\n\n{#elseif isDict}\n    DICT_SET({accessor}, {argumentExpression}, {expression});\n\n{#elseif isDynamicArray}\n    {accessor}->data[{argumentExpression}] = {expression};\n\n{#elseif isStaticArray}\n    {accessor}[{argumentExpression}] = {expression};\n\n{#else}\n    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n\n{/if}")
+], CAssignment);
 exports.CAssignment = CAssignment;
+var CAssignment_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27,"./elementaccess":6}],5:[function(require,module,exports){
+},{"../template":28,"../types":29,"./elementaccess":6}],5:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -532,15 +533,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var elementaccess_1 = require('./elementaccess');
-var log_1 = require('../standard/console/log');
-var resolver_1 = require('../resolver');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var elementaccess_1 = require("./elementaccess");
+var log_1 = require("../standard/console/log");
+var resolver_1 = require("../resolver");
 var CCallExpression = (function () {
     function CCallExpression(scope, call) {
         this.propName = null;
         this.printfCalls = [];
+        this.printfCall = null;
         this.funcName = call.expression.getText();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         this.standardCall = resolver_1.StandardCallHelper.createTemplate(scope, call);
@@ -554,10 +556,10 @@ var CCallExpression = (function () {
             var propAccess = call.expression;
             this.propName = propAccess.name.getText();
             this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-            if (this.funcName == "console.log") {
-                for (var i = 0; i < call.arguments.length; i++) {
+            if (this.funcName == "console.log" && call.arguments.length) {
+                for (var i = 0; i < call.arguments.length - 1; i++)
                     this.printfCalls.push(log_1.ConsoleLogHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
-                }
+                this.printfCall = log_1.ConsoleLogHelper.create(scope, call.arguments[call.arguments.length - 1], true);
                 scope.root.headerFlags.printf = true;
             }
             else if ((this.propName == "indexOf" || this.propName == "lastIndexOf") && this.arguments.length == 1) {
@@ -573,15 +575,15 @@ var CCallExpression = (function () {
             }
         }
     }
-    CCallExpression = __decorate([
-        template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"lastIndexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif printfCalls.length == 1}\n    {printfCalls}\n{#elseif printfCalls.length > 1}\n    {\n        {printfCalls {    }=>{this}\n}\n    }\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
-    ], CCallExpression);
     return CCallExpression;
 }());
+CCallExpression = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if printfCalls.length}\n        {printfCalls => {this}\n}\n    {/if}\n{/statements}\n{#if standardCall}\n    {standardCall}\n{#elseif propName == \"indexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif propName == \"lastIndexOf\" && arguments.length == 1}\n    {funcName}({varAccess}, {arg1})\n{#elseif printfCall}\n    {printfCall}\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
+], CCallExpression);
 exports.CCallExpression = CCallExpression;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../resolver":13,"../standard/console/log":25,"../template":26,"../types":27,"./elementaccess":6}],6:[function(require,module,exports){
+},{"../resolver":14,"../standard/console/log":26,"../template":28,"../types":29,"./elementaccess":6}],6:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -591,9 +593,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var CElementAccess = (function () {
+var template_1 = require("../template");
+var types_1 = require("../types");
+var CElementAccess = CElementAccess_1 = (function () {
     function CElementAccess(scope, node) {
         var type = null;
         var elementAccess = null;
@@ -608,7 +610,7 @@ var CElementAccess = (function () {
             if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
                 elementAccess = propAccess.expression.getText();
             else
-                elementAccess = new CElementAccess(scope, propAccess.expression);
+                elementAccess = new CElementAccess_1(scope, propAccess.expression);
             argumentExpression = propAccess.name.getText();
         }
         else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
@@ -617,7 +619,7 @@ var CElementAccess = (function () {
             if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
                 elementAccess = elemAccess.expression.getText();
             else
-                elementAccess = new CElementAccess(scope, elemAccess.expression);
+                elementAccess = new CElementAccess_1(scope, elemAccess.expression);
             if (type instanceof types_1.StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                 var ident = elemAccess.argumentExpression.getText().slice(1, -1);
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
@@ -634,11 +636,11 @@ var CElementAccess = (function () {
         }
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
-    CElementAccess = __decorate([
-        template_1.CodeTemplate("{simpleAccessor}", [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
-    ], CElementAccess);
     return CElementAccess;
 }());
+CElementAccess = CElementAccess_1 = __decorate([
+    template_1.CodeTemplate("{simpleAccessor}", [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
+], CElementAccess);
 exports.CElementAccess = CElementAccess;
 var CSimpleElementAccess = (function () {
     function CSimpleElementAccess(scope, type, elementAccess, argumentExpression) {
@@ -659,15 +661,16 @@ var CSimpleElementAccess = (function () {
         if (this.isString && this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;
     }
-    CSimpleElementAccess = __decorate([
-        template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
-    ], CSimpleElementAccess);
     return CSimpleElementAccess;
 }());
+CSimpleElementAccess = __decorate([
+    template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
+], CSimpleElementAccess);
 exports.CSimpleElementAccess = CSimpleElementAccess;
+var CElementAccess_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27}],7:[function(require,module,exports){
+},{"../template":28,"../types":29}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -677,9 +680,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var variable_1 = require('./variable');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var variable_1 = require("./variable");
 var CBinaryExpression = (function () {
     function CBinaryExpression(scope, node) {
         var leftType = scope.root.typeHelper.getCType(node.left);
@@ -688,11 +691,11 @@ var CBinaryExpression = (function () {
         var right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
     }
-    CBinaryExpression = __decorate([
-        template_1.CodeTemplate("{expression}", ts.SyntaxKind.BinaryExpression)
-    ], CBinaryExpression);
     return CBinaryExpression;
 }());
+CBinaryExpression = __decorate([
+    template_1.CodeTemplate("{expression}", ts.SyntaxKind.BinaryExpression)
+], CBinaryExpression);
 var CSimpleBinaryExpression = (function () {
     function CSimpleBinaryExpression(scope, left, leftType, right, rightType, operatorKind, node) {
         this.left = left;
@@ -781,11 +784,11 @@ var CSimpleBinaryExpression = (function () {
         }
         var _a;
     }
-    CSimpleBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
-    ], CSimpleBinaryExpression);
     return CSimpleBinaryExpression;
 }());
+CSimpleBinaryExpression = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
+], CSimpleBinaryExpression);
 exports.CSimpleBinaryExpression = CSimpleBinaryExpression;
 var CUnaryExpression = (function () {
     function CUnaryExpression(scope, node) {
@@ -815,34 +818,34 @@ var CUnaryExpression = (function () {
         this.nodeText = node.getText();
         var _a;
     }
-    CUnaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif replacedWithCall}\n    {call}({operand}){callCondition}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
-    ], CUnaryExpression);
     return CUnaryExpression;
 }());
+CUnaryExpression = __decorate([
+    template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif replacedWithCall}\n    {call}({operand}){callCondition}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
+], CUnaryExpression);
 var CTernaryExpression = (function () {
     function CTernaryExpression(scope, node) {
         this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.condition);
         this.whenTrue = template_1.CodeTemplateFactory.createForNode(scope, node.whenTrue);
         this.whenFalse = template_1.CodeTemplateFactory.createForNode(scope, node.whenFalse);
     }
-    CTernaryExpression = __decorate([
-        template_1.CodeTemplate("{condition} ? {whenTrue} : {whenFalse}", ts.SyntaxKind.ConditionalExpression)
-    ], CTernaryExpression);
     return CTernaryExpression;
 }());
+CTernaryExpression = __decorate([
+    template_1.CodeTemplate("{condition} ? {whenTrue} : {whenFalse}", ts.SyntaxKind.ConditionalExpression)
+], CTernaryExpression);
 var CGroupingExpression = (function () {
     function CGroupingExpression(scope, node) {
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
     }
-    CGroupingExpression = __decorate([
-        template_1.CodeTemplate("({expression})", ts.SyntaxKind.ParenthesizedExpression)
-    ], CGroupingExpression);
     return CGroupingExpression;
 }());
+CGroupingExpression = __decorate([
+    template_1.CodeTemplate("({expression})", ts.SyntaxKind.ParenthesizedExpression)
+], CGroupingExpression);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27,"./variable":11}],8:[function(require,module,exports){
+},{"../template":28,"../types":29,"./variable":11}],8:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -852,8 +855,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var variable_1 = require('./variable');
+var template_1 = require("../template");
+var variable_1 = require("./variable");
 var CFunctionPrototype = (function () {
     function CFunctionPrototype(scope, node) {
         this.parameters = [];
@@ -861,11 +864,11 @@ var CFunctionPrototype = (function () {
         this.name = node.name.getText();
         this.parameters = node.parameters.map(function (p) { return new variable_1.CVariable(scope, p.name.getText(), p.name, { removeStorageSpecifier: true }); });
     }
-    CFunctionPrototype = __decorate([
-        template_1.CodeTemplate("{returnType} {name}({parameters {, }=> {this}});")
-    ], CFunctionPrototype);
     return CFunctionPrototype;
 }());
+CFunctionPrototype = __decorate([
+    template_1.CodeTemplate("{returnType} {name}({parameters {, }=> {this}});")
+], CFunctionPrototype);
 exports.CFunctionPrototype = CFunctionPrototype;
 var CFunction = (function () {
     function CFunction(root, funcDecl) {
@@ -881,7 +884,7 @@ var CFunction = (function () {
         this.parameters = funcDecl.parameters.map(function (p) { return new variable_1.CVariable(_this, p.name.getText(), p.name, { removeStorageSpecifier: true }); });
         this.variables = [];
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
-        var _loop_1 = function(gcVarName) {
+        var _loop_1 = function (gcVarName) {
             if (root.variables.filter(function (v) { return v.name == gcVarName; }).length)
                 return "continue";
             var gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
@@ -896,15 +899,15 @@ var CFunction = (function () {
             this.destructors = new variable_1.CVariableDestructors(this, funcDecl);
         }
     }
-    CFunction = __decorate([
-        template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
-    ], CFunction);
     return CFunction;
 }());
+CFunction = __decorate([
+    template_1.CodeTemplate("\n{returnType} {name}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}", ts.SyntaxKind.FunctionDeclaration)
+], CFunction);
 exports.CFunction = CFunction;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"./variable":11}],9:[function(require,module,exports){
+},{"../template":28,"./variable":11}],9:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -914,10 +917,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var variable_1 = require('./variable');
-var assignment_1 = require('./assignment');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var variable_1 = require("./variable");
+var assignment_1 = require("./assignment");
 var CArrayLiteralExpression = (function () {
     function CArrayLiteralExpression(scope, node) {
         var arrSize = node.elements.length;
@@ -968,11 +971,11 @@ var CArrayLiteralExpression = (function () {
         else
             this.expression = "/* Unsupported use of array literal expression */";
     }
-    CArrayLiteralExpression = __decorate([
-        template_1.CodeTemplate("{expression}", ts.SyntaxKind.ArrayLiteralExpression)
-    ], CArrayLiteralExpression);
     return CArrayLiteralExpression;
 }());
+CArrayLiteralExpression = __decorate([
+    template_1.CodeTemplate("{expression}", ts.SyntaxKind.ArrayLiteralExpression)
+], CArrayLiteralExpression);
 var CObjectLiteralExpression = (function () {
     function CObjectLiteralExpression(scope, node) {
         var _this = this;
@@ -994,39 +997,40 @@ var CObjectLiteralExpression = (function () {
         else
             this.expression = "/* Unsupported use of object literal expression */";
     }
-    CObjectLiteralExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if varName}\n        {varName} = malloc(sizeof(*{varName}));\n        assert({varName} != NULL);\n        {initializers}\n    {/if}\n{/statements}\n{expression}", ts.SyntaxKind.ObjectLiteralExpression)
-    ], CObjectLiteralExpression);
     return CObjectLiteralExpression;
 }());
+CObjectLiteralExpression = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if varName}\n        {varName} = malloc(sizeof(*{varName}));\n        assert({varName} != NULL);\n        {initializers}\n    {/if}\n{/statements}\n{expression}", ts.SyntaxKind.ObjectLiteralExpression)
+], CObjectLiteralExpression);
 var CString = (function () {
     function CString(scope, value) {
         var s = typeof value === 'string' ? '"' + value + '"' : value.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, function (match, g1) { return String.fromCharCode(parseInt(g1, 16)); });
+        s = s.replace(/\\/g, '\\\\');
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
             this.value = s;
     }
-    CString = __decorate([
-        template_1.CodeTemplate("{value}", ts.SyntaxKind.StringLiteral)
-    ], CString);
     return CString;
 }());
+CString = __decorate([
+    template_1.CodeTemplate("{value}", ts.SyntaxKind.StringLiteral)
+], CString);
 exports.CString = CString;
 var CNumber = (function () {
     function CNumber(scope, value) {
         this.value = value.getText();
     }
-    CNumber = __decorate([
-        template_1.CodeTemplate("{value}", [ts.SyntaxKind.NumericLiteral])
-    ], CNumber);
     return CNumber;
 }());
+CNumber = __decorate([
+    template_1.CodeTemplate("{value}", [ts.SyntaxKind.NumericLiteral])
+], CNumber);
 exports.CNumber = CNumber;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27,"./assignment":4,"./variable":11}],10:[function(require,module,exports){
+},{"../template":28,"../types":29,"./assignment":4,"./variable":11}],10:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1036,48 +1040,48 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var variable_1 = require('./variable');
-var elementaccess_1 = require('./elementaccess');
-var assignment_1 = require('./assignment');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var variable_1 = require("./variable");
+var elementaccess_1 = require("./elementaccess");
+var assignment_1 = require("./assignment");
 var CBreakStatement = (function () {
     function CBreakStatement(scope, node) {
     }
-    CBreakStatement = __decorate([
-        template_1.CodeTemplate("break;\n", ts.SyntaxKind.BreakStatement)
-    ], CBreakStatement);
     return CBreakStatement;
 }());
+CBreakStatement = __decorate([
+    template_1.CodeTemplate("break;\n", ts.SyntaxKind.BreakStatement)
+], CBreakStatement);
 exports.CBreakStatement = CBreakStatement;
 var CContinueStatement = (function () {
     function CContinueStatement(scope, node) {
     }
-    CContinueStatement = __decorate([
-        template_1.CodeTemplate("continue;\n", ts.SyntaxKind.ContinueStatement)
-    ], CContinueStatement);
     return CContinueStatement;
 }());
+CContinueStatement = __decorate([
+    template_1.CodeTemplate("continue;\n", ts.SyntaxKind.ContinueStatement)
+], CContinueStatement);
 exports.CContinueStatement = CContinueStatement;
 var CEmptyStatement = (function () {
     function CEmptyStatement(scope, node) {
     }
-    CEmptyStatement = __decorate([
-        template_1.CodeTemplate(";\n", ts.SyntaxKind.EmptyStatement)
-    ], CEmptyStatement);
     return CEmptyStatement;
 }());
+CEmptyStatement = __decorate([
+    template_1.CodeTemplate(";\n", ts.SyntaxKind.EmptyStatement)
+], CEmptyStatement);
 exports.CEmptyStatement = CEmptyStatement;
 var CReturnStatement = (function () {
     function CReturnStatement(scope, node) {
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new variable_1.CVariableDestructors(scope, node);
     }
-    CReturnStatement = __decorate([
-        template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
-    ], CReturnStatement);
     return CReturnStatement;
 }());
+CReturnStatement = __decorate([
+    template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
+], CReturnStatement);
 exports.CReturnStatement = CReturnStatement;
 var CIfStatement = (function () {
     function CIfStatement(scope, node) {
@@ -1086,33 +1090,33 @@ var CIfStatement = (function () {
         this.hasElseBlock = !!node.elseStatement;
         this.elseBlock = this.hasElseBlock && new CBlock(scope, node.elseStatement);
     }
-    CIfStatement = __decorate([
-        template_1.CodeTemplate("\nif ({condition})\n{thenBlock}\n{#if hasElseBlock}\n    else\n    {elseBlock}\n{/if}\n", ts.SyntaxKind.IfStatement)
-    ], CIfStatement);
     return CIfStatement;
 }());
+CIfStatement = __decorate([
+    template_1.CodeTemplate("\nif ({condition})\n{thenBlock}\n{#if hasElseBlock}\n    else\n    {elseBlock}\n{/if}\n", ts.SyntaxKind.IfStatement)
+], CIfStatement);
 exports.CIfStatement = CIfStatement;
 var CWhileStatement = (function () {
     function CWhileStatement(scope, node) {
         this.block = new CBlock(scope, node.statement);
         this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
     }
-    CWhileStatement = __decorate([
-        template_1.CodeTemplate("\nwhile ({condition})\n{block}", ts.SyntaxKind.WhileStatement)
-    ], CWhileStatement);
     return CWhileStatement;
 }());
+CWhileStatement = __decorate([
+    template_1.CodeTemplate("\nwhile ({condition})\n{block}", ts.SyntaxKind.WhileStatement)
+], CWhileStatement);
 exports.CWhileStatement = CWhileStatement;
 var CDoWhileStatement = (function () {
     function CDoWhileStatement(scope, node) {
         this.block = new CBlock(scope, node.statement);
         this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
     }
-    CDoWhileStatement = __decorate([
-        template_1.CodeTemplate("\ndo\n{block}\nwhile ({condition});", ts.SyntaxKind.DoStatement)
-    ], CDoWhileStatement);
     return CDoWhileStatement;
 }());
+CDoWhileStatement = __decorate([
+    template_1.CodeTemplate("\ndo\n{block}\nwhile ({condition});", ts.SyntaxKind.DoStatement)
+], CDoWhileStatement);
 exports.CDoWhileStatement = CDoWhileStatement;
 var CForStatement = (function () {
     function CForStatement(scope, node) {
@@ -1128,11 +1132,11 @@ var CForStatement = (function () {
         this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.condition);
         this.increment = template_1.CodeTemplateFactory.createForNode(scope, node.incrementor);
     }
-    CForStatement = __decorate([
-        template_1.CodeTemplate("\n{#if varDecl}\n    {varDecl}\n{/if}\nfor ({init};{condition};{increment})\n{block}", ts.SyntaxKind.ForStatement)
-    ], CForStatement);
     return CForStatement;
 }());
+CForStatement = __decorate([
+    template_1.CodeTemplate("\n{#if varDecl}\n    {varDecl}\n{/if}\nfor ({init};{condition};{increment})\n{block}", ts.SyntaxKind.ForStatement)
+], CForStatement);
 exports.CForStatement = CForStatement;
 var CForOfStatement = (function () {
     function CForOfStatement(scope, node) {
@@ -1165,11 +1169,11 @@ var CForOfStatement = (function () {
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
     }
-    CForOfStatement = __decorate([
-        template_1.CodeTemplate("\n{#if isDynamicArray}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)\n    {\n        {init} = {cast}{arrayAccess}->data[{iteratorVarName}];\n        {statements {    }=> {this}}\n    }\n{#else}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)\n    {\n        {init} = {cast}{arrayAccess}[{iteratorVarName}];\n        {statements {    }=> {this}}\n    }\n{/if}\n", ts.SyntaxKind.ForOfStatement)
-    ], CForOfStatement);
     return CForOfStatement;
 }());
+CForOfStatement = __decorate([
+    template_1.CodeTemplate("\n{#if isDynamicArray}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)\n    {\n        {init} = {cast}{arrayAccess}->data[{iteratorVarName}];\n        {statements {    }=> {this}}\n    }\n{#else}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)\n    {\n        {init} = {cast}{arrayAccess}[{iteratorVarName}];\n        {statements {    }=> {this}}\n    }\n{/if}\n", ts.SyntaxKind.ForOfStatement)
+], CForOfStatement);
 exports.CForOfStatement = CForOfStatement;
 var CForInStatement = (function () {
     function CForInStatement(scope, node) {
@@ -1202,11 +1206,11 @@ var CForInStatement = (function () {
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
     }
-    CForInStatement = __decorate([
-        template_1.CodeTemplate("\nfor ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)\n{\n    {init} = {varAccess}->index->data[{iteratorVarName}];\n    {statements {    }=> {this}}\n}\n", ts.SyntaxKind.ForInStatement)
-    ], CForInStatement);
     return CForInStatement;
 }());
+CForInStatement = __decorate([
+    template_1.CodeTemplate("\nfor ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)\n{\n    {init} = {varAccess}->index->data[{iteratorVarName}];\n    {statements {    }=> {this}}\n}\n", ts.SyntaxKind.ForInStatement)
+], CForInStatement);
 exports.CForInStatement = CForInStatement;
 var CProperty = (function () {
     function CProperty(varAccess, index, name, init) {
@@ -1231,11 +1235,11 @@ var CExpressionStatement = (function () {
         if (!this.expression)
             this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
     }
-    CExpressionStatement = __decorate([
-        template_1.CodeTemplate("{expression}{SemicolonCR}", ts.SyntaxKind.ExpressionStatement)
-    ], CExpressionStatement);
     return CExpressionStatement;
 }());
+CExpressionStatement = __decorate([
+    template_1.CodeTemplate("{expression}{SemicolonCR}", ts.SyntaxKind.ExpressionStatement)
+], CExpressionStatement);
 exports.CExpressionStatement = CExpressionStatement;
 var CBlock = (function () {
     function CBlock(scope, node) {
@@ -1252,15 +1256,15 @@ var CBlock = (function () {
         else
             this.statements.push(template_1.CodeTemplateFactory.createForNode(this, node));
     }
-    CBlock = __decorate([
-        template_1.CodeTemplate("\n{#if statements.length > 1 || variables.length > 0}\n    {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n    }\n{/if}\n{#if statements.length == 1 && variables.length == 0}\n        {statements}\n{/if}\n{#if statements.length == 0 && variables.length == 0}\n        /* no statements */;\n{/if}", ts.SyntaxKind.Block)
-    ], CBlock);
     return CBlock;
 }());
+CBlock = __decorate([
+    template_1.CodeTemplate("\n{#if statements.length > 1 || variables.length > 0}\n    {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n    }\n{/if}\n{#if statements.length == 1 && variables.length == 0}\n        {statements}\n{/if}\n{#if statements.length == 0 && variables.length == 0}\n        /* no statements */;\n{/if}", ts.SyntaxKind.Block)
+], CBlock);
 exports.CBlock = CBlock;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27,"./assignment":4,"./elementaccess":6,"./variable":11}],11:[function(require,module,exports){
+},{"../template":28,"../types":29,"./assignment":4,"./elementaccess":6,"./variable":11}],11:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1270,28 +1274,28 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../template');
-var types_1 = require('../types');
-var assignment_1 = require('./assignment');
+var template_1 = require("../template");
+var types_1 = require("../types");
+var assignment_1 = require("./assignment");
 var CVariableStatement = (function () {
     function CVariableStatement(scope, node) {
         this.declarations = node.declarationList.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
     }
-    CVariableStatement = __decorate([
-        template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableStatement)
-    ], CVariableStatement);
     return CVariableStatement;
 }());
+CVariableStatement = __decorate([
+    template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableStatement)
+], CVariableStatement);
 exports.CVariableStatement = CVariableStatement;
 var CVariableDeclarationList = (function () {
     function CVariableDeclarationList(scope, node) {
         this.declarations = node.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
     }
-    CVariableDeclarationList = __decorate([
-        template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableDeclarationList)
-    ], CVariableDeclarationList);
     return CVariableDeclarationList;
 }());
+CVariableDeclarationList = __decorate([
+    template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableDeclarationList)
+], CVariableDeclarationList);
 exports.CVariableDeclarationList = CVariableDeclarationList;
 var CVariableDeclaration = (function () {
     function CVariableDeclaration(scope, varDecl) {
@@ -1304,11 +1308,11 @@ var CVariableDeclaration = (function () {
         if (varDecl.initializer)
             this.initializer = assignment_1.AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
     }
-    CVariableDeclaration = __decorate([
-        template_1.CodeTemplate("\n{allocator}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
-    ], CVariableDeclaration);
     return CVariableDeclaration;
 }());
+CVariableDeclaration = __decorate([
+    template_1.CodeTemplate("\n{allocator}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
+], CVariableDeclaration);
 exports.CVariableDeclaration = CVariableDeclaration;
 var CVariableAllocation = (function () {
     function CVariableAllocation(scope, varName, varType, refNode) {
@@ -1331,11 +1335,11 @@ var CVariableAllocation = (function () {
         if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
     }
-    CVariableAllocation = __decorate([
-        template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateDict}\n    DICT_CREATE({varName}, {initialCapacity});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n")
-    ], CVariableAllocation);
     return CVariableAllocation;
 }());
+CVariableAllocation = __decorate([
+    template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateDict}\n    DICT_CREATE({varName}, {initialCapacity});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n")
+], CVariableAllocation);
 exports.CVariableAllocation = CVariableAllocation;
 var CVariableDestructors = (function () {
     function CVariableDestructors(scope, node) {
@@ -1368,11 +1372,11 @@ var CVariableDestructors = (function () {
             _this.destructors.push(r.varName);
         });
     }
-    CVariableDestructors = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {destructors => free({this});\n}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
-    ], CVariableDestructors);
     return CVariableDestructors;
 }());
+CVariableDestructors = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {destructors => free({this});\n}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
+], CVariableDestructors);
 exports.CVariableDestructors = CVariableDestructors;
 var CVariable = (function () {
     function CVariable(scope, name, typeSource, options) {
@@ -1403,7 +1407,7 @@ var CVariable = (function () {
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":26,"../types":27,"./assignment":4}],12:[function(require,module,exports){
+},{"../template":28,"../types":29,"./assignment":4}],12:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1413,27 +1417,28 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var memory_1 = require('./memory');
-var types_1 = require('./types');
-var template_1 = require('./template');
-var function_1 = require('./nodes/function');
-var variable_1 = require('./nodes/variable');
+var memory_1 = require("./memory");
+var types_1 = require("./types");
+var template_1 = require("./template");
+var function_1 = require("./nodes/function");
+var variable_1 = require("./nodes/variable");
 // these imports are here only because it is necessary to run decorators
-require('./nodes/statements');
-require('./nodes/expressions');
-require('./nodes/call');
-require('./nodes/literals');
-require('./standard/array/push');
-require('./standard/array/pop');
-require('./standard/array/unshift');
-require('./standard/array/shift');
-require('./standard/array/splice');
-require('./standard/array/slice');
-require('./standard/array/concat');
-require('./standard/array/join');
-require('./standard/array/indexOf');
-require('./standard/array/lastIndexOf');
-require('./standard/array/sort');
+require("./nodes/statements");
+require("./nodes/expressions");
+require("./nodes/call");
+require("./nodes/literals");
+require("./standard/array/push");
+require("./standard/array/pop");
+require("./standard/array/unshift");
+require("./standard/array/shift");
+require("./standard/array/splice");
+require("./standard/array/slice");
+require("./standard/array/concat");
+require("./standard/array/join");
+require("./standard/array/indexOf");
+require("./standard/array/lastIndexOf");
+require("./standard/array/sort");
+require("./standard/string/search");
 var HeaderFlags = (function () {
     function HeaderFlags() {
         this.strings = false;
@@ -1505,15 +1510,228 @@ var CProgram = (function () {
         }
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
-    CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int*)a - *(int*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
-    ], CProgram);
     return CProgram;
 }());
+CProgram = __decorate([
+    template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int*)a - *(int*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+], CProgram);
 exports.CProgram = CProgram;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":10,"./nodes/variable":11,"./standard/array/concat":14,"./standard/array/indexOf":15,"./standard/array/join":16,"./standard/array/lastIndexOf":17,"./standard/array/pop":18,"./standard/array/push":19,"./standard/array/shift":20,"./standard/array/slice":21,"./standard/array/sort":22,"./standard/array/splice":23,"./standard/array/unshift":24,"./template":26,"./types":27}],13:[function(require,module,exports){
+},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":10,"./nodes/variable":11,"./standard/array/concat":15,"./standard/array/indexOf":16,"./standard/array/join":17,"./standard/array/lastIndexOf":18,"./standard/array/pop":19,"./standard/array/push":20,"./standard/array/shift":21,"./standard/array/slice":22,"./standard/array/sort":23,"./standard/array/splice":24,"./standard/array/unshift":25,"./standard/string/search":27,"./template":28,"./types":29}],13:[function(require,module,exports){
+"use strict";
+var RegexCompiler = (function () {
+    function RegexCompiler() {
+    }
+    RegexCompiler.prototype.optimizeTokens = function (variants) {
+        for (var _i = 0, variants_1 = variants; _i < variants_1.length; _i++) {
+            var tokens = variants_1[_i];
+            for (var i = 0; i < tokens.length - 1; i++) {
+                if (tokens[i].chars
+                    && tokens[i + 1].chars
+                    && tokens[i].chars.length == tokens[i + 1].chars.length
+                    && tokens[i].chars.every(function (v) { return tokens[i + 1].chars.indexOf(v) != -1; })
+                    && tokens[i].wildCard
+                    && !tokens[i + 1].wildCard) {
+                    var t = tokens[i + 1];
+                    tokens[i + 1] = tokens[i];
+                    tokens[i] = t;
+                }
+            }
+        }
+        return variants;
+    };
+    RegexCompiler.prototype.tokenize = function (template, nested) {
+        template += ' '; // add dummy to the end so less checks in tokenize loop
+        var i = 0;
+        var variants = [];
+        var tokens = [];
+        var group = 0;
+        variants.push(tokens);
+        var getCharsMode = null;
+        var getCharsToken = null;
+        while (i < template.length - 1) {
+            if (getCharsMode) {
+                if (template[i] == '\\') {
+                    i++;
+                    if (template[i] == 'd')
+                        getCharsToken[getCharsMode].push(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+                    else if (template[i] == 'n')
+                        getCharsToken[getCharsMode].push('\n');
+                    else if (template[i] == 's')
+                        getCharsToken[getCharsMode].push('\t', ' ');
+                    else
+                        getCharsToken[getCharsMode].push(template[i]);
+                }
+                else if (template[i] == ']') {
+                    getCharsMode = null;
+                }
+                else if (template[i + 1] == '-') {
+                    var ch = template[i];
+                    i++;
+                    i++;
+                    while (ch.charCodeAt(0) <= template[i].charCodeAt(0)) {
+                        getCharsToken[getCharsMode].push(ch);
+                        ch = String.fromCharCode(ch.charCodeAt(0) + 1);
+                    }
+                }
+                else
+                    getCharsToken[getCharsMode].push(template[i]);
+            }
+            else if (template[i] == '\\') {
+                i++;
+                if (template[i] == 'd')
+                    tokens.push({ chars: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] });
+                else if (template[i] == 'n')
+                    tokens.push({ chars: ['\n'] });
+                else if (template[i] == 's')
+                    tokens.push({ chars: ['\t', ' '] });
+                else
+                    tokens.push({ chars: [template[i]] });
+            }
+            else if (template[i] == '*') {
+                var lastToken = tokens[tokens.length - 1];
+                lastToken.zeroOrMore = true;
+                lastToken.wildCard = true;
+            }
+            else if (template[i] == '+') {
+                var lastToken = tokens[tokens.length - 1];
+                var newToken = {
+                    zeroOrMore: true,
+                    wildCard: true,
+                    chars: lastToken.chars,
+                    anyChar: lastToken.anyChar,
+                    tokens: lastToken.tokens,
+                    group: lastToken.group
+                };
+                tokens.push(newToken);
+            }
+            else if (template[i] == '?') {
+                var lastToken = tokens[tokens.length - 1];
+                lastToken.zeroOrOne = true;
+                lastToken.wildCard = true;
+            }
+            else if (template[i] == '.') {
+                tokens.push({ anyChar: true, except: [], wildCard: true });
+            }
+            else if (template[i] == '[' && template[i + 1] == '^') {
+                i++;
+                tokens.push({ anyChar: true, except: [] });
+                getCharsMode = 'except';
+                getCharsToken = tokens[tokens.length - 1];
+            }
+            else if (template[i] == '[') {
+                tokens.push({ chars: [] });
+                getCharsMode = 'chars';
+                getCharsToken = tokens[tokens.length - 1];
+            }
+            else if (template[i] == '|') {
+                tokens = [];
+                group = 0;
+                variants.push(tokens);
+            }
+            else if (template[i] == '(') {
+                var _a = this.tokenize(template.slice(i + 1), true), last_i = _a[0], nested_variants = _a[1];
+                tokens.push({ tokens: nested_variants, group: group++ });
+                i = i + 1 + last_i;
+            }
+            else if (nested && template[i] == ')') {
+                return [i, this.optimizeTokens(variants)];
+            }
+            else
+                tokens.push({ chars: [template[i]] });
+            i++;
+        }
+        return this.optimizeTokens(variants);
+    };
+    RegexCompiler.prototype.preprocessRegex = function (template) {
+        var fixedStart = false;
+        var fixedEnd = false;
+        if (template[0] == '^') {
+            fixedStart = true;
+            template = template.slice(1);
+        }
+        if (template[template.length - 1] == '$') {
+            fixedEnd = true;
+            template = template.slice(0, -1);
+        }
+        var variants = this.tokenize(template, false);
+        return [fixedStart, fixedEnd, variants];
+    };
+    RegexCompiler.prototype.setupNextStep = function (stmNode, token, nextPos) {
+        if (!token)
+            return;
+        if (token.chars) {
+            for (var _i = 0, _a = token.chars; _i < _a.length; _i++) {
+                var ch = _a[_i];
+                stmNode.chars[ch] = nextPos;
+            }
+        }
+        else if (token.anyChar) {
+            stmNode.anyChar = nextPos;
+            stmNode.except = {};
+            for (var _b = 0, _c = token.except; _b < _c.length; _b++) {
+                var ch = _c[_b];
+                stmNode.except[ch] = true;
+            }
+        }
+        else if (token.tokens) {
+            stmNode.stm = this.generateRegexMachines(true, false, token.tokens);
+            stmNode.group = token.group;
+            stmNode.next = nextPos;
+        }
+    };
+    RegexCompiler.prototype.generateRegexMachines = function (fixedStart, fixedEnd, variants) {
+        var stm_variants = [];
+        for (var _i = 0, variants_2 = variants; _i < variants_2.length; _i++) {
+            var tokens = variants_2[_i];
+            var stm = {
+                states: [],
+                fixedStart: fixedStart,
+                fixedEnd: fixedEnd,
+                final: 0
+            };
+            for (var i = 0; i < tokens.length; i++) {
+                stm.states.push({ chars: {} });
+                if (tokens[i].zeroOrMore) {
+                    this.setupNextStep(stm.states[i], tokens[i], i);
+                    var n = i + 1;
+                    // jump to one of next wildCards if match
+                    while (tokens[n] && tokens[n].wildCard) {
+                        this.setupNextStep(stm.states[i], tokens[n], tokens[n].zeroOrMore ? n : n + 1);
+                        n++;
+                    }
+                    this.setupNextStep(stm.states[i], tokens[n], n + 1);
+                }
+                else if (tokens[i].zeroOrOne) {
+                    this.setupNextStep(stm.states[i], tokens[i], i + 1);
+                    var n = i + 1;
+                    // jump to one of next wildCards if match
+                    while (tokens[n] && tokens[n].wildCard) {
+                        this.setupNextStep(stm.states[i], tokens[n], tokens[n].zeroOrMore ? n : n + 1);
+                        n++;
+                    }
+                    this.setupNextStep(stm.states[i], tokens[n], n + 1);
+                }
+                else
+                    this.setupNextStep(stm.states[i], tokens[i], i + 1);
+            }
+            stm.final = tokens.length;
+            while (tokens[stm.final - 1] && tokens[stm.final - 1].wildCard)
+                stm.final--;
+            stm_variants.push(stm);
+        }
+        return stm_variants;
+    };
+    RegexCompiler.prototype.compile = function (template) {
+        var _a = this.preprocessRegex(template), fixedStart = _a[0], fixedEnd = _a[1], variants = _a[2];
+        return this.generateRegexMachines(fixedStart, fixedEnd, variants);
+    };
+    return RegexCompiler;
+}());
+exports.RegexCompiler = RegexCompiler;
+
+},{}],14:[function(require,module,exports){
 "use strict";
 var standardCallResolvers = [];
 function StandardCallResolver(target) {
@@ -1560,7 +1778,7 @@ var StandardCallHelper = (function () {
 }());
 exports.StandardCallHelper = StandardCallHelper;
 
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1570,11 +1788,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayConcatResolver = (function () {
     function ArrayConcatResolver() {
     }
@@ -1601,11 +1819,11 @@ var ArrayConcatResolver = (function () {
     ArrayConcatResolver.prototype.getTempVarName = function (typeHelper, node) {
         return "tmp_array";
     };
-    ArrayConcatResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayConcatResolver);
     return ArrayConcatResolver;
 }());
+ArrayConcatResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayConcatResolver);
 var CArrayConcat = (function () {
     function CArrayConcat(scope, call) {
         var _this = this;
@@ -1629,11 +1847,11 @@ var CArrayConcat = (function () {
         }
         scope.root.headerFlags.array = true;
     }
-    CArrayConcat = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {sizes{+}=>{this}}, 0);\n        {tempVarName}->size = {tempVarName}->capacity;\n        {indexVarName} = 0;\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
-    ], CArrayConcat);
     return CArrayConcat;
 }());
+CArrayConcat = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {sizes{+}=>{this}}, 0);\n        {tempVarName}->size = {tempVarName}->capacity;\n        {indexVarName} = 0;\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+], CArrayConcat);
 var CGetSize = (function () {
     function CGetSize(scope, valueNode, value) {
         this.value = value;
@@ -1641,11 +1859,11 @@ var CGetSize = (function () {
         this.isArray = type instanceof types_1.ArrayType;
         this.staticArraySize = type instanceof types_1.ArrayType && type.capacity;
     }
-    CGetSize = __decorate([
-        template_1.CodeTemplate("\n{#if staticArraySize}\n    {staticArraySize}\n{#elseif isArray}\n    {value}->size\n{#else}\n    1\n{/if}")
-    ], CGetSize);
     return CGetSize;
 }());
+CGetSize = __decorate([
+    template_1.CodeTemplate("\n{#if staticArraySize}\n    {staticArraySize}\n{#elseif isArray}\n    {value}->size\n{#else}\n    1\n{/if}")
+], CGetSize);
 var CConcatValue = (function () {
     function CConcatValue(scope, varAccess, valueNode, value, indexVarName) {
         this.varAccess = varAccess;
@@ -1659,14 +1877,14 @@ var CConcatValue = (function () {
             scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
         }
     }
-    CConcatValue = __decorate([
-        template_1.CodeTemplate("\n{#if staticArraySize}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++)\n        {varAccess}->data[{indexVarName}++] = {value}[{iteratorVarName}];\n{#elseif isArray}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {value}->size; {iteratorVarName}++)\n        {varAccess}->data[{indexVarName}++] = {value}->data[{iteratorVarName}];\n{#else}\n    {varAccess}->data[{indexVarName}++] = {value};\n{/if}\n")
-    ], CConcatValue);
     return CConcatValue;
 }());
+CConcatValue = __decorate([
+    template_1.CodeTemplate("\n{#if staticArraySize}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++)\n        {varAccess}->data[{indexVarName}++] = {value}[{iteratorVarName}];\n{#elseif isArray}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {value}->size; {iteratorVarName}++)\n        {varAccess}->data[{indexVarName}++] = {value}->data[{iteratorVarName}];\n{#else}\n    {varAccess}->data[{indexVarName}++] = {value};\n{/if}\n")
+], CConcatValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],15:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],16:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1676,12 +1894,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var expressions_1 = require('../../nodes/expressions');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var expressions_1 = require("../../nodes/expressions");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayIndexOfResolver = (function () {
     function ArrayIndexOfResolver() {
     }
@@ -1704,11 +1922,11 @@ var ArrayIndexOfResolver = (function () {
     ArrayIndexOfResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayIndexOfResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayIndexOfResolver);
     return ArrayIndexOfResolver;
 }());
+ArrayIndexOfResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayIndexOfResolver);
 var CArrayIndexOf = (function () {
     function CArrayIndexOf(scope, call) {
         this.tempVarName = '';
@@ -1730,14 +1948,14 @@ var CArrayIndexOf = (function () {
             scope.root.headerFlags.array = true;
         }
     }
-    CArrayIndexOf = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
-    ], CArrayIndexOf);
     return CArrayIndexOf;
 }());
+CArrayIndexOf = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+], CArrayIndexOf);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],16:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],17:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1747,12 +1965,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var literals_1 = require('../../nodes/literals');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var literals_1 = require("../../nodes/literals");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayConcatResolver = (function () {
     function ArrayConcatResolver() {
     }
@@ -1777,11 +1995,11 @@ var ArrayConcatResolver = (function () {
     ArrayConcatResolver.prototype.getTempVarName = function (typeHelper, node) {
         return "tmp_joined_string";
     };
-    ArrayConcatResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayConcatResolver);
     return ArrayConcatResolver;
 }());
+ArrayConcatResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayConcatResolver);
 var CArrayJoin = (function () {
     function CArrayJoin(scope, call) {
         this.tempVarName = '';
@@ -1811,32 +2029,32 @@ var CArrayJoin = (function () {
                 scope.root.headerFlags.str_int16_t_cat = true;
         }
     }
-    CArrayJoin = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {tempVarName} = malloc({calculatedStringLength});\n        assert({tempVarName} != NULL);\n        {tempVarName}[0] = '\\0';\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n            if ({iteratorVarName} > 0)\n                strcat({tempVarName}, {separator});\n            {catFuncName}({tempVarName}, {arrayElement}[{iteratorVarName}]);\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
-    ], CArrayJoin);
     return CArrayJoin;
 }());
+CArrayJoin = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {tempVarName} = malloc({calculatedStringLength});\n        assert({tempVarName} != NULL);\n        {tempVarName}[0] = '\\0';\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n            if ({iteratorVarName} > 0)\n                strcat({tempVarName}, {separator});\n            {catFuncName}({tempVarName}, {arrayElement}[{iteratorVarName}]);\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+], CArrayJoin);
 var CArraySize = (function () {
     function CArraySize(scope, varAccess, type) {
         this.varAccess = varAccess;
         this.type = type;
         this.arrayCapacity = type.capacity + "";
     }
-    CArraySize = __decorate([
-        template_1.CodeTemplate("\n{#if type.isDynamicArray}\n    {varAccess}->size\n{#else}\n    {arrayCapacity}\n{/if}")
-    ], CArraySize);
     return CArraySize;
 }());
+CArraySize = __decorate([
+    template_1.CodeTemplate("\n{#if type.isDynamicArray}\n    {varAccess}->size\n{#else}\n    {arrayCapacity}\n{/if}")
+], CArraySize);
 var CArrayElement = (function () {
     function CArrayElement(scope, varAccess, type) {
         this.varAccess = varAccess;
         this.type = type;
     }
-    CArrayElement = __decorate([
-        template_1.CodeTemplate("\n{#if type.isDynamicArray}\n    {varAccess}->data\n{#else}\n    {varAccess}\n{/if}")
-    ], CArrayElement);
     return CArrayElement;
 }());
+CArrayElement = __decorate([
+    template_1.CodeTemplate("\n{#if type.isDynamicArray}\n    {varAccess}->data\n{#else}\n    {varAccess}\n{/if}")
+], CArrayElement);
 var CCalculateStringSize = (function () {
     function CCalculateStringSize(scope, varAccess, iteratorVarName, type, node) {
         this.varAccess = varAccess;
@@ -1852,14 +2070,14 @@ var CCalculateStringSize = (function () {
             scope.variables.push(new variable_1.CVariable(scope, this.lengthVarName, types_1.NumberVarType));
         }
     }
-    CCalculateStringSize = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if arrayOfStrings}\n        {lengthVarName} = 0;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)\n            {lengthVarName} += strlen({arrayElement}[{iteratorVarName}]);\n    {/if}\n{/statements}\n{#if type.isDynamicArray && arrayOfStrings}\n    {arraySize} == 0 ? 1 : {lengthVarName} + strlen({separator})*({arraySize}-1) + 1\n{#elseif arrayCapacity > 0 && arrayOfStrings}\n    {lengthVarName} + strlen({separator})*({arraySize}-1) + 1\n{#elseif type.isDynamicArray && arrayOfNumbers}\n    {varAccess}->size == 0 ? 1 : STR_INT16_T_BUFLEN*{varAccess}->size + strlen({separator})*({arraySize}-1) + 1\n{#elseif arrayCapacity > 0 && arrayOfNumbers}\n    STR_INT16_T_BUFLEN*{arraySize}+strlen({separator})*({arraySize}-1)+1\n{#else}\n    1\n{/if}")
-    ], CCalculateStringSize);
     return CCalculateStringSize;
 }());
+CCalculateStringSize = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if arrayOfStrings}\n        {lengthVarName} = 0;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)\n            {lengthVarName} += strlen({arrayElement}[{iteratorVarName}]);\n    {/if}\n{/statements}\n{#if type.isDynamicArray && arrayOfStrings}\n    {arraySize} == 0 ? 1 : {lengthVarName} + strlen({separator})*({arraySize}-1) + 1\n{#elseif arrayCapacity > 0 && arrayOfStrings}\n    {lengthVarName} + strlen({separator})*({arraySize}-1) + 1\n{#elseif type.isDynamicArray && arrayOfNumbers}\n    {varAccess}->size == 0 ? 1 : STR_INT16_T_BUFLEN*{varAccess}->size + strlen({separator})*({arraySize}-1) + 1\n{#elseif arrayCapacity > 0 && arrayOfNumbers}\n    STR_INT16_T_BUFLEN*{arraySize}+strlen({separator})*({arraySize}-1)+1\n{#else}\n    1\n{/if}")
+], CCalculateStringSize);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],17:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],18:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1869,12 +2087,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var expressions_1 = require('../../nodes/expressions');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var expressions_1 = require("../../nodes/expressions");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayLastIndexOfResolver = (function () {
     function ArrayLastIndexOfResolver() {
     }
@@ -1897,11 +2115,11 @@ var ArrayLastIndexOfResolver = (function () {
     ArrayLastIndexOfResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayLastIndexOfResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayLastIndexOfResolver);
     return ArrayLastIndexOfResolver;
 }());
+ArrayLastIndexOfResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayLastIndexOfResolver);
 var CArrayLastIndexOf = (function () {
     function CArrayLastIndexOf(scope, call) {
         this.tempVarName = '';
@@ -1923,14 +2141,14 @@ var CArrayLastIndexOf = (function () {
             scope.root.headerFlags.array = true;
         }
     }
-    CArrayLastIndexOf = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
-    ], CArrayLastIndexOf);
     return CArrayLastIndexOf;
 }());
+CArrayLastIndexOf = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+], CArrayLastIndexOf);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],18:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],19:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1940,10 +2158,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayPopResolver = (function () {
     function ArrayPopResolver() {
     }
@@ -1968,11 +2186,11 @@ var ArrayPopResolver = (function () {
     ArrayPopResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayPopResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayPopResolver);
     return ArrayPopResolver;
 }());
+ArrayPopResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayPopResolver);
 var CArrayPop = (function () {
     function CArrayPop(scope, call) {
         this.tempVarName = '';
@@ -1982,14 +2200,14 @@ var CArrayPop = (function () {
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_pop = true;
     }
-    CArrayPop = __decorate([
-        template_1.CodeTemplate("ARRAY_POP({varAccess})")
-    ], CArrayPop);
     return CArrayPop;
 }());
+CArrayPop = __decorate([
+    template_1.CodeTemplate("ARRAY_POP({varAccess})")
+], CArrayPop);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../resolver":13,"../../template":26,"../../types":27}],19:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":14,"../../template":28,"../../types":29}],20:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1999,11 +2217,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayPushResolver = (function () {
     function ArrayPushResolver() {
     }
@@ -2026,11 +2244,11 @@ var ArrayPushResolver = (function () {
     ArrayPushResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayPushResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayPushResolver);
     return ArrayPushResolver;
 }());
+ArrayPushResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayPushResolver);
 var CArrayPush = (function () {
     function CArrayPush(scope, call) {
         var _this = this;
@@ -2048,24 +2266,24 @@ var CArrayPush = (function () {
         }
         scope.root.headerFlags.array = true;
     }
-    CArrayPush = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {pushValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {pushValues}\n{#else}\n    {tempVarName}\n{/if}")
-    ], CArrayPush);
     return CArrayPush;
 }());
+CArrayPush = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {pushValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {pushValues}\n{#else}\n    {tempVarName}\n{/if}")
+], CArrayPush);
 var CPushValue = (function () {
     function CPushValue(scope, varAccess, value) {
         this.varAccess = varAccess;
         this.value = value;
     }
-    CPushValue = __decorate([
-        template_1.CodeTemplate("ARRAY_PUSH({varAccess}, {value});\n")
-    ], CPushValue);
     return CPushValue;
 }());
+CPushValue = __decorate([
+    template_1.CodeTemplate("ARRAY_PUSH({varAccess}, {value});\n")
+], CPushValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],20:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],21:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2075,11 +2293,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayShiftResolver = (function () {
     function ArrayShiftResolver() {
     }
@@ -2102,11 +2320,11 @@ var ArrayShiftResolver = (function () {
     ArrayShiftResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayShiftResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayShiftResolver);
     return ArrayShiftResolver;
 }());
+ArrayShiftResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayShiftResolver);
 var CArrayShift = (function () {
     function CArrayShift(scope, call) {
         this.tempVarName = '';
@@ -2120,14 +2338,14 @@ var CArrayShift = (function () {
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_remove = true;
     }
-    CArrayShift = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {tempVarName} = {varAccess}->data[0];\n    ARRAY_REMOVE({varAccess}, 0, 1);\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
-    ], CArrayShift);
     return CArrayShift;
 }());
+CArrayShift = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {tempVarName} = {varAccess}->data[0];\n    ARRAY_REMOVE({varAccess}, 0, 1);\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
+], CArrayShift);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],21:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],22:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2137,11 +2355,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArraySliceResolver = (function () {
     function ArraySliceResolver() {
     }
@@ -2167,11 +2385,11 @@ var ArraySliceResolver = (function () {
     ArraySliceResolver.prototype.getTempVarName = function (typeHelper, node) {
         return "tmp_slice";
     };
-    ArraySliceResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArraySliceResolver);
     return ArraySliceResolver;
 }());
+ArraySliceResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArraySliceResolver);
 var CArraySlice = (function () {
     function CArraySlice(scope, call) {
         this.tempVarName = '';
@@ -2202,14 +2420,14 @@ var CArraySlice = (function () {
         }
         scope.root.headerFlags.array = true;
     }
-    CArraySlice = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && !endIndexArg}\n        {sizeVarName} = ({startIndexArg}) < 0 ? -({startIndexArg}) : {varAccess}->size - ({startIndexArg});\n        {startVarName} = ({startIndexArg}) < 0 ? {varAccess}->size + ({startIndexArg}) : ({startIndexArg});\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {startVarName}];\n    {#elseif !topExpressionOfStatement && endIndexArg}\n        {startVarName} = ({startIndexArg}) < 0 ? {varAccess}->size + ({startIndexArg}) : ({startIndexArg});\n        {endVarName} = ({endIndexArg}) < 0 ? {varAccess}->size + ({endIndexArg}) : ({endIndexArg});\n        {sizeVarName} = {endVarName} - {startVarName};\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {startVarName}];\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    /* slice doesn't have side effects, skipping */\n{#else}\n    {tempVarName}\n{/if}")
-    ], CArraySlice);
     return CArraySlice;
 }());
+CArraySlice = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && !endIndexArg}\n        {sizeVarName} = ({startIndexArg}) < 0 ? -({startIndexArg}) : {varAccess}->size - ({startIndexArg});\n        {startVarName} = ({startIndexArg}) < 0 ? {varAccess}->size + ({startIndexArg}) : ({startIndexArg});\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {startVarName}];\n    {#elseif !topExpressionOfStatement && endIndexArg}\n        {startVarName} = ({startIndexArg}) < 0 ? {varAccess}->size + ({startIndexArg}) : ({startIndexArg});\n        {endVarName} = ({endIndexArg}) < 0 ? {varAccess}->size + ({endIndexArg}) : ({endIndexArg});\n        {sizeVarName} = {endVarName} - {startVarName};\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName} + {startVarName}];\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    /* slice doesn't have side effects, skipping */\n{#else}\n    {tempVarName}\n{/if}")
+], CArraySlice);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],22:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],23:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2219,10 +2437,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArraySortResolver = (function () {
     function ArraySortResolver() {
     }
@@ -2246,11 +2464,11 @@ var ArraySortResolver = (function () {
     ArraySortResolver.prototype.getTempVarName = function (typeHelper, node) {
         return "";
     };
-    ArraySortResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArraySortResolver);
     return ArraySortResolver;
 }());
+ArraySortResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArraySortResolver);
 var CArraySort = (function () {
     function CArraySort(scope, call) {
         this.varAccess = null;
@@ -2267,14 +2485,14 @@ var CArraySort = (function () {
         else if (this.arrayOfStrings)
             scope.root.headerFlags.array_str_cmp = true;
     }
-    CArraySort = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && arrayOfInts}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n    {#elseif !topExpressionOfStatement && arrayOfStrings}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{#elseif arrayOfInts}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n{#elseif arrayOfStrings}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n{/if}")
-    ], CArraySort);
     return CArraySort;
 }());
+CArraySort = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && arrayOfInts}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n    {#elseif !topExpressionOfStatement && arrayOfStrings}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{#elseif arrayOfInts}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n{#elseif arrayOfStrings}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n{/if}")
+], CArraySort);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../resolver":13,"../../template":26,"../../types":27}],23:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":14,"../../template":28,"../../types":29}],24:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2284,11 +2502,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArraySpliceResolver = (function () {
     function ArraySpliceResolver() {
     }
@@ -2314,11 +2532,11 @@ var ArraySpliceResolver = (function () {
     ArraySpliceResolver.prototype.getTempVarName = function (typeHelper, node) {
         return "tmp_removed_values";
     };
-    ArraySpliceResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArraySpliceResolver);
     return ArraySpliceResolver;
 }());
+ArraySpliceResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArraySpliceResolver);
 var CArraySplice = (function () {
     function CArraySplice(scope, call) {
         var _this = this;
@@ -2350,25 +2568,25 @@ var CArraySplice = (function () {
         scope.root.headerFlags.array_insert = true;
         scope.root.headerFlags.array_remove = true;
     }
-    CArraySplice = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {deleteCountArg}, {deleteCountArg});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {deleteCountArg}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}))];\n        ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n        {insertValues}\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && needsRemove}\n    ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n    {insertValues}\n{#elseif topExpressionOfStatement && !needsRemove}\n    {insertValues}\n{#else}\n    {tempVarName}\n{/if}")
-    ], CArraySplice);
     return CArraySplice;
 }());
+CArraySplice = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {deleteCountArg}, {deleteCountArg});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {deleteCountArg}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}))];\n        ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n        {insertValues}\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && needsRemove}\n    ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n    {insertValues}\n{#elseif topExpressionOfStatement && !needsRemove}\n    {insertValues}\n{#else}\n    {tempVarName}\n{/if}")
+], CArraySplice);
 var CInsertValue = (function () {
     function CInsertValue(scope, varAccess, startIndex, value) {
         this.varAccess = varAccess;
         this.startIndex = startIndex;
         this.value = value;
     }
-    CInsertValue = __decorate([
-        template_1.CodeTemplate("ARRAY_INSERT({varAccess}, {startIndex}, {value});\n")
-    ], CInsertValue);
     return CInsertValue;
 }());
+CInsertValue = __decorate([
+    template_1.CodeTemplate("ARRAY_INSERT({varAccess}, {startIndex}, {value});\n")
+], CInsertValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],24:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],25:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2378,11 +2596,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var resolver_1 = require('../../resolver');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
-var elementaccess_1 = require('../../nodes/elementaccess');
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
 var ArrayUnshiftResolver = (function () {
     function ArrayUnshiftResolver() {
     }
@@ -2405,11 +2623,11 @@ var ArrayUnshiftResolver = (function () {
     ArrayUnshiftResolver.prototype.getTempVarName = function (typeHelper, node) {
         return null;
     };
-    ArrayUnshiftResolver = __decorate([
-        resolver_1.StandardCallResolver
-    ], ArrayUnshiftResolver);
     return ArrayUnshiftResolver;
 }());
+ArrayUnshiftResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArrayUnshiftResolver);
 var CArrayUnshift = (function () {
     function CArrayUnshift(scope, call) {
         var _this = this;
@@ -2428,24 +2646,24 @@ var CArrayUnshift = (function () {
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_insert = true;
     }
-    CArrayUnshift = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {unshiftValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {unshiftValues}\n{#else}\n    {tempVarName}\n{/if}")
-    ], CArrayUnshift);
     return CArrayUnshift;
 }());
+CArrayUnshift = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {unshiftValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {unshiftValues}\n{#else}\n    {tempVarName}\n{/if}")
+], CArrayUnshift);
 var CUnshiftValue = (function () {
     function CUnshiftValue(scope, varAccess, value) {
         this.varAccess = varAccess;
         this.value = value;
     }
-    CUnshiftValue = __decorate([
-        template_1.CodeTemplate("ARRAY_INSERT({varAccess}, 0, {value});\n")
-    ], CUnshiftValue);
     return CUnshiftValue;
 }());
+CUnshiftValue = __decorate([
+    template_1.CodeTemplate("ARRAY_INSERT({varAccess}, 0, {value});\n")
+], CUnshiftValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":13,"../../template":26,"../../types":27}],25:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],26:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2455,9 +2673,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var template_1 = require('../../template');
-var types_1 = require('../../types');
-var variable_1 = require('../../nodes/variable');
+var template_1 = require("../../template");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
 var ConsoleLogHelper = (function () {
     function ConsoleLogHelper() {
     }
@@ -2474,7 +2692,7 @@ var ConsoleLogHelper = (function () {
     return ConsoleLogHelper;
 }());
 exports.ConsoleLogHelper = ConsoleLogHelper;
-var CPrintf = (function () {
+var CPrintf = CPrintf_1 = (function () {
     function CPrintf(scope, printNode, accessor, varType, options) {
         this.accessor = accessor;
         this.isStringLiteral = false;
@@ -2510,7 +2728,7 @@ var CPrintf = (function () {
             var elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
             var opts = { quotedString: true, indent: this.INDENT + "    " };
             this.elementPrintfs = [
-                new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
+                new CPrintf_1(scope, printNode, elementAccessor, varType.elementType, opts)
             ];
         }
         else if (varType instanceof types_1.DictType) {
@@ -2519,7 +2737,7 @@ var CPrintf = (function () {
             scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
             var opts = { quotedString: true, indent: this.INDENT + "    " };
             this.elementPrintfs = [
-                new CPrintf(scope, printNode, accessor + "->values->data[" + this.iteratorVarName + "]", varType.elementType, opts)
+                new CPrintf_1(scope, printNode, accessor + "->values->data[" + this.iteratorVarName + "]", varType.elementType, opts)
             ];
         }
         else if (varType instanceof types_1.StructType) {
@@ -2527,18 +2745,133 @@ var CPrintf = (function () {
             for (var k in varType.properties) {
                 var propAccessor = accessor + "->" + k;
                 var opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
-                this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], opts));
+                this.elementPrintfs.push(new CPrintf_1(scope, printNode, propAccessor, varType.properties[k], opts));
             }
         }
     }
-    CPrintf = __decorate([
-        template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{accessor}{CR}\");\n{#elseif isQuotedCString}\n    printf(\"{propPrefix}\\\"%s\\\"{CR}\", {accessor});\n{#elseif isCString}\n    printf(\"%s{CR}\", {accessor});\n{#elseif isInteger}\n    printf(\"{propPrefix}%d{CR}\", {accessor});\n{#elseif isBoolean && !propPrefix}\n    printf({accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isBoolean && propPrefix}\n    printf(\"{propPrefix}%s\", {accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isDict}\n    printf(\"{propPrefix}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isStruct}\n    printf(\"{propPrefix}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isArray}\n    printf(\"{propPrefix}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{CR}\");\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
-    ], CPrintf);
     return CPrintf;
+}());
+CPrintf = CPrintf_1 = __decorate([
+    template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{accessor}{CR}\");\n{#elseif isQuotedCString}\n    printf(\"{propPrefix}\\\"%s\\\"{CR}\", {accessor});\n{#elseif isCString}\n    printf(\"%s{CR}\", {accessor});\n{#elseif isInteger}\n    printf(\"{propPrefix}%d{CR}\", {accessor});\n{#elseif isBoolean && !propPrefix}\n    printf({accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isBoolean && propPrefix}\n    printf(\"{propPrefix}%s\", {accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isDict}\n    printf(\"{propPrefix}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isStruct}\n    printf(\"{propPrefix}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isArray}\n    printf(\"{propPrefix}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{CR}\");\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
+], CPrintf);
+var CPrintf_1;
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../nodes/variable":11,"../../template":28,"../../types":29}],27:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
+var regex_1 = require("../../regex");
+var StringSearchResolver = (function () {
+    function StringSearchResolver() {
+    }
+    StringSearchResolver.prototype.matchesNode = function (typeHelper, call) {
+        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+            return false;
+        var propAccess = call.expression;
+        var objType = typeHelper.getCType(propAccess.expression);
+        return propAccess.name.getText() == "search" && objType == types_1.StringVarType;
+    };
+    StringSearchResolver.prototype.returnType = function (typeHelper, call) {
+        return types_1.NumberVarType;
+    };
+    StringSearchResolver.prototype.createTemplate = function (scope, node) {
+        return new CStringSearch(scope, node);
+    };
+    StringSearchResolver.prototype.needsDisposal = function (typeHelper, node) {
+        return false;
+    };
+    StringSearchResolver.prototype.getTempVarName = function (typeHelper, node) {
+        return null;
+    };
+    return StringSearchResolver;
+}());
+StringSearchResolver = __decorate([
+    resolver_1.StandardCallResolver
+], StringSearchResolver);
+var CStringSearch = (function () {
+    function CStringSearch(scope, call) {
+        this.stateTransitionBlocks = [];
+        var propAccess = call.expression;
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!this.topExpressionOfStatement) {
+            this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+            this.stateVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "state");
+            this.nextVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "next");
+            this.chVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "ch");
+            this.indexVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "index");
+            this.lenVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "len");
+            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
+            scope.variables.push(new variable_1.CVariable(scope, this.stateVarName, types_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, this.nextVarName, types_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, this.chVarName, types_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, this.indexVarName, types_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, this.lenVarName, types_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
+            if (call.arguments.length < 1 || call.arguments[0].kind != ts.SyntaxKind.RegularExpressionLiteral)
+                console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
+            var template = call.arguments[0].text;
+            var compiler = new regex_1.RegexCompiler();
+            var stms = compiler.compile(template.slice(1, -1));
+            if (stms.length >= 1) {
+                for (var s = 0; s < stms[0].states.length; s++) {
+                    this.stateTransitionBlocks.push(new CStateTransitionsBlock(scope, this.chVarName, this.stateVarName, this.nextVarName, s, stms[0].states[s]));
+                }
+                this.final = stms[0].final + "";
+            }
+            scope.root.headerFlags.strings = true;
+        }
+    }
+    return CStringSearch;
+}());
+CStringSearch = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {stateVarName} = 0;\n        {indexVarName} = 0;\n        {nextVarName} = -1;\n        {lenVarName} = strlen({varAccess});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {lenVarName}; {iteratorVarName}++) {\n            {chVarName} = {varAccess}[{iteratorVarName}];\n\n            {stateTransitionBlocks {    }=> {this}}\n\n            if ({nextVarName} == -1) {\n                if ({stateVarName} >= {final})\n                    break;\n                {iteratorVarName} = {indexVarName};\n                {indexVarName}++;\n                {stateVarName} = 0;\n            } else {\n                {stateVarName} = {nextVarName};\n                {nextVarName} = -1;\n            }\n        }\n        if ({stateVarName} < {final})\n            {indexVarName} = -1;\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {indexVarName}\n{/if}")
+], CStringSearch);
+var CStateTransitionsBlock = (function () {
+    function CStateTransitionsBlock(scope, chVarName, stateVarName, nextVarName, stateNumber, state) {
+        this.chVarName = chVarName;
+        this.stateVarName = stateVarName;
+        this.nextVarName = nextVarName;
+        this.stateNumber = stateNumber;
+        this.charConditions = [];
+        this.exceptConditions = [];
+        this.anyChar = '';
+        for (var ch in state.chars)
+            this.charConditions.push(new CharCondition(ch.replace('\\', '\\\\'), state.chars[ch], this.chVarName, this.nextVarName));
+        for (var ch in state.except)
+            this.exceptConditions.push(new CharCondition(ch.replace('\\', '\\\\'), -1, this.chVarName, this.nextVarName));
+        if (state.anyChar)
+            this.anyChar = state.anyChar + "";
+        // 'if (' + this.nextVarName + ' == -1) ' + this.nextVarName + ' = ' + state.anyChar + ';';
+    }
+    return CStateTransitionsBlock;
+}());
+CStateTransitionsBlock = __decorate([
+    template_1.CodeTemplate("if ({stateVarName} == {stateNumber}) {\n        {charConditions {\n        }=> if ({chVarName} == '{ch}') {nextVarName} = {next};}\n{#if anyChar && exceptConditions.length}\n            if ({exceptConditions { && }=> ({chVarName} != '{ch}')} && {nextVarName} == -1)\n                {nextVarName} = {anyChar};\n{#elseif anyChar}\n            if ({nextVarName} == -1) {nextVarName} = {anyChar};\n{/if}\n    }\n")
+], CStateTransitionsBlock);
+var CharCondition = (function () {
+    function CharCondition(ch, next, chVarName, nextVarName) {
+        this.ch = ch;
+        this.next = next;
+        this.chVarName = chVarName;
+        this.nextVarName = nextVarName;
+    }
+    return CharCondition;
 }());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/variable":11,"../../template":26,"../../types":27}],26:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../regex":13,"../../resolver":14,"../../template":28,"../../types":29}],28:[function(require,module,exports){
 "use strict";
 ;
 var nodeKindTemplates = {};
@@ -2753,11 +3086,11 @@ function processTemplate(template, args) {
     return [template, statements];
 }
 
-},{}],27:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
-var resolver_1 = require('./resolver');
+var resolver_1 = require("./resolver");
 exports.UniversalVarType = "struct js_var *";
 exports.PointerVarType = "void *";
 exports.StringVarType = "const char *";
@@ -3087,7 +3420,7 @@ var TypeHelper = (function () {
             return exports.NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
             return exports.BooleanVarType;
-        if (tsType.flags & ts.TypeFlags.ObjectType && tsType.getProperties().length > 0) {
+        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0) {
             return this.generateStructure(tsType, ident);
         }
         if (tsType.flags == ts.TypeFlags.Any)
@@ -3337,7 +3670,7 @@ var TypeHelper = (function () {
         var somePromisesAreResolved;
         do {
             somePromisesAreResolved = this.tryResolvePromises();
-            var _loop_1 = function(k) {
+            var _loop_1 = function (k) {
                 var promises = Object.keys(this_1.variablesData[k].typePromises)
                     .map(function (p) { return _this.variablesData[k].typePromises[p]; });
                 var variableBestTypes = promises
@@ -3613,10 +3946,10 @@ var TypeHelper = (function () {
 exports.TypeHelper = TypeHelper;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":13}],28:[function(require,module,exports){
+},{"./resolver":14}],30:[function(require,module,exports){
 (function (process,global){
 "use strict";
-var program_1 = require('./src/program');
+var program_1 = require("./src/program");
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 // Public API
 if (typeof window !== 'undefined')
@@ -3655,4 +3988,4 @@ if (typeof window !== 'undefined')
 })();
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./src/program":12,"_process":2,"fs":1}]},{},[28]);
+},{"./src/program":12,"_process":2,"fs":1}]},{},[30]);
