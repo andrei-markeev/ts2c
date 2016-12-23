@@ -31,124 +31,117 @@ class StringSearchResolver implements IResolver {
     }
 }
 
+var regexLiteralFuncNames = {};
+
 @CodeTemplate(`
-{#statements}
-    {#if !topExpressionOfStatement}
-        {stateVarName} = 0;
-        {indexVarName} = 0;
-        {nextVarName} = -1;
-        {lenVarName} = strlen({varAccess});
-        for ({iteratorVarName} = 0; {iteratorVarName} < {lenVarName}; {iteratorVarName}++) {
-            {chVarName} = {varAccess}[{iteratorVarName}];
-
-            {stateTransitionBlocks {    }=> {this}}
-
-            if ({nextVarName} == -1) {
-                {continueBlock}
-            } else {
-                {stateVarName} = {nextVarName};
-                {nextVarName} = -1;
-            }
-        }
-    {/if}
-    {#if !topExpressionOfStatement && fixedEnd}
-        if ({stateVarName} < {final} || {iteratorVarName} != {lenVarName})
-            {indexVarName} = -1;
-    {#elseif !topExpressionOfStatement && !fixedEnd}
-        if ({stateVarName} < {final})
-            {indexVarName} = -1;
-    {/if}
-{/statements}
 {#if !topExpressionOfStatement}
-    {indexVarName}
+    {regexFuncName}({argAccess})
 {/if}`)
-class CStringSearch {
+class CStringSearch
+{
     public topExpressionOfStatement: boolean;
-    public stateVarName: string;
-    public nextVarName: string;
-    public chVarName: string;
-    public iteratorVarName: string;
-    public indexVarName: string;
-    public lenVarName: string;
-    public varAccess: CElementAccess;
-    public stateTransitionBlocks: CStateTransitionsBlock[] = [];
-    public final: string;
-    public fixedEnd: boolean;
-    public continueBlock: ContinueBlock;
+    public regexFuncName: string;
+    public argAccess: CElementAccess;
+
     constructor(scope: IScope, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
-            this.varAccess = new CElementAccess(scope, propAccess.expression);
-
-            this.stateVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "state");
-            this.nextVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "next");
-            this.chVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "ch");
-            this.indexVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "index");
-            this.lenVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "len");
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
-
-            scope.variables.push(new CVariable(scope, this.stateVarName, NumberVarType));
-            scope.variables.push(new CVariable(scope, this.nextVarName, NumberVarType));
-            scope.variables.push(new CVariable(scope, this.chVarName, NumberVarType));
-            scope.variables.push(new CVariable(scope, this.indexVarName, NumberVarType));
-            scope.variables.push(new CVariable(scope, this.lenVarName, NumberVarType));
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-
-            if (call.arguments.length < 1 || call.arguments[0].kind != ts.SyntaxKind.RegularExpressionLiteral)
-                console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
-
-            let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
-            let compiler = new RegexCompiler();
-            let compiledRegex = compiler.compile(template.slice(1, -1));
-            if (compiledRegex.variants.length >= 1) {
-                for (let s = 0; s < compiledRegex.variants[0].states.length; s++) {
-                    this.stateTransitionBlocks.push(new CStateTransitionsBlock(
-                        scope,
-                        this.chVarName,
-                        this.stateVarName,
-                        this.nextVarName,
-                        s,
-                        compiledRegex.variants[0].states[s]
-                    ));
+            if (call.arguments.length == 1 && call.arguments[0].kind == ts.SyntaxKind.RegularExpressionLiteral) {
+                let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
+                if (!regexLiteralFuncNames[template]) {
+                    regexLiteralFuncNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex_search");
+                    scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearch(scope, call, regexLiteralFuncNames[template]));
                 }
-                this.final = compiledRegex.variants[0].final+"";
-                this.fixedEnd = compiledRegex.fixedEnd;
-                this.continueBlock = new ContinueBlock(scope, 
-                    compiledRegex.fixedStart,
-                    this.fixedEnd,
-                    this.stateVarName,
-                    this.final,
-                    this.iteratorVarName,
-                    this.indexVarName,
-                    this.lenVarName
-                );
-            }
-            scope.root.headerFlags.strings = true;
+                this.regexFuncName = regexLiteralFuncNames[template];
+                this.argAccess = new CElementAccess(scope, propAccess.expression);
+            } else
+                console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
         }
+    }
+}
+
+@CodeTemplate(`
+int {regexFunctionName}(const char *str) {
+    state = 0;
+    index = 0;
+    next = -1;
+    len = strlen(str);
+    for (iterator = 0; iterator < len; iterator++) {
+        ch = str[iterator];
+
+        {stateTransitionBlocks {        }=> {this}}
+
+        if (next == -1) {
+            {continueBlock}
+        } else {
+            state = next;
+            next = -1;
+        }
+    }
+{#if fixedEnd}
+        if (state < {final} || iterator != len)
+            index = -1;
+{#else}
+        if (state < {final})
+            index = -1;
+{/if}
+}`)
+class CRegexSearch {
+    public topExpressionOfStatement: boolean;
+    public stateTransitionBlocks: CStateTransitionsBlock[] = [];
+    public final: string;
+    public fixedEnd: boolean;
+    public continueBlock: ContinueBlock;
+    constructor(scope: IScope, call: ts.CallExpression, public regexFunctionName: string) {
+        let propAccess = <ts.PropertyAccessExpression>call.expression;
+
+        if (call.arguments.length < 1 || call.arguments[0].kind != ts.SyntaxKind.RegularExpressionLiteral)
+            console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
+
+        let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
+        let compiler = new RegexCompiler();
+        let compiledRegex = compiler.compile(template.slice(1, -1));
+        if (compiledRegex.variants.length >= 1) {
+            for (let s = 0; s < compiledRegex.variants[0].states.length; s++) {
+                this.stateTransitionBlocks.push(new CStateTransitionsBlock(
+                    scope,
+                    s,
+                    compiledRegex.variants[0].states[s]
+                ));
+            }
+            this.final = compiledRegex.variants[0].final+"";
+            this.fixedEnd = compiledRegex.fixedEnd;
+            this.continueBlock = new ContinueBlock(scope, 
+                compiledRegex.fixedStart,
+                this.fixedEnd,
+                this.final
+            );
+        }
+        scope.root.headerFlags.strings = true;
     }
 
 }
 
-@CodeTemplate(`if ({stateVarName} == {stateNumber}) {
-        {charConditions {\n        }=> if ({chVarName} == '{ch}') {nextVarName} = {next};}
+@CodeTemplate(`if (state == {stateNumber}) {
+            {charConditions {\n            }=> if (ch == '{ch}') next = {next};}
 {#if anyChar && exceptConditions.length}
-            if ({exceptConditions { && }=> ({chVarName} != '{ch}')} && {nextVarName} == -1)
-                {nextVarName} = {anyChar};
+                if ({exceptConditions { && }=> (ch != '{ch}')} && next == -1)
+                    next = {anyChar};
 {#elseif anyChar}
-            if ({nextVarName} == -1) {nextVarName} = {anyChar};
+                if (next == -1) next = {anyChar};
 {/if}
-    }
+        }
 `)
 class CStateTransitionsBlock {
     public charConditions: CharCondition[] = [];
     public exceptConditions: CharCondition[] = [];
     public anyChar: string = '';
-    constructor(scope: IScope, public chVarName: string, public stateVarName: string, public nextVarName: string, public stateNumber: number, state: RegexState) {
+    constructor(scope: IScope, public stateNumber: number, state: RegexState) {
         for (let ch in state.chars)
-            this.charConditions.push(new CharCondition(ch.replace('\\','\\\\'), state.chars[ch], this.chVarName, this.nextVarName));
+            this.charConditions.push(new CharCondition(ch.replace('\\','\\\\'), state.chars[ch]));
         for (let ch in state.except)
-            this.exceptConditions.push(new CharCondition(ch.replace('\\','\\\\'), -1, this.chVarName, this.nextVarName));
+            this.exceptConditions.push(new CharCondition(ch.replace('\\','\\\\'), -1));
         if (state.anyChar)
             this.anyChar = state.anyChar+"";
     }
@@ -156,15 +149,15 @@ class CStateTransitionsBlock {
 
 @CodeTemplate(`
 {#if !fixedStart && !fixedEnd}
-    if ({stateVarName} >= {final})
+    if (state >= {final})
         break;
-    {iteratorVarName} = {indexVarName};
-    {indexVarName}++;
-    {stateVarName} = 0;
+    iterator = index;
+    index++;
+    state = 0;
 {#elseif !fixedStart && fixedEnd}
-    {iteratorVarName} = {indexVarName};
-    {indexVarName}++;
-    {stateVarName} = 0;
+    iterator = index;
+    index++;
+    state = 0;
 {#else}
     break;
 {/if}`)
@@ -172,13 +165,9 @@ class ContinueBlock {
     constructor(scope: IScope, 
         public fixedStart: boolean, 
         public fixedEnd: boolean, 
-        public stateVarName: string, 
-        public final: string,
-        public iteratorVarName: string,
-        public indexVarName: string,
-        public lenVarName) { }
+        public final: string) { }
 }
 
 class CharCondition {
-    constructor(public ch: string, public next: number, public chVarName: string, public nextVarName: string) {}
+    constructor(public ch: string, public next: number) {}
 }

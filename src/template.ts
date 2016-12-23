@@ -204,14 +204,22 @@ function processTemplate(template: string, args: any): [string, string] {
             template = template.slice(0, startPos) + elementsResolved + template.slice(pos);
             replaced = true;
         }
-        else
-            while (template.indexOf("{" + k + "}") > -1) {
+        else {
+            let index = -1;
+            while ((index = template.indexOf("{" + k + "}")) > -1) {
+                let spaces = '';
+                while (template.length > index && template[index-1] == ' ') {
+                    index--;
+                    spaces+=' ';
+                }
                 let value = args[k];
                 if (value && value.resolve)
                     value = value.resolve();
+                value = value && typeof value === 'string' && value.replace(/\n/g, '\n'+spaces);
                 template = template.replace("{" + k + "}", value);
                 replaced = true;
             }
+        }
     }
     if (args["resolve"] && !replaced && template.indexOf("{this}") > -1) {
         template = template.replace("{this}", args["resolve"]());

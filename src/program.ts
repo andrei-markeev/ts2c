@@ -304,7 +304,7 @@ export class CProgram implements IScope {
     public func = this;
     public variables: CVariable[] = [];
     public statements: any[] = [];
-    public functions: CFunction[] = [];
+    public functions: any[] = [];
     public functionPrototypes: CFunctionPrototype[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
