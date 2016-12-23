@@ -161,7 +161,7 @@ export class RegexCompiler {
             for (let ch of token.except)
                 stmNode.except[ch] = true;
         } else if (token.tokens) {
-            stmNode.stm = this.generateRegexMachines(true, false, token.tokens);
+            stmNode.stm = this.generateRegexMachines(true, false, token.tokens).variants;
             stmNode.group = token.group;
             stmNode.next = nextPos;
         }
@@ -209,7 +209,7 @@ export class RegexCompiler {
 
         }
 
-        return stm_variants;
+        return { fixedStart: fixedStart, fixedEnd: fixedEnd, variants: stm_variants };
 
     }
 

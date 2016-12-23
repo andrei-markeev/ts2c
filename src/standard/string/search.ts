@@ -44,16 +44,17 @@ class StringSearchResolver implements IResolver {
             {stateTransitionBlocks {    }=> {this}}
 
             if ({nextVarName} == -1) {
-                if ({stateVarName} >= {final})
-                    break;
-                {iteratorVarName} = {indexVarName};
-                {indexVarName}++;
-                {stateVarName} = 0;
+                {continueBlock}
             } else {
                 {stateVarName} = {nextVarName};
                 {nextVarName} = -1;
             }
         }
+    {/if}
+    {#if !topExpressionOfStatement && fixedEnd}
+        if ({stateVarName} < {final} || {iteratorVarName} != {lenVarName})
+            {indexVarName} = -1;
+    {#elseif !topExpressionOfStatement && !fixedEnd}
         if ({stateVarName} < {final})
             {indexVarName} = -1;
     {/if}
@@ -72,6 +73,8 @@ class CStringSearch {
     public varAccess: CElementAccess;
     public stateTransitionBlocks: CStateTransitionsBlock[] = [];
     public final: string;
+    public fixedEnd: boolean;
+    public continueBlock: ContinueBlock;
     constructor(scope: IScope, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
@@ -97,19 +100,29 @@ class CStringSearch {
 
             let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
             let compiler = new RegexCompiler();
-            let stms = compiler.compile(template.slice(1, -1));
-            if (stms.length >= 1) {
-                for (let s = 0; s < stms[0].states.length; s++) {
+            let compiledRegex = compiler.compile(template.slice(1, -1));
+            if (compiledRegex.variants.length >= 1) {
+                for (let s = 0; s < compiledRegex.variants[0].states.length; s++) {
                     this.stateTransitionBlocks.push(new CStateTransitionsBlock(
                         scope,
                         this.chVarName,
                         this.stateVarName,
                         this.nextVarName,
                         s,
-                        stms[0].states[s]
+                        compiledRegex.variants[0].states[s]
                     ));
                 }
-                this.final = stms[0].final+"";
+                this.final = compiledRegex.variants[0].final+"";
+                this.fixedEnd = compiledRegex.fixedEnd;
+                this.continueBlock = new ContinueBlock(scope, 
+                    compiledRegex.fixedStart,
+                    this.fixedEnd,
+                    this.stateVarName,
+                    this.final,
+                    this.iteratorVarName,
+                    this.indexVarName,
+                    this.lenVarName
+                );
             }
             scope.root.headerFlags.strings = true;
         }
@@ -138,8 +151,32 @@ class CStateTransitionsBlock {
             this.exceptConditions.push(new CharCondition(ch.replace('\\','\\\\'), -1, this.chVarName, this.nextVarName));
         if (state.anyChar)
             this.anyChar = state.anyChar+"";
-            // 'if (' + this.nextVarName + ' == -1) ' + this.nextVarName + ' = ' + state.anyChar + ';';
     }
+}
+
+@CodeTemplate(`
+{#if !fixedStart && !fixedEnd}
+    if ({stateVarName} >= {final})
+        break;
+    {iteratorVarName} = {indexVarName};
+    {indexVarName}++;
+    {stateVarName} = 0;
+{#elseif !fixedStart && fixedEnd}
+    {iteratorVarName} = {indexVarName};
+    {indexVarName}++;
+    {stateVarName} = 0;
+{#else}
+    break;
+{/if}`)
+class ContinueBlock {
+    constructor(scope: IScope, 
+        public fixedStart: boolean, 
+        public fixedEnd: boolean, 
+        public stateVarName: string, 
+        public final: string,
+        public iteratorVarName: string,
+        public indexVarName: string,
+        public lenVarName) { }
 }
 
 class CharCondition {
