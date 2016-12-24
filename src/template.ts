@@ -56,7 +56,7 @@ function processTemplate(template: string, args: any): [string, string] {
     }
 
     if (typeof args === "string")
-        return [template.replace("{this}", args), statements];
+        return [template.replace("{this}", () => args), statements];
 
     let ifPos;
     while ((ifPos = template.indexOf("{#if ")) > -1) {
@@ -164,7 +164,7 @@ function processTemplate(template: string, args: any): [string, string] {
                 statements += elementStatements;
 
                 if (k == 'statements') {
-                    resolvedElement = resolvedElement.replace(/[;\n*]+;/g, ';');
+                    resolvedElement = resolvedElement.replace(/[;\n]+;/g, ';');
                     if (resolvedElement.search(/\n/) > -1) {
                         for (let line of resolvedElement.split('\n')) {
                             if (line != '') {
@@ -215,14 +215,15 @@ function processTemplate(template: string, args: any): [string, string] {
                 let value = args[k];
                 if (value && value.resolve)
                     value = value.resolve();
-                value = value && typeof value === 'string' && value.replace(/\n/g, '\n'+spaces);
-                template = template.replace("{" + k + "}", value);
+                if (value && typeof value === 'string')
+                    value = value.replace(/\n/g, '\n'+spaces);
+                template = template.replace("{" + k + "}", () => value);
                 replaced = true;
             }
         }
     }
     if (args["resolve"] && !replaced && template.indexOf("{this}") > -1) {
-        template = template.replace("{this}", args["resolve"]());
+        template = template.replace("{this}", () => args["resolve"]());
     }
     template = template.replace(/^[\n]*/, '').replace(/\n\s*\n[\n\s]*\n/g, '\n\n');
     return [template, statements];

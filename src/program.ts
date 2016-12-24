@@ -55,6 +55,7 @@ class HeaderFlags {
     str_rpos: boolean = false;
     str_len: boolean = false;
     atoi: boolean = false;
+    regex_search_result_t: boolean = false;
 }
 
 
@@ -98,6 +99,13 @@ class HeaderFlags {
 	    const char *string;
 	    void *obj;
 	};
+{/if}
+
+{#if headerFlags.regex_search_result_t}
+    struct regex_search_result_t {
+        int16_t index;
+        int16_t length;
+    };
 {/if}
 
 {#if headerFlags.gc_iterator || headerFlags.dict}

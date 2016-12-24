@@ -1,3 +1,9 @@
+export interface CompiledRegex {
+    fixedStart: boolean;
+    fixedEnd: boolean;
+    variants: RegexMachine[]
+}
+
 export interface RegexMachine {
     states: RegexState[];
     fixedStart: boolean;
@@ -11,6 +17,7 @@ export interface RegexState {
     chars: { [ch: string]: number };
 
     stm?: RegexMachine[];
+    template?: string;
     group?: number;
     next?: number;
 }
@@ -95,6 +102,7 @@ export class RegexCompiler {
                     chars: lastToken.chars,
                     anyChar: lastToken.anyChar,
                     tokens: lastToken.tokens,
+                    template: lastToken.template,
                     group: lastToken.group
                 };
                 tokens.push(newToken);
@@ -119,7 +127,7 @@ export class RegexCompiler {
                 variants.push(tokens);
             } else if (template[i] == '(') {
                 let [last_i, nested_variants] = this.tokenize(template.slice(i + 1), true);
-                tokens.push({ tokens: nested_variants, group: group++ });
+                tokens.push({ tokens: nested_variants, template: '/^'+template.slice(i+1, i+1+last_i) + '/', group: group++ });
                 i = i + 1 + last_i;
             } else if (nested && template[i] == ')') {
                 return [i, this.optimizeTokens(variants)];
@@ -162,6 +170,7 @@ export class RegexCompiler {
                 stmNode.except[ch] = true;
         } else if (token.tokens) {
             stmNode.stm = this.generateRegexMachines(true, false, token.tokens).variants;
+            stmNode.template = token.template;
             stmNode.group = token.group;
             stmNode.next = nextPos;
         }
@@ -213,7 +222,7 @@ export class RegexCompiler {
 
     }
 
-    public compile(template)
+    public compile(template) : CompiledRegex
     {
         var [fixedStart, fixedEnd, variants] = this.preprocessRegex(template);
         return this.generateRegexMachines(fixedStart, fixedEnd, variants);

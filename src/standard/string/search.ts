@@ -6,7 +6,7 @@ import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
-import { RegexCompiler, RegexState } from '../../regex';
+import { RegexCompiler, CompiledRegex, RegexMachine, RegexState } from '../../regex';
 
 @StandardCallResolver
 class StringSearchResolver implements IResolver {
@@ -35,7 +35,7 @@ var regexLiteralFuncNames = {};
 
 @CodeTemplate(`
 {#if !topExpressionOfStatement}
-    {regexFuncName}({argAccess})
+    {regexFuncName}({argAccess}).index
 {/if}`)
 class CStringSearch
 {
@@ -51,7 +51,7 @@ class CStringSearch
                 let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
                 if (!regexLiteralFuncNames[template]) {
                     regexLiteralFuncNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex_search");
-                    scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearch(scope, call, regexLiteralFuncNames[template]));
+                    scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearch(scope, template, regexLiteralFuncNames[template]));
                 }
                 this.regexFuncName = regexLiteralFuncNames[template];
                 this.argAccess = new CElementAccess(scope, propAccess.expression);
@@ -62,88 +62,134 @@ class CStringSearch
 }
 
 @CodeTemplate(`
-int {regexFunctionName}(const char *str) {
-    state = 0;
-    index = 0;
-    next = -1;
-    len = strlen(str);
-    for (iterator = 0; iterator < len; iterator++) {
-        ch = str[iterator];
-
-        {stateTransitionBlocks {        }=> {this}}
-
-        if (next == -1) {
-            {continueBlock}
-        } else {
-            state = next;
-            next = -1;
-        }
-    }
-{#if fixedEnd}
-        if (state < {final} || iterator != len)
-            index = -1;
-{#else}
-        if (state < {final})
-            index = -1;
+struct regex_search_result_t {regexFunctionName}(const char *str) {
+    int16_t state, next, len = strlen(str), iterator;
+    struct regex_search_result_t result{#if hasNested}, nested_result{/if};
+{#if hasChars}
+    char ch;
 {/if}
+{variants}
+    result.length = result.index == -1 ? 0 : iterator - result.index;
+    return result;
 }`)
 class CRegexSearch {
-    public topExpressionOfStatement: boolean;
-    public stateTransitionBlocks: CStateTransitionsBlock[] = [];
-    public final: string;
-    public fixedEnd: boolean;
-    public continueBlock: ContinueBlock;
-    constructor(scope: IScope, call: ts.CallExpression, public regexFunctionName: string) {
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-
-        if (call.arguments.length < 1 || call.arguments[0].kind != ts.SyntaxKind.RegularExpressionLiteral)
-            console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
-
-        let template = (<ts.RegularExpressionLiteral>call.arguments[0]).text;
+    public hasNested: boolean = false;
+    public hasChars: boolean = false;
+    public variants: CRegexSearchVariant[] = [];
+    constructor(scope: IScope, template: string, public regexFunctionName: string, compiledRegex: CompiledRegex = null) {
         let compiler = new RegexCompiler();
-        let compiledRegex = compiler.compile(template.slice(1, -1));
-        if (compiledRegex.variants.length >= 1) {
-            for (let s = 0; s < compiledRegex.variants[0].states.length; s++) {
-                this.stateTransitionBlocks.push(new CStateTransitionsBlock(
-                    scope,
-                    s,
-                    compiledRegex.variants[0].states[s]
-                ));
-            }
-            this.final = compiledRegex.variants[0].final+"";
-            this.fixedEnd = compiledRegex.fixedEnd;
-            this.continueBlock = new ContinueBlock(scope, 
-                compiledRegex.fixedStart,
-                this.fixedEnd,
-                this.final
-            );
+        compiledRegex = compiledRegex || compiler.compile(template.slice(1, -1));
+        for (let i=0; i<compiledRegex.variants.length; i++) {
+            let variant = compiledRegex.variants[i];
+            this.hasNested = this.hasNested || variant.states.filter(s => s.stm).length > 0;
+            this.hasChars = this.hasChars || variant.states.filter(s => Object.keys(s.chars).length > 0).length > 0;
+            this.variants.push(new CRegexSearchVariant(scope, variant, i==0, compiledRegex.fixedStart, compiledRegex.fixedEnd));
         }
         scope.root.headerFlags.strings = true;
+        scope.root.headerFlags.regex_search_result_t = true;
     }
 
+}
+
+@CodeTemplate(`
+{#if !firstVariant}
+        if (result.index == -1) {
+{/if}
+{TAB}    state = 0;
+{TAB}    next = -1;
+{TAB}    result.index = 0;
+{TAB}    for (iterator = 0; iterator < len; iterator++) {
+{#if hasChars}
+{TAB}        ch = str[iterator];
+{/if}
+
+{TAB}        {stateTransitionBlocks {        }=> {this}}
+
+
+{TAB}        if (next == -1) {
+{TAB}            {continueBlock}
+{TAB}        } else {
+{TAB}            state = next;
+{TAB}            next = -1;
+{TAB}        }
+{TAB}    }
+{#if fixedEnd}
+    {TAB}    if (state < {final} || iterator != len)
+    {TAB}        result.index = -1;
+{#else}
+    {TAB}    if (state < {final})
+    {TAB}        result.index = -1;
+{/if}
+{#if !firstVariant}
+        }
+{/if}
+`)
+class CRegexSearchVariant {
+    public final: string;
+    public continueBlock: ContinueBlock;
+    public stateTransitionBlocks: CStateTransitionsBlock[] = [];
+    public hasChars: boolean;
+    public TAB: string;
+    constructor(scope: IScope, variant: RegexMachine, public firstVariant: boolean, fixedStart: boolean, public fixedEnd: boolean) {
+        this.TAB = this.firstVariant ? "" : "    ";
+        this.hasChars = variant.states.filter(s => Object.keys(s.chars).length > 0).length > 0;
+        for (let s = 0; s < variant.states.length; s++) {
+            this.stateTransitionBlocks.push(new CStateTransitionsBlock(
+                scope,
+                s+"",
+                variant.states[s]
+            ));
+        }
+        this.final = variant.final+"";
+        this.continueBlock = new ContinueBlock(scope, 
+            fixedStart,
+            this.fixedEnd,
+            this.final
+        );
+    }
 }
 
 @CodeTemplate(`if (state == {stateNumber}) {
             {charConditions {\n            }=> if (ch == '{ch}') next = {next};}
 {#if anyChar && exceptConditions.length}
                 if ({exceptConditions { && }=> (ch != '{ch}')} && next == -1)
-                    next = {anyChar};
+                    next = {next};
 {#elseif anyChar}
-                if (next == -1) next = {anyChar};
+                if (next == -1) next = {next};
+{#elseif nestedCall}
+                nested_result = {nestedCall};
+                if (nested_result.index > -1) {
+                    next = {next};
+                    iterator += nested_result.length-1;
+                }
 {/if}
         }
 `)
 class CStateTransitionsBlock {
     public charConditions: CharCondition[] = [];
     public exceptConditions: CharCondition[] = [];
-    public anyChar: string = '';
-    constructor(scope: IScope, public stateNumber: number, state: RegexState) {
+    public anyChar: boolean = false;
+    public nestedCall: string = '';
+    public next: string;
+    constructor(scope: IScope, public stateNumber: string, state: RegexState) {
         for (let ch in state.chars)
             this.charConditions.push(new CharCondition(ch.replace('\\','\\\\'), state.chars[ch]));
         for (let ch in state.except)
             this.exceptConditions.push(new CharCondition(ch.replace('\\','\\\\'), -1));
-        if (state.anyChar)
-            this.anyChar = state.anyChar+"";
+        for (let stm in state.stm) {
+            if (!regexLiteralFuncNames[state.template]) {
+                regexLiteralFuncNames[state.template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex_search");
+                let compiledRegex = { fixedStart: true, fixedEnd: false, variants: state.stm };
+                let regexSearch = new CRegexSearch(scope, state.template, regexLiteralFuncNames[state.template], compiledRegex);
+                scope.root.functions.splice(scope.parent ? -2 : -1, 0, regexSearch);
+            }
+            this.nestedCall = regexLiteralFuncNames[state.template] + '(str + iterator)';
+            this.next = state.next+"";
+        }
+        if (state.anyChar) {
+            this.anyChar = true;
+            this.next = state.anyChar+"";
+        }
     }
 }
 
@@ -151,12 +197,12 @@ class CStateTransitionsBlock {
 {#if !fixedStart && !fixedEnd}
     if (state >= {final})
         break;
-    iterator = index;
-    index++;
+    iterator = result.index;
+    result.index++;
     state = 0;
 {#elseif !fixedStart && fixedEnd}
-    iterator = index;
-    index++;
+    iterator = result.index;
+    result.index++;
     state = 0;
 {#else}
     break;
