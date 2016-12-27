@@ -13,6 +13,8 @@ Source code structure:
  - types.ts - extended type analysis on top of TypeScript's type checker
  - memory.ts - memory management related stuff 
  - template.ts - code templating engine
+ - resolver.ts - standard call resolvers
+ - regex.ts - regular expression engine
 
 Contributions
 -------------
