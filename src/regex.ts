@@ -143,7 +143,7 @@ export class RegexBuilder {
                 nextFromState = [firstFromState, finalState];
             else
                 nextFromState = [finalState];
-            lastTransitions.filter(ls => ls).forEach(ls => ls.toState = finalState);
+            lastTransitions.forEach(ls => ls.toState = finalState);
         } else {
             for (let tok of token.tokens) {
                 let results = [];
@@ -165,13 +165,18 @@ export class RegexBuilder {
         return { transitions, nextFromState, finalState };
     }
 
-    static normalize(transitions: Transition[], finalState: number) {
+    static normalize(transitions: Transition[], finalStates: number[]) {
         if (!transitions.length)
             return [];
         let states = [];
 
-        if (transitions.map(t => t.fromState).indexOf(finalState) == -1)
-            transitions.push({ fromState: finalState, final: true });
+        for (let finalState of finalStates) {
+            if (transitions.map(t => t.fromState).indexOf(finalState) == -1) {
+                transitions.push({ fromState: finalState, final: true })
+            } else
+                transitions.filter(t => t.fromState == finalState).forEach(t => t.final = true);
+        }
+
         let stateIndices = {};
         let queue = [transitions.filter(t => t.fromState == 0)];
         let processed = {};
@@ -224,8 +229,8 @@ export class RegexBuilder {
 
     static build(template): RegexMachine {
         let tokenTree = RegexParser.parse(template);
-        let { transitions, finalState } = this.convert(tokenTree);
-        let states = this.normalize(transitions, finalState);
+        let { transitions, nextFromState } = this.convert(tokenTree);
+        let states = this.normalize(transitions, nextFromState);
         return { states: states, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
     }
 
