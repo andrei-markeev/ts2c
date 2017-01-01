@@ -13,7 +13,7 @@ export interface RegexState {
 
 type RegexToken = string | ComplexRegexToken;
 interface ComplexRegexToken {
-    zeroOrMore?: boolean;
+    oneOrMore?: boolean;
     anyOf?: boolean;
     anyCharExcept?: boolean;
     nothing?: boolean;
@@ -31,6 +31,10 @@ interface Transition {
 }
 
 const NOTHING = { nothing: true };
+
+Array.prototype["removeDuplicates"] = function () {
+    return this.filter(function (item, pos, self) { return self.indexOf(item) == pos; });
+}
 
 class RegexParser {
 
@@ -80,19 +84,20 @@ class RegexParser {
             else if (template[i] == '.')
                 tokens.push({ anyCharExcept: true, tokens: [] });
             else if (template[i] == '*') {
+                tokens.pop();
                 if (typeof last === "string")
-                    tokens.push({ zeroOrMore: true, tokens: [tokens.pop()] });
+                    tokens.push({ anyOf: true, tokens: [NOTHING, { tokens: [last], oneOrMore: true }] });
                 else
-                    last.zeroOrMore = true
+                    tokens.push({ anyOf: true, tokens: [NOTHING, { ...last, oneOrMore: true }] });
             } else if (template[i] == '?')
                 tokens.push({ anyOf: true, tokens: [NOTHING, tokens.pop()] });
             else if (template[i] == '+')
                 if (typeof last === "string")
-                    tokens.push({ zeroOrMore: true, tokens: [last] });
+                    tokens.push({ oneOrMore: true, tokens: [tokens.pop()] });
                 else
-                    tokens.push({ ...last, zeroOrMore: true });
+                    last.oneOrMore = true
             else if (template[i] == '|') {
-                rootToken.tokens.push({ tokens: tokens });
+                rootToken.tokens.push(tokens.length ? { tokens: tokens } : NOTHING);
                 rootToken.anyOf = true;
                 tokens = [];
             } else if (template.slice(i, i + 3) == '(?:')
@@ -111,7 +116,7 @@ class RegexParser {
             i++;
         }
         if (rootToken.anyOf)
-            rootToken.tokens.push({ tokens: tokens });
+            rootToken.tokens.push(tokens.length ? { tokens: tokens } : NOTHING);
         else
             rootToken.tokens = tokens;
         rootToken.template = template.slice(0, i);
@@ -121,47 +126,51 @@ class RegexParser {
 
 export class RegexBuilder {
 
-    static convert(token: RegexToken, transitions: Transition[] = [], firstFromState = 0) {
-        let finalState = transitions.map(t => t.toState).reduce((a, b) => Math.max(a, b), 0);
-        let lastFromState = firstFromState;
-        if (typeof token == "string" || token.anyCharExcept)
+    static convert(token: RegexToken, transitions: Transition[] = [], firstFromState = 0, finalState = 0) {
+        let nextFromState = [firstFromState];
+        if (typeof token == "string" || token.anyCharExcept) {
             transitions.push({ token: token, fromState: firstFromState, toState: ++finalState });
-        else if (token.anyOf) {
+            nextFromState = [finalState];
+        } else if (token.anyOf) {
             let lastTransitions: Transition[] = [];
             for (let tok of token.tokens.filter(t => t != NOTHING)) {
                 let l = transitions.length;
-                finalState = this.convert(tok, transitions, firstFromState).finalState;
+                let result = this.convert(tok, transitions, firstFromState, finalState);
+                finalState = result.finalState;
                 lastTransitions = lastTransitions.concat(transitions.slice(l).filter(t => t.toState == finalState));
             }
-            // update toState of all variants to the finalState of last variant
             if (token.tokens.indexOf(NOTHING) > -1)
-                transitions.filter(t => t.toState == firstFromState).forEach(tr => transitions.push({ ...tr, toState: finalState }));
+                nextFromState = [firstFromState, finalState];
+            else
+                nextFromState = [finalState];
             lastTransitions.filter(ls => ls).forEach(ls => ls.toState = finalState);
         } else {
-            let nextStartFrom = firstFromState;
             for (let tok of token.tokens) {
-                let result = this.convert(tok, transitions, nextStartFrom);
-                finalState = result.finalState;
-                if (typeof tok == "string" || !tok.zeroOrMore)
-                    nextStartFrom = result.finalState;
+                let results = [];
+                let lastTransitions: Transition[] = [];
+                for (let fromState of nextFromState) {
+                    let l = transitions.length;
+                    let result = this.convert(tok, transitions, fromState, finalState);
+                    lastTransitions = lastTransitions.concat(transitions.slice(l).filter(t => t.toState == result.finalState));
+                    results.push(result);
+                }
+                nextFromState = [].concat.apply([], results.map(r => r.nextFromState)).removeDuplicates();
+                finalState = results.map(r => r.finalState).reduce((a,b) => Math.max(a, b), 0);
             }
         }
-        if (typeof token != "string" && token.zeroOrMore) {
+        if (typeof token != "string" && token.oneOrMore) {
             for (let tr of transitions.filter(t => t.toState == finalState))
                 transitions.push({ ...tr, toState: firstFromState });
         }
-        return { transitions, lastFromState, finalState };
+        return { transitions, nextFromState, finalState };
     }
 
     static normalize(transitions: Transition[], finalState: number) {
         if (!transitions.length)
             return [];
         let states = [];
-        Array.prototype["removeDuplicates"] = function () {
-            return this.filter(function (item, pos, self) { return self.indexOf(item) == pos; });
-        }
 
-        if (transitions.map(t => t.toState).indexOf(finalState) == -1)
+        if (transitions.map(t => t.fromState).indexOf(finalState) == -1)
             transitions.push({ fromState: finalState, dummy: true });
         let stateIndices = {};
         let queue = [transitions.filter(t => t.fromState == 0)];
@@ -215,7 +224,11 @@ export class RegexBuilder {
         let tokenTree = RegexParser.parse(template);
         let { transitions, finalState } = this.convert(tokenTree);
         let states = this.normalize(transitions, finalState);
-        return { states: states, final: states.length - 1, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
+        let final = states.length - 1;
+        for (let i=0;i<states.length;i++)
+            if (states[i].anyChar == null && Object.keys(states[i].chars).length == 0)
+                final = i;
+        return { states: states, final: final, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
     }
 
 }

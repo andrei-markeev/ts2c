@@ -84,10 +84,10 @@ struct regex_search_result_t {regexFunctionName}(const char *str) {
         }
     }
 {#if fixedEnd}
-        if (state < {final} || iterator != len)
+        if (state != {final} || iterator != len)
             result.index = -1;
 {#else}
-        if (state < {final})
+        if (state != {final})
             result.index = -1;
 {/if}
     result.length = result.index == -1 ? 0 : iterator - result.index;
@@ -153,7 +153,7 @@ class CStateTransitionsBlock {
 
 @CodeTemplate(`
 {#if !fixedStart && !fixedEnd}
-    if (state >= {final})
+    if (state == {final})
         break;
     iterator = result.index;
     result.index++;
