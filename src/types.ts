@@ -550,6 +550,8 @@ export class TypeHelper {
                     }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "sort")
                         varData.isDynamicArray = true;
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "reverse")
+                        varData.isDynamicArray = true;
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {

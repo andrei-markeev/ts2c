@@ -36,7 +36,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
         - [x] **`true` / `false`**
         - [x] **number literal** _(partial: only 16-bit integers)_
         - [x] **string literal**
-        - [x] **regular expression literal** _(partial: only in direct calls to String.search)_
+        - [x] **regular expression literal**
     - [x] **Array initializer `[` ... `]`** 
     - [x] **Object initializer `{` ... `}`**
     - [x] **Grouping operator `(` `)`**
@@ -130,7 +130,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **join**
      - [x] **pop**
      - [x] **push**
-     - [ ] reverse
+     - [x] **reverse**
      - [x] **shift**
      - [x] **slice** _(partial: no bounds checking)_
      - [x] **sort** _(partial: sort function as parameter not supported)_
@@ -151,7 +151,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] localeCompare
      - [ ] match
      - [ ] replace
-     - [x] **search** _(partial: only with regex literal directly as parameter)_
+     - [x] **search**
      - [ ] slice
      - [ ] split
      - [ ] substring
