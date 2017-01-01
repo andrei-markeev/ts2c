@@ -7,6 +7,7 @@ export const PointerVarType = "void *";
 export const StringVarType = "const char *";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
+export const RegexVarType = "struct regex_struct_t";
 
 /** Type that represents static or dynamic array */
 export class ArrayType {
@@ -236,6 +237,8 @@ export class TypeHelper {
                     }
                     return null;
                 }
+            case ts.SyntaxKind.RegularExpressionLiteral:
+                return RegexVarType;
             case ts.SyntaxKind.ArrayLiteralExpression:
                 return this.arrayLiteralsTypes[node.pos];
             case ts.SyntaxKind.ObjectLiteralExpression:

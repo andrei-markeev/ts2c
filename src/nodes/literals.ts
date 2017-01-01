@@ -4,6 +4,7 @@ import {IScope} from '../program';
 import {ArrayType, StructType} from '../types';
 import {CVariable} from './variable';
 import {AssignmentHelper, CAssignment} from './assignment';
+import {CRegexSearchFunction} from './regexfunc';
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
 class CArrayLiteralExpression {
@@ -94,6 +95,21 @@ class CObjectLiteralExpression {
     }
 }
 
+var regexNames = {};
+
+@CodeTemplate(`{expression}`, ts.SyntaxKind.RegularExpressionLiteral)
+class CRegexLiteralExpression {
+    public expression: string = '';
+    constructor(scope: IScope, node: ts.RegularExpressionLiteral) {
+        let template = node.text;
+        if (!regexNames[template]) {
+            regexNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex");
+            scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearchFunction(scope, template, regexNames[template]));
+        }
+        this.expression = regexNames[template];
+        scope.root.headerFlags.regex = true;
+    }
+}
 
 @CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
 export class CString {

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType} from '../../types';
+import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType, RegexVarType} from '../../types';
 import {IScope} from '../../program';
 import {CExpression} from '../../nodes/expressions';
 import {CCallExpression} from '../../nodes/call';
@@ -32,6 +32,8 @@ interface PrintfOptions {
     printf("{propPrefix}\\"%s\\"{CR}", {accessor});
 {#elseif isCString}
     printf("%s{CR}", {accessor});
+{#elseif isRegex}
+    printf("%s{CR}", {accessor}.str);
 {#elseif isInteger}
     printf("{propPrefix}%d{CR}", {accessor});
 {#elseif isBoolean && !propPrefix}
@@ -67,6 +69,7 @@ class CPrintf {
     public isStringLiteral: boolean = false;
     public isQuotedCString: boolean = false;
     public isCString: boolean = false;
+    public isRegex: boolean = false;
     public isInteger: boolean = false;
     public isBoolean: boolean = false;
     public isDict: boolean = false;
@@ -84,6 +87,7 @@ class CPrintf {
         this.isStringLiteral = varType == StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
         this.isQuotedCString = varType == StringVarType && options.quotedString;
         this.isCString = varType == StringVarType && !options.quotedString;
+        this.isRegex = varType == RegexVarType;
         this.isInteger = varType == NumberVarType;
         this.isBoolean = varType == BooleanVarType;
 

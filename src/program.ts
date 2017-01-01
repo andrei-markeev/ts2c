@@ -55,7 +55,7 @@ class HeaderFlags {
     str_rpos: boolean = false;
     str_len: boolean = false;
     atoi: boolean = false;
-    regex_search_result_t: boolean = false;
+    regex: boolean = false;
 }
 
 
@@ -89,6 +89,13 @@ class HeaderFlags {
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}
     typedef int int16_t;
 {/if}
+{#if headerFlags.regex}
+    typedef int16_t regex_func_t(const char*);
+    struct regex_struct_t {
+        const char * str;
+        regex_func_t * func;
+    };
+{/if}
 
 {#if headerFlags.js_var}
     enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};
@@ -99,13 +106,6 @@ class HeaderFlags {
 	    const char *string;
 	    void *obj;
 	};
-{/if}
-
-{#if headerFlags.regex_search_result_t}
-    struct regex_search_result_t {
-        int16_t index;
-        int16_t length;
-    };
 {/if}
 
 {#if headerFlags.gc_iterator || headerFlags.dict}
