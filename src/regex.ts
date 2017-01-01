@@ -1,6 +1,5 @@
 export interface RegexMachine {
     states: RegexState[];
-    final: number;
     fixedStart: boolean;
     fixedEnd: boolean;
 }
@@ -9,6 +8,7 @@ export interface RegexState {
     anyChar?: number;
     except?: { [ch: string]: boolean };
     chars: { [ch: string]: number };
+    final: boolean;
 }
 
 type RegexToken = string | ComplexRegexToken;
@@ -27,7 +27,7 @@ interface Transition {
     fromState: number;
     token?: RegexToken;
     toState?: number;
-    dummy?: boolean;
+    final?: boolean;
 }
 
 const NOTHING = { nothing: true };
@@ -171,7 +171,7 @@ export class RegexBuilder {
         let states = [];
 
         if (transitions.map(t => t.fromState).indexOf(finalState) == -1)
-            transitions.push({ fromState: finalState, dummy: true });
+            transitions.push({ fromState: finalState, final: true });
         let stateIndices = {};
         let queue = [transitions.filter(t => t.fromState == 0)];
         let processed = {};
@@ -192,6 +192,8 @@ export class RegexBuilder {
             if (processed[id])
                 continue;
             states.push({ chars: {} });
+            if (trgroup.filter(t => t.final).length > 0)
+                states[states.length - 1].final = true;
 
             processed[id] = true;
 
@@ -224,11 +226,7 @@ export class RegexBuilder {
         let tokenTree = RegexParser.parse(template);
         let { transitions, finalState } = this.convert(tokenTree);
         let states = this.normalize(transitions, finalState);
-        let final = states.length - 1;
-        for (let i=0;i<states.length;i++)
-            if (states[i].anyChar == null && Object.keys(states[i].chars).length == 0)
-                final = i;
-        return { states: states, final: final, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
+        return { states: states, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
     }
 
 }

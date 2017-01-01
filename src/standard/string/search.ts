@@ -84,10 +84,10 @@ struct regex_search_result_t {regexFunctionName}(const char *str) {
         }
     }
 {#if fixedEnd}
-        if (state != {final} || iterator != len)
+        if (({finals { && }=> state != {this}}) || iterator != len)
             result.index = -1;
 {#else}
-        if (state != {final})
+        if ({finals { && }=> state != {this}})
             result.index = -1;
 {/if}
     result.length = result.index == -1 ? 0 : iterator - result.index;
@@ -95,7 +95,7 @@ struct regex_search_result_t {regexFunctionName}(const char *str) {
 }`)
 class CRegexSearch {
     public hasChars: boolean;
-    public final: string;
+    public finals: string[];
     public fixedEnd: boolean;
     public continueBlock: ContinueBlock;
     public stateTransitionBlocks: CStateTransitionsBlock[] = [];
@@ -111,12 +111,12 @@ class CRegexSearch {
                 regexMachine.states[s]
             ));
         }
-        this.final = regexMachine.final+"";
+        this.finals = regexMachine.states.length > 0 ? regexMachine.states.map((s, i) => s.final ? i : -1).filter(f => f > -1).map(f => f+"") : ["-1"];
         this.fixedEnd = regexMachine.fixedEnd;
         this.continueBlock = new ContinueBlock(scope, 
             regexMachine.fixedStart,
             this.fixedEnd,
-            this.final
+            this.finals
         );
         scope.root.headerFlags.strings = true;
         scope.root.headerFlags.regex_search_result_t = true;
@@ -153,7 +153,7 @@ class CStateTransitionsBlock {
 
 @CodeTemplate(`
 {#if !fixedStart && !fixedEnd}
-    if (state == {final})
+    if ({finals { || }=> state == {this}})
         break;
     iterator = result.index;
     result.index++;
@@ -169,7 +169,7 @@ class ContinueBlock {
     constructor(scope: IScope, 
         public fixedStart: boolean, 
         public fixedEnd: boolean, 
-        public final: string) { }
+        public finals: string[]) { }
 }
 
 class CharCondition {
