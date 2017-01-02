@@ -598,7 +598,9 @@ export class TypeHelper {
                         if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                             let binExpr = <ts.BinaryExpression>elemAccess.parent;
                             if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                                if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                                if (promiseKind == TypePromiseKind.dictOf) {
+                                    this.addTypePromise(varPos, binExpr.right, promiseKind);
+                                } else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                                     this.addTypePromise(varPos, binExpr.right, promiseKind, propName);
                                 }
                             }
