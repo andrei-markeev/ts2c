@@ -424,7 +424,7 @@ var MemoryManager = (function () {
 exports.MemoryManager = MemoryManager;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":14,"./types":29}],4:[function(require,module,exports){
+},{"./resolver":15,"./types":31}],4:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -523,7 +523,7 @@ exports.CAssignment = CAssignment;
 var CAssignment_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29,"./elementaccess":6}],5:[function(require,module,exports){
+},{"../template":30,"../types":31,"./elementaccess":6}],5:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -583,7 +583,7 @@ CCallExpression = __decorate([
 exports.CCallExpression = CCallExpression;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../resolver":14,"../standard/console/log":26,"../template":28,"../types":29,"./elementaccess":6}],6:[function(require,module,exports){
+},{"../resolver":15,"../standard/console/log":28,"../template":30,"../types":31,"./elementaccess":6}],6:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -670,7 +670,7 @@ exports.CSimpleElementAccess = CSimpleElementAccess;
 var CElementAccess_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29}],7:[function(require,module,exports){
+},{"../template":30,"../types":31}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -845,7 +845,7 @@ CGroupingExpression = __decorate([
 ], CGroupingExpression);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29,"./variable":11}],8:[function(require,module,exports){
+},{"../template":30,"../types":31,"./variable":12}],8:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -907,7 +907,7 @@ CFunction = __decorate([
 exports.CFunction = CFunction;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"./variable":11}],9:[function(require,module,exports){
+},{"../template":30,"./variable":12}],9:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -921,6 +921,7 @@ var template_1 = require("../template");
 var types_1 = require("../types");
 var variable_1 = require("./variable");
 var assignment_1 = require("./assignment");
+var regexfunc_1 = require("./regexfunc");
 var CArrayLiteralExpression = (function () {
     function CArrayLiteralExpression(scope, node) {
         var arrSize = node.elements.length;
@@ -1002,6 +1003,23 @@ var CObjectLiteralExpression = (function () {
 CObjectLiteralExpression = __decorate([
     template_1.CodeTemplate("\n{#statements}\n    {#if varName}\n        {varName} = malloc(sizeof(*{varName}));\n        assert({varName} != NULL);\n        {initializers}\n    {/if}\n{/statements}\n{expression}", ts.SyntaxKind.ObjectLiteralExpression)
 ], CObjectLiteralExpression);
+var regexNames = {};
+var CRegexLiteralExpression = (function () {
+    function CRegexLiteralExpression(scope, node) {
+        this.expression = '';
+        var template = node.text;
+        if (!regexNames[template]) {
+            regexNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex");
+            scope.root.functions.splice(scope.parent ? -2 : -1, 0, new regexfunc_1.CRegexSearchFunction(scope, template, regexNames[template]));
+        }
+        this.expression = regexNames[template];
+        scope.root.headerFlags.regex = true;
+    }
+    return CRegexLiteralExpression;
+}());
+CRegexLiteralExpression = __decorate([
+    template_1.CodeTemplate("{expression}", ts.SyntaxKind.RegularExpressionLiteral)
+], CRegexLiteralExpression);
 var CString = (function () {
     function CString(scope, value) {
         var s = typeof value === 'string' ? '"' + value + '"' : value.getText();
@@ -1029,7 +1047,81 @@ CNumber = __decorate([
 exports.CNumber = CNumber;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29,"./assignment":4,"./variable":11}],10:[function(require,module,exports){
+},{"../template":30,"../types":31,"./assignment":4,"./regexfunc":10,"./variable":12}],10:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var template_1 = require("../template");
+var literals_1 = require("./literals");
+var regex_1 = require("../regex");
+var CRegexSearchFunction = (function () {
+    function CRegexSearchFunction(scope, template, regexName, regexMachine) {
+        if (regexMachine === void 0) { regexMachine = null; }
+        this.regexName = regexName;
+        this.stateTransitionBlocks = [];
+        this.templateString = new literals_1.CString(scope, template.replace(/\\/g, '\\\\'));
+        regexMachine = regexMachine || regex_1.RegexBuilder.build(template.slice(1, -1));
+        this.hasChars = regexMachine.states.filter(function (s) { return s && (Object.keys(s.chars).length > 0 || s.except && Object.keys(s.except).length > 0); }).length > 0;
+        for (var s = 0; s < regexMachine.states.length - 1; s++) {
+            if (regexMachine.states[s] == null)
+                continue;
+            this.stateTransitionBlocks.push(new CStateTransitionsBlock(scope, s + "", regexMachine.states[s]));
+        }
+        this.finals = regexMachine.states.length > 0 ? regexMachine.states.map(function (s, i) { return s.final ? i : -1; }).filter(function (f) { return f > -1; }).map(function (f) { return f + ""; }) : ["-1"];
+        this.fixedEnd = regexMachine.fixedEnd;
+        this.continueBlock = new ContinueBlock(scope, regexMachine.fixedStart, this.fixedEnd, this.finals);
+        scope.root.headerFlags.strings = true;
+    }
+    return CRegexSearchFunction;
+}());
+CRegexSearchFunction = __decorate([
+    template_1.CodeTemplate("\nint16_t {regexName}_search(const char *str) {\n    int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0;\n{#if hasChars}\n        char ch;\n{/if}\n    for (iterator = 0; iterator < len; iterator++) {\n{#if hasChars}\n            ch = str[iterator];\n{/if}\n\n        {stateTransitionBlocks {        }=> {this}}\n\n        if (next == -1) {\n            {continueBlock}\n        } else {\n            state = next;\n            next = -1;\n        }\n    }\n{#if fixedEnd}\n        if (({finals { && }=> state != {this}}) || iterator != len)\n            index = -1;\n{#else}\n        if ({finals { && }=> state != {this}})\n            index = -1;\n{/if}\n    return index;\n}\nstruct regex_struct_t {regexName} = { {templateString}, {regexName}_search };\n")
+], CRegexSearchFunction);
+exports.CRegexSearchFunction = CRegexSearchFunction;
+var CStateTransitionsBlock = (function () {
+    function CStateTransitionsBlock(scope, stateNumber, state) {
+        this.stateNumber = stateNumber;
+        this.charConditions = [];
+        this.exceptConditions = [];
+        this.anyChar = false;
+        for (var ch in state.chars)
+            this.charConditions.push(new CharCondition(ch.replace('\\', '\\\\'), state.chars[ch]));
+        for (var ch in state.except)
+            this.exceptConditions.push(new CharCondition(ch.replace('\\', '\\\\'), -1));
+        if (state.anyChar != null) {
+            this.anyChar = true;
+            this.next = state.anyChar + "";
+        }
+    }
+    return CStateTransitionsBlock;
+}());
+CStateTransitionsBlock = __decorate([
+    template_1.CodeTemplate("if (state == {stateNumber}) {\n            {charConditions {\n            }=> if (ch == '{ch}') next = {next};}\n{#if anyChar && exceptConditions.length}\n                if ({exceptConditions { && }=> (ch != '{ch}')} && next == -1)\n                    next = {next};\n{#elseif anyChar}\n                if (next == -1) next = {next};\n{/if}\n        }\n")
+], CStateTransitionsBlock);
+var ContinueBlock = (function () {
+    function ContinueBlock(scope, fixedStart, fixedEnd, finals) {
+        this.fixedStart = fixedStart;
+        this.fixedEnd = fixedEnd;
+        this.finals = finals;
+    }
+    return ContinueBlock;
+}());
+ContinueBlock = __decorate([
+    template_1.CodeTemplate("\n{#if !fixedStart && !fixedEnd}\n    if ({finals { || }=> state == {this}})\n        break;\n    iterator = index;\n    index++;\n    state = 0;\n{#elseif !fixedStart && fixedEnd}\n    iterator = index;\n    index++;\n    state = 0;\n{#else}\n    break;\n{/if}")
+], ContinueBlock);
+var CharCondition = (function () {
+    function CharCondition(ch, next) {
+        this.ch = ch;
+        this.next = next;
+    }
+    return CharCondition;
+}());
+
+},{"../regex":14,"../template":30,"./literals":9}],11:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1263,7 +1355,7 @@ CBlock = __decorate([
 exports.CBlock = CBlock;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29,"./assignment":4,"./elementaccess":6,"./variable":11}],11:[function(require,module,exports){
+},{"../template":30,"../types":31,"./assignment":4,"./elementaccess":6,"./variable":12}],12:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1406,7 +1498,7 @@ var CVariable = (function () {
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":28,"../types":29,"./assignment":4}],12:[function(require,module,exports){
+},{"../template":30,"../types":31,"./assignment":4}],13:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1437,6 +1529,7 @@ require("./standard/array/join");
 require("./standard/array/indexOf");
 require("./standard/array/lastIndexOf");
 require("./standard/array/sort");
+require("./standard/array/reverse");
 require("./standard/string/search");
 var HeaderFlags = (function () {
     function HeaderFlags() {
@@ -1461,7 +1554,7 @@ var HeaderFlags = (function () {
         this.str_rpos = false;
         this.str_len = false;
         this.atoi = false;
-        this.regex_search_result_t = false;
+        this.regex = false;
     }
     return HeaderFlags;
 }());
@@ -1513,227 +1606,252 @@ var CProgram = (function () {
     return CProgram;
 }());
 CProgram = __decorate([
-    template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.regex_search_result_t}\n    struct regex_search_result_t {\n        int16_t index;\n        int16_t length;\n    };\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int*)a - *(int*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
+    template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}\n    typedef int int16_t;\n{/if}\n{#if headerFlags.regex}\n    typedef int16_t regex_func_t(const char*);\n    struct regex_struct_t {\n        const char * str;\n        regex_func_t * func;\n    };\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int*)a - *(int*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}")
 ], CProgram);
 exports.CProgram = CProgram;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":10,"./nodes/variable":11,"./standard/array/concat":15,"./standard/array/indexOf":16,"./standard/array/join":17,"./standard/array/lastIndexOf":18,"./standard/array/pop":19,"./standard/array/push":20,"./standard/array/shift":21,"./standard/array/slice":22,"./standard/array/sort":23,"./standard/array/splice":24,"./standard/array/unshift":25,"./standard/string/search":27,"./template":28,"./types":29}],13:[function(require,module,exports){
+},{"./memory":3,"./nodes/call":5,"./nodes/expressions":7,"./nodes/function":8,"./nodes/literals":9,"./nodes/statements":11,"./nodes/variable":12,"./standard/array/concat":16,"./standard/array/indexOf":17,"./standard/array/join":18,"./standard/array/lastIndexOf":19,"./standard/array/pop":20,"./standard/array/push":21,"./standard/array/reverse":22,"./standard/array/shift":23,"./standard/array/slice":24,"./standard/array/sort":25,"./standard/array/splice":26,"./standard/array/unshift":27,"./standard/string/search":29,"./template":30,"./types":31}],14:[function(require,module,exports){
 "use strict";
-var RegexCompiler = (function () {
-    function RegexCompiler() {
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
     }
-    RegexCompiler.prototype.optimizeTokens = function (variants) {
-        for (var _i = 0, variants_1 = variants; _i < variants_1.length; _i++) {
-            var tokens = variants_1[_i];
-            for (var i = 0; i < tokens.length - 1; i++) {
-                if (tokens[i].chars
-                    && tokens[i + 1].chars
-                    && tokens[i].chars.length == tokens[i + 1].chars.length
-                    && tokens[i].chars.every(function (v) { return tokens[i + 1].chars.indexOf(v) != -1; })
-                    && tokens[i].wildCard
-                    && !tokens[i + 1].wildCard) {
-                    var t = tokens[i + 1];
-                    tokens[i + 1] = tokens[i];
-                    tokens[i] = t;
-                }
-            }
-        }
-        return variants;
+    return t;
+};
+var NOTHING = { nothing: true };
+Array.prototype["removeDuplicates"] = function () {
+    return this.filter(function (item, pos, self) { return self.indexOf(item) == pos; });
+};
+var RegexParser = (function () {
+    function RegexParser() {
+    }
+    RegexParser.parseEscaped = function (c) {
+        if (c == 'd')
+            return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        else if (c == 'n')
+            return ['\n'];
+        else if (c == 's')
+            return ['\t', ' '];
+        else
+            return [c];
     };
-    RegexCompiler.prototype.tokenize = function (template, nested) {
-        template += ' '; // add dummy to the end so less checks in tokenize loop
-        var i = 0;
-        var variants = [];
-        var tokens = [];
-        var group = 0;
-        variants.push(tokens);
-        var getCharsMode = null;
-        var getCharsToken = null;
-        while (i < template.length - 1) {
-            if (getCharsMode) {
-                if (template[i] == '\\') {
-                    i++;
-                    if (template[i] == 'd')
-                        getCharsToken[getCharsMode].push(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
-                    else if (template[i] == 'n')
-                        getCharsToken[getCharsMode].push('\n');
-                    else if (template[i] == 's')
-                        getCharsToken[getCharsMode].push('\t', ' ');
-                    else
-                        getCharsToken[getCharsMode].push(template[i]);
-                }
-                else if (template[i] == ']') {
-                    getCharsMode = null;
-                }
-                else if (template[i + 1] == '-') {
-                    var ch = template[i];
-                    i++;
-                    i++;
-                    while (ch.charCodeAt(0) <= template[i].charCodeAt(0)) {
-                        getCharsToken[getCharsMode].push(ch);
-                        ch = String.fromCharCode(ch.charCodeAt(0) + 1);
-                    }
-                }
-                else
-                    getCharsToken[getCharsMode].push(template[i]);
-            }
-            else if (template[i] == '\\') {
+    RegexParser.parseChars = function (template, i, mode) {
+        var token = { tokens: [] };
+        token[mode] = true;
+        while (template[i] != ']') {
+            if (template[i] == '\\')
+                i++ && (token.tokens = token.tokens.concat(this.parseEscaped(template[i])));
+            else if (template[i + 1] == '-' && template[i + 2] != ']') {
+                var ch = template[i];
                 i++;
-                if (template[i] == 'd')
-                    tokens.push({ chars: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] });
-                else if (template[i] == 'n')
-                    tokens.push({ chars: ['\n'] });
-                else if (template[i] == 's')
-                    tokens.push({ chars: ['\t', ' '] });
-                else
-                    tokens.push({ chars: [template[i]] });
-            }
-            else if (template[i] == '*') {
-                var lastToken = tokens[tokens.length - 1];
-                lastToken.zeroOrMore = true;
-                lastToken.wildCard = true;
-            }
-            else if (template[i] == '+') {
-                var lastToken = tokens[tokens.length - 1];
-                var newToken = {
-                    zeroOrMore: true,
-                    wildCard: true,
-                    chars: lastToken.chars,
-                    anyChar: lastToken.anyChar,
-                    tokens: lastToken.tokens,
-                    template: lastToken.template,
-                    group: lastToken.group
-                };
-                tokens.push(newToken);
-            }
-            else if (template[i] == '?') {
-                var lastToken = tokens[tokens.length - 1];
-                lastToken.zeroOrOne = true;
-                lastToken.wildCard = true;
-            }
-            else if (template[i] == '.') {
-                tokens.push({ anyChar: true, except: [], wildCard: true });
-            }
-            else if (template[i] == '[' && template[i + 1] == '^') {
                 i++;
-                tokens.push({ anyChar: true, except: [] });
-                getCharsMode = 'except';
-                getCharsToken = tokens[tokens.length - 1];
-            }
-            else if (template[i] == '[') {
-                tokens.push({ chars: [] });
-                getCharsMode = 'chars';
-                getCharsToken = tokens[tokens.length - 1];
-            }
-            else if (template[i] == '|') {
-                tokens = [];
-                group = 0;
-                variants.push(tokens);
-            }
-            else if (template[i] == '(') {
-                var _a = this.tokenize(template.slice(i + 1), true), last_i = _a[0], nested_variants = _a[1];
-                tokens.push({ tokens: nested_variants, template: '/^' + template.slice(i + 1, i + 1 + last_i) + '/', group: group++ });
-                i = i + 1 + last_i;
-            }
-            else if (nested && template[i] == ')') {
-                return [i, this.optimizeTokens(variants)];
+                while (ch.charCodeAt(0) <= template[i].charCodeAt(0)) {
+                    token.tokens.push(ch);
+                    ch = String.fromCharCode(ch.charCodeAt(0) + 1);
+                }
             }
             else
-                tokens.push({ chars: [template[i]] });
+                token.tokens.push(template[i]);
             i++;
         }
-        return this.optimizeTokens(variants);
+        return [token.tokens.length ? token : null, i];
     };
-    RegexCompiler.prototype.preprocessRegex = function (template) {
-        var fixedStart = false;
-        var fixedEnd = false;
-        if (template[0] == '^') {
-            fixedStart = true;
-            template = template.slice(1);
-        }
-        if (template[template.length - 1] == '$') {
-            fixedEnd = true;
-            template = template.slice(0, -1);
-        }
-        var variants = this.tokenize(template, false);
-        return [fixedStart, fixedEnd, variants];
-    };
-    RegexCompiler.prototype.setupNextStep = function (stmNode, token, nextPos) {
-        if (!token)
-            return;
-        if (token.chars) {
-            for (var _i = 0, _a = token.chars; _i < _a.length; _i++) {
-                var ch = _a[_i];
-                stmNode.chars[ch] = nextPos;
-            }
-        }
-        else if (token.anyChar) {
-            stmNode.anyChar = nextPos;
-            stmNode.except = {};
-            for (var _b = 0, _c = token.except; _b < _c.length; _b++) {
-                var ch = _c[_b];
-                stmNode.except[ch] = true;
-            }
-        }
-        else if (token.tokens) {
-            stmNode.stm = this.generateRegexMachines(true, false, token.tokens).variants;
-            stmNode.template = token.template;
-            stmNode.group = token.group;
-            stmNode.next = nextPos;
-        }
-    };
-    RegexCompiler.prototype.generateRegexMachines = function (fixedStart, fixedEnd, variants) {
-        var stm_variants = [];
-        for (var _i = 0, variants_2 = variants; _i < variants_2.length; _i++) {
-            var tokens = variants_2[_i];
-            var stm = {
-                states: [],
-                fixedStart: fixedStart,
-                fixedEnd: fixedEnd,
-                final: 0
-            };
-            for (var i = 0; i < tokens.length; i++) {
-                stm.states.push({ chars: {} });
-                if (tokens[i].zeroOrMore) {
-                    this.setupNextStep(stm.states[i], tokens[i], i);
-                    var n = i + 1;
-                    // jump to one of next wildCards if match
-                    while (tokens[n] && tokens[n].wildCard) {
-                        this.setupNextStep(stm.states[i], tokens[n], tokens[n].zeroOrMore ? n : n + 1);
-                        n++;
-                    }
-                    this.setupNextStep(stm.states[i], tokens[n], n + 1);
-                }
-                else if (tokens[i].zeroOrOne) {
-                    this.setupNextStep(stm.states[i], tokens[i], i + 1);
-                    var n = i + 1;
-                    // jump to one of next wildCards if match
-                    while (tokens[n] && tokens[n].wildCard) {
-                        this.setupNextStep(stm.states[i], tokens[n], tokens[n].zeroOrMore ? n : n + 1);
-                        n++;
-                    }
-                    this.setupNextStep(stm.states[i], tokens[n], n + 1);
-                }
+    RegexParser.parse = function (template, group) {
+        if (group === void 0) { group = false; }
+        var fixedStart = template[0] == '^' && !!(template = template.slice(1));
+        var fixedEnd = template[template.length - 1] == '$' && (template = template.slice(0, -1));
+        var rootToken = { tokens: [], fixedStart: fixedStart, fixedEnd: fixedEnd };
+        var tokens = [];
+        var lastToken = function () { return tokens.slice(-1)[0]; };
+        var tok = null;
+        var i = 0;
+        while (i < template.length) {
+            var last = lastToken();
+            if (template[i] == '\\')
+                i++, tokens.push({ anyOf: true, tokens: this.parseEscaped(template[i]) });
+            else if (template[i] == '.')
+                tokens.push({ anyCharExcept: true, tokens: [] });
+            else if (template[i] == '*') {
+                tokens.pop();
+                if (typeof last === "string")
+                    tokens.push({ anyOf: true, tokens: [NOTHING, { tokens: [last], oneOrMore: true }] });
                 else
-                    this.setupNextStep(stm.states[i], tokens[i], i + 1);
+                    tokens.push({ anyOf: true, tokens: [NOTHING, __assign({}, last, { oneOrMore: true })] });
             }
-            stm.final = tokens.length;
-            while (tokens[stm.final - 1] && tokens[stm.final - 1].wildCard)
-                stm.final--;
-            stm_variants.push(stm);
+            else if (template[i] == '?')
+                tokens.push({ anyOf: true, tokens: [NOTHING, tokens.pop()] });
+            else if (template[i] == '+')
+                if (typeof last === "string")
+                    tokens.push({ oneOrMore: true, tokens: [tokens.pop()] });
+                else
+                    last.oneOrMore = true;
+            else if (template[i] == '|') {
+                rootToken.tokens.push(tokens.length ? { tokens: tokens } : NOTHING);
+                rootToken.anyOf = true;
+                tokens = [];
+            }
+            else if (template.slice(i, i + 3) == '(?:')
+                i += 3, (tok = this.parse(template.slice(i), true)) && tok && tokens.push(tok);
+            else if (template[i] == '(')
+                i++, (tok = this.parse(template.slice(i), true)) && tok && tokens.push(tok) && (i += tok.template.length);
+            else if (template[i] == ')' && group)
+                break;
+            else if (template.slice(i, i + 2) == '[^')
+                i += 2, (_a = this.parseChars(template, i, 'anyCharExcept'), tok = _a[0], i = _a[1], _a) && tok && tokens.push(tok);
+            else if (template[i] == '[')
+                i++, (_b = this.parseChars(template, i, 'anyOf'), tok = _b[0], i = _b[1], _b) && tok && tokens.push(tok);
+            else
+                tokens.push(template[i]);
+            i++;
         }
-        return { fixedStart: fixedStart, fixedEnd: fixedEnd, variants: stm_variants };
+        if (rootToken.anyOf)
+            rootToken.tokens.push(tokens.length ? { tokens: tokens } : NOTHING);
+        else
+            rootToken.tokens = tokens;
+        rootToken.template = template.slice(0, i);
+        return group && rootToken.tokens.length == 0 ? null : rootToken;
+        var _a, _b;
     };
-    RegexCompiler.prototype.compile = function (template) {
-        var _a = this.preprocessRegex(template), fixedStart = _a[0], fixedEnd = _a[1], variants = _a[2];
-        return this.generateRegexMachines(fixedStart, fixedEnd, variants);
-    };
-    return RegexCompiler;
+    return RegexParser;
 }());
-exports.RegexCompiler = RegexCompiler;
+var RegexBuilder = (function () {
+    function RegexBuilder() {
+    }
+    RegexBuilder.convert = function (token, transitions, firstFromState, finalState) {
+        if (transitions === void 0) { transitions = []; }
+        if (firstFromState === void 0) { firstFromState = 0; }
+        if (finalState === void 0) { finalState = 0; }
+        var nextFromState = [firstFromState];
+        if (typeof token == "string" || token.anyCharExcept) {
+            transitions.push({ token: token, fromState: firstFromState, toState: ++finalState });
+            nextFromState = [finalState];
+        }
+        else if (token.anyOf) {
+            var lastTransitions = [];
+            for (var _i = 0, _a = token.tokens.filter(function (t) { return t != NOTHING; }); _i < _a.length; _i++) {
+                var tok = _a[_i];
+                var l = transitions.length;
+                var result = this.convert(tok, transitions, firstFromState, finalState);
+                finalState = result.finalState;
+                lastTransitions = lastTransitions.concat(transitions.slice(l).filter(function (t) { return t.toState == finalState; }));
+            }
+            if (token.tokens.indexOf(NOTHING) > -1)
+                nextFromState = [firstFromState, finalState];
+            else
+                nextFromState = [finalState];
+            lastTransitions.forEach(function (ls) { return ls.toState = finalState; });
+        }
+        else {
+            for (var _b = 0, _c = token.tokens; _b < _c.length; _b++) {
+                var tok = _c[_b];
+                var results = [];
+                var lastTransitions = [];
+                var _loop_1 = function (fromState) {
+                    var l = transitions.length;
+                    var result = this_1.convert(tok, transitions, fromState, finalState);
+                    lastTransitions = lastTransitions.concat(transitions.slice(l).filter(function (t) { return t.toState == result.finalState; }));
+                    results.push(result);
+                };
+                var this_1 = this;
+                for (var _d = 0, nextFromState_1 = nextFromState; _d < nextFromState_1.length; _d++) {
+                    var fromState = nextFromState_1[_d];
+                    _loop_1(fromState);
+                }
+                nextFromState = [].concat.apply([], results.map(function (r) { return r.nextFromState; })).removeDuplicates();
+                finalState = results.map(function (r) { return r.finalState; }).reduce(function (a, b) { return Math.max(a, b); }, 0);
+            }
+        }
+        if (typeof token != "string" && token.oneOrMore) {
+            for (var _e = 0, _f = transitions.filter(function (t) { return t.toState == finalState; }); _e < _f.length; _e++) {
+                var tr = _f[_e];
+                transitions.push(__assign({}, tr, { toState: firstFromState }));
+            }
+        }
+        return { transitions: transitions, nextFromState: nextFromState, finalState: finalState };
+    };
+    RegexBuilder.normalize = function (transitions, finalStates) {
+        if (!transitions.length)
+            return [];
+        var states = [];
+        var _loop_2 = function (finalState) {
+            if (transitions.map(function (t) { return t.fromState; }).indexOf(finalState) == -1) {
+                transitions.push({ fromState: finalState, final: true });
+            }
+            else
+                transitions.filter(function (t) { return t.fromState == finalState; }).forEach(function (t) { return t.final = true; });
+        };
+        for (var _i = 0, finalStates_1 = finalStates; _i < finalStates_1.length; _i++) {
+            var finalState = finalStates_1[_i];
+            _loop_2(finalState);
+        }
+        var stateIndices = {};
+        var queue = [transitions.filter(function (t) { return t.fromState == 0; })];
+        var processed = {};
+        var tokenMoreOrEqual = function (token, other) {
+            return JSON.stringify(token) === JSON.stringify(other);
+        };
+        var ensureId = function (tt) {
+            var id = tt.map(function (t) { return t.fromState; }).removeDuplicates().sort().join(",");
+            if (stateIndices[id] == null) {
+                stateIndices[id] = Object.keys(stateIndices).length;
+            }
+            return stateIndices[id];
+        };
+        var _loop_3 = function () {
+            var trgroup = queue.pop();
+            var id = ensureId(trgroup);
+            if (processed[id])
+                return "continue";
+            states.push({ chars: {} });
+            if (trgroup.filter(function (t) { return t.final; }).length > 0)
+                states[states.length - 1].final = true;
+            processed[id] = true;
+            var processedTr = [];
+            var _loop_4 = function (tr) {
+                var group = trgroup.filter(function (t) { return tokenMoreOrEqual(tr.token, t.token) && processedTr.indexOf(t) == -1; });
+                if (!group.length)
+                    return "continue";
+                group.forEach(function (g) { return processedTr.push(g); });
+                var reachableStates = group.map(function (g) { return g.toState; });
+                var closure = transitions.filter(function (t) { return reachableStates.indexOf(t.fromState) > -1; });
+                var closureId = ensureId(closure);
+                if (typeof tr.token == "string")
+                    states[id].chars[tr.token] = closureId;
+                else {
+                    states[id].anyChar = closureId;
+                    states[id].except = {};
+                    for (var _i = 0, _a = tr.token.tokens; _i < _a.length; _i++) {
+                        var ch = _a[_i];
+                        states[id].except[ch] = true;
+                    }
+                }
+                console.log("FROM: ", id, "----", tr.token, "---> ", closureId);
+                queue.unshift(closure);
+            };
+            for (var _i = 0, _a = trgroup.filter(function (t) { return !!t.token; }); _i < _a.length; _i++) {
+                var tr = _a[_i];
+                _loop_4(tr);
+            }
+        };
+        while (queue.length) {
+            _loop_3();
+        }
+        return states;
+    };
+    RegexBuilder.build = function (template) {
+        var tokenTree = RegexParser.parse(template);
+        var _a = this.convert(tokenTree), transitions = _a.transitions, nextFromState = _a.nextFromState;
+        var states = this.normalize(transitions, nextFromState);
+        return { states: states, fixedStart: tokenTree.fixedStart, fixedEnd: tokenTree.fixedEnd };
+    };
+    return RegexBuilder;
+}());
+exports.RegexBuilder = RegexBuilder;
 
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 "use strict";
 var standardCallResolvers = [];
 function StandardCallResolver(target) {
@@ -1780,7 +1898,7 @@ var StandardCallHelper = (function () {
 }());
 exports.StandardCallHelper = StandardCallHelper;
 
-},{}],15:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1886,7 +2004,7 @@ CConcatValue = __decorate([
 ], CConcatValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],16:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],17:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1957,7 +2075,7 @@ CArrayIndexOf = __decorate([
 ], CArrayIndexOf);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],17:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],18:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1981,7 +2099,7 @@ var ArrayConcatResolver = (function () {
             return false;
         var propAccess = call.expression;
         var objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "join" && objType instanceof types_1.ArrayType;
+        return (propAccess.name.getText() == "join" || propAccess.name.getText() == "toString") && objType instanceof types_1.ArrayType;
     };
     ArrayConcatResolver.prototype.returnType = function (typeHelper, call) {
         return types_1.StringVarType;
@@ -2019,7 +2137,7 @@ var CArrayJoin = (function () {
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
             this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);
-            if (call.arguments.length > 0)
+            if (call.arguments.length > 0 && propAccess.name.getText() == "join")
                 this.separator = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             else
                 this.separator = new literals_1.CString(scope, ',');
@@ -2079,7 +2197,7 @@ CCalculateStringSize = __decorate([
 ], CCalculateStringSize);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],18:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/literals":9,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],19:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2150,7 +2268,7 @@ CArrayLastIndexOf = __decorate([
 ], CArrayLastIndexOf);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],19:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/expressions":7,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],20:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2209,7 +2327,7 @@ CArrayPop = __decorate([
 ], CArrayPop);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../resolver":14,"../../template":28,"../../types":29}],20:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":15,"../../template":30,"../../types":31}],21:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2285,7 +2403,71 @@ CPushValue = __decorate([
 ], CPushValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],21:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],22:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
+var template_1 = require("../../template");
+var resolver_1 = require("../../resolver");
+var types_1 = require("../../types");
+var variable_1 = require("../../nodes/variable");
+var elementaccess_1 = require("../../nodes/elementaccess");
+var ArraySortResolver = (function () {
+    function ArraySortResolver() {
+    }
+    ArraySortResolver.prototype.matchesNode = function (typeHelper, call) {
+        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+            return false;
+        var propAccess = call.expression;
+        var objType = typeHelper.getCType(propAccess.expression);
+        return propAccess.name.getText() == "reverse" && objType instanceof types_1.ArrayType && objType.isDynamicArray;
+    };
+    ArraySortResolver.prototype.returnType = function (typeHelper, call) {
+        var propAccess = call.expression;
+        return typeHelper.getCType(propAccess.expression);
+    };
+    ArraySortResolver.prototype.createTemplate = function (scope, node) {
+        return new CArrayReverse(scope, node);
+    };
+    ArraySortResolver.prototype.needsDisposal = function (typeHelper, node) {
+        return false;
+    };
+    ArraySortResolver.prototype.getTempVarName = function (typeHelper, node) {
+        return "";
+    };
+    return ArraySortResolver;
+}());
+ArraySortResolver = __decorate([
+    resolver_1.StandardCallResolver
+], ArraySortResolver);
+var CArrayReverse = (function () {
+    function CArrayReverse(scope, call) {
+        this.varAccess = null;
+        var propAccess = call.expression;
+        var type = scope.root.typeHelper.getCType(propAccess.expression);
+        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.iteratorVar1 = scope.root.typeHelper.addNewIteratorVariable(call);
+        this.iteratorVar2 = scope.root.typeHelper.addNewIteratorVariable(call);
+        this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "temp");
+        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVar1, types_1.NumberVarType));
+        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVar2, types_1.NumberVarType));
+        scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type.elementType));
+    }
+    return CArrayReverse;
+}());
+CArrayReverse = __decorate([
+    template_1.CodeTemplate("\n{#statements}\n    {iteratorVar1} = 0;\n    {iteratorVar2} = {varAccess}->size - 1;\n    while ({iteratorVar1} < {iteratorVar2}) {\n        {tempVarName} = {varAccess}->data[{iteratorVar1}];\n        {varAccess}->data[{iteratorVar1}] = {varAccess}->data[{iteratorVar2}];\n        {varAccess}->data[{iteratorVar2}] = {tempVarName};\n        {iteratorVar1}++;\n        {iteratorVar2}--;\n    }\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{/if}")
+], CArrayReverse);
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],23:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2347,7 +2529,7 @@ CArrayShift = __decorate([
 ], CArrayShift);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],22:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],24:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2429,7 +2611,7 @@ CArraySlice = __decorate([
 ], CArraySlice);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],23:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],25:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2494,7 +2676,7 @@ CArraySort = __decorate([
 ], CArraySort);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../resolver":14,"../../template":28,"../../types":29}],24:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":15,"../../template":30,"../../types":31}],26:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2588,7 +2770,7 @@ CInsertValue = __decorate([
 ], CInsertValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],25:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],27:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2665,7 +2847,7 @@ CUnshiftValue = __decorate([
 ], CUnshiftValue);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../nodes/variable":11,"../../resolver":14,"../../template":28,"../../types":29}],26:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../nodes/variable":12,"../../resolver":15,"../../template":30,"../../types":31}],28:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2700,6 +2882,7 @@ var CPrintf = CPrintf_1 = (function () {
         this.isStringLiteral = false;
         this.isQuotedCString = false;
         this.isCString = false;
+        this.isRegex = false;
         this.isInteger = false;
         this.isBoolean = false;
         this.isDict = false;
@@ -2712,6 +2895,7 @@ var CPrintf = CPrintf_1 = (function () {
         this.isStringLiteral = varType == types_1.StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
         this.isQuotedCString = varType == types_1.StringVarType && options.quotedString;
         this.isCString = varType == types_1.StringVarType && !options.quotedString;
+        this.isRegex = varType == types_1.RegexVarType;
         this.isInteger = varType == types_1.NumberVarType;
         this.isBoolean = varType == types_1.BooleanVarType;
         if (this.isStringLiteral)
@@ -2754,12 +2938,12 @@ var CPrintf = CPrintf_1 = (function () {
     return CPrintf;
 }());
 CPrintf = CPrintf_1 = __decorate([
-    template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{accessor}{CR}\");\n{#elseif isQuotedCString}\n    printf(\"{propPrefix}\\\"%s\\\"{CR}\", {accessor});\n{#elseif isCString}\n    printf(\"%s{CR}\", {accessor});\n{#elseif isInteger}\n    printf(\"{propPrefix}%d{CR}\", {accessor});\n{#elseif isBoolean && !propPrefix}\n    printf({accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isBoolean && propPrefix}\n    printf(\"{propPrefix}%s\", {accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isDict}\n    printf(\"{propPrefix}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isStruct}\n    printf(\"{propPrefix}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isArray}\n    printf(\"{propPrefix}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{CR}\");\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
+    template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{accessor}{CR}\");\n{#elseif isQuotedCString}\n    printf(\"{propPrefix}\\\"%s\\\"{CR}\", {accessor});\n{#elseif isCString}\n    printf(\"%s{CR}\", {accessor});\n{#elseif isRegex}\n    printf(\"%s{CR}\", {accessor}.str);\n{#elseif isInteger}\n    printf(\"{propPrefix}%d{CR}\", {accessor});\n{#elseif isBoolean && !propPrefix}\n    printf({accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isBoolean && propPrefix}\n    printf(\"{propPrefix}%s\", {accessor} ? \"true{CR}\" : \"false{CR}\");\n{#elseif isDict}\n    printf(\"{propPrefix}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isStruct}\n    printf(\"{propPrefix}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{CR}\");\n{#elseif isArray}\n    printf(\"{propPrefix}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{CR}\");\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
 ], CPrintf);
 var CPrintf_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/variable":11,"../../template":28,"../../types":29}],27:[function(require,module,exports){
+},{"../../nodes/variable":12,"../../template":30,"../../types":31}],29:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -2773,7 +2957,6 @@ var template_1 = require("../../template");
 var resolver_1 = require("../../resolver");
 var types_1 = require("../../types");
 var elementaccess_1 = require("../../nodes/elementaccess");
-var regex_1 = require("../../regex");
 var StringSearchResolver = (function () {
     function StringSearchResolver() {
     }
@@ -2801,123 +2984,27 @@ var StringSearchResolver = (function () {
 StringSearchResolver = __decorate([
     resolver_1.StandardCallResolver
 ], StringSearchResolver);
-var regexLiteralFuncNames = {};
 var CStringSearch = (function () {
     function CStringSearch(scope, call) {
         var propAccess = call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
-            if (call.arguments.length == 1 && call.arguments[0].kind == ts.SyntaxKind.RegularExpressionLiteral) {
-                var template = call.arguments[0].text;
-                if (!regexLiteralFuncNames[template]) {
-                    regexLiteralFuncNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex_search");
-                    scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearch(scope, template, regexLiteralFuncNames[template]));
-                }
-                this.regexFuncName = regexLiteralFuncNames[template];
+            if (call.arguments.length == 1) {
                 this.argAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                this.regexVar = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             }
             else
-                console.log("Unsupported parameter type in " + call.getText() + ". Expected regular expression literal.");
+                console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
     }
     return CStringSearch;
 }());
 CStringSearch = __decorate([
-    template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    {regexFuncName}({argAccess}).index\n{/if}")
+    template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    {regexVar}.func({argAccess})\n{/if}")
 ], CStringSearch);
-var CRegexSearch = (function () {
-    function CRegexSearch(scope, template, regexFunctionName, compiledRegex) {
-        if (compiledRegex === void 0) { compiledRegex = null; }
-        this.regexFunctionName = regexFunctionName;
-        this.hasNested = false;
-        this.hasChars = false;
-        this.variants = [];
-        var compiler = new regex_1.RegexCompiler();
-        compiledRegex = compiledRegex || compiler.compile(template.slice(1, -1));
-        for (var i = 0; i < compiledRegex.variants.length; i++) {
-            var variant = compiledRegex.variants[i];
-            this.hasNested = this.hasNested || variant.states.filter(function (s) { return s.stm; }).length > 0;
-            this.hasChars = this.hasChars || variant.states.filter(function (s) { return Object.keys(s.chars).length > 0; }).length > 0;
-            this.variants.push(new CRegexSearchVariant(scope, variant, i == 0, compiledRegex.fixedStart, compiledRegex.fixedEnd));
-        }
-        scope.root.headerFlags.strings = true;
-        scope.root.headerFlags.regex_search_result_t = true;
-    }
-    return CRegexSearch;
-}());
-CRegexSearch = __decorate([
-    template_1.CodeTemplate("\nstruct regex_search_result_t {regexFunctionName}(const char *str) {\n    int16_t state, next, len = strlen(str), iterator;\n    struct regex_search_result_t result{#if hasNested}, nested_result{/if};\n{#if hasChars}\n    char ch;\n{/if}\n{variants}\n    result.length = result.index == -1 ? 0 : iterator - result.index;\n    return result;\n}")
-], CRegexSearch);
-var CRegexSearchVariant = (function () {
-    function CRegexSearchVariant(scope, variant, firstVariant, fixedStart, fixedEnd) {
-        this.firstVariant = firstVariant;
-        this.fixedEnd = fixedEnd;
-        this.stateTransitionBlocks = [];
-        this.TAB = this.firstVariant ? "" : "    ";
-        this.hasChars = variant.states.filter(function (s) { return Object.keys(s.chars).length > 0; }).length > 0;
-        for (var s = 0; s < variant.states.length; s++) {
-            this.stateTransitionBlocks.push(new CStateTransitionsBlock(scope, s + "", variant.states[s]));
-        }
-        this.final = variant.final + "";
-        this.continueBlock = new ContinueBlock(scope, fixedStart, this.fixedEnd, this.final);
-    }
-    return CRegexSearchVariant;
-}());
-CRegexSearchVariant = __decorate([
-    template_1.CodeTemplate("\n{#if !firstVariant}\n        if (result.index == -1) {\n{/if}\n{TAB}    state = 0;\n{TAB}    next = -1;\n{TAB}    result.index = 0;\n{TAB}    for (iterator = 0; iterator < len; iterator++) {\n{#if hasChars}\n{TAB}        ch = str[iterator];\n{/if}\n\n{TAB}        {stateTransitionBlocks {        }=> {this}}\n\n\n{TAB}        if (next == -1) {\n{TAB}            {continueBlock}\n{TAB}        } else {\n{TAB}            state = next;\n{TAB}            next = -1;\n{TAB}        }\n{TAB}    }\n{#if fixedEnd}\n    {TAB}    if (state < {final} || iterator != len)\n    {TAB}        result.index = -1;\n{#else}\n    {TAB}    if (state < {final})\n    {TAB}        result.index = -1;\n{/if}\n{#if !firstVariant}\n        }\n{/if}\n")
-], CRegexSearchVariant);
-var CStateTransitionsBlock = (function () {
-    function CStateTransitionsBlock(scope, stateNumber, state) {
-        this.stateNumber = stateNumber;
-        this.charConditions = [];
-        this.exceptConditions = [];
-        this.anyChar = false;
-        this.nestedCall = '';
-        for (var ch in state.chars)
-            this.charConditions.push(new CharCondition(ch.replace('\\', '\\\\'), state.chars[ch]));
-        for (var ch in state.except)
-            this.exceptConditions.push(new CharCondition(ch.replace('\\', '\\\\'), -1));
-        for (var stm in state.stm) {
-            if (!regexLiteralFuncNames[state.template]) {
-                regexLiteralFuncNames[state.template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex_search");
-                var compiledRegex = { fixedStart: true, fixedEnd: false, variants: state.stm };
-                var regexSearch = new CRegexSearch(scope, state.template, regexLiteralFuncNames[state.template], compiledRegex);
-                scope.root.functions.splice(scope.parent ? -2 : -1, 0, regexSearch);
-            }
-            this.nestedCall = regexLiteralFuncNames[state.template] + '(str + iterator)';
-            this.next = state.next + "";
-        }
-        if (state.anyChar) {
-            this.anyChar = true;
-            this.next = state.anyChar + "";
-        }
-    }
-    return CStateTransitionsBlock;
-}());
-CStateTransitionsBlock = __decorate([
-    template_1.CodeTemplate("if (state == {stateNumber}) {\n            {charConditions {\n            }=> if (ch == '{ch}') next = {next};}\n{#if anyChar && exceptConditions.length}\n                if ({exceptConditions { && }=> (ch != '{ch}')} && next == -1)\n                    next = {next};\n{#elseif anyChar}\n                if (next == -1) next = {next};\n{#elseif nestedCall}\n                nested_result = {nestedCall};\n                if (nested_result.index > -1) {\n                    next = {next};\n                    iterator += nested_result.length-1;\n                }\n{/if}\n        }\n")
-], CStateTransitionsBlock);
-var ContinueBlock = (function () {
-    function ContinueBlock(scope, fixedStart, fixedEnd, final) {
-        this.fixedStart = fixedStart;
-        this.fixedEnd = fixedEnd;
-        this.final = final;
-    }
-    return ContinueBlock;
-}());
-ContinueBlock = __decorate([
-    template_1.CodeTemplate("\n{#if !fixedStart && !fixedEnd}\n    if (state >= {final})\n        break;\n    iterator = result.index;\n    result.index++;\n    state = 0;\n{#elseif !fixedStart && fixedEnd}\n    iterator = result.index;\n    result.index++;\n    state = 0;\n{#else}\n    break;\n{/if}")
-], ContinueBlock);
-var CharCondition = (function () {
-    function CharCondition(ch, next) {
-        this.ch = ch;
-        this.next = next;
-    }
-    return CharCondition;
-}());
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../nodes/elementaccess":6,"../../regex":13,"../../resolver":14,"../../template":28,"../../types":29}],28:[function(require,module,exports){
+},{"../../nodes/elementaccess":6,"../../resolver":15,"../../template":30,"../../types":31}],30:[function(require,module,exports){
 "use strict";
 ;
 var nodeKindTemplates = {};
@@ -3144,7 +3231,7 @@ function processTemplate(template, args) {
     return [template, statements];
 }
 
-},{}],29:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 (function (global){
 "use strict";
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
@@ -3154,6 +3241,7 @@ exports.PointerVarType = "void *";
 exports.StringVarType = "const char *";
 exports.NumberVarType = "int16_t";
 exports.BooleanVarType = "uint8_t";
+exports.RegexVarType = "struct regex_struct_t";
 /** Type that represents static or dynamic array */
 var ArrayType = (function () {
     function ArrayType(elementType, capacity, isDynamicArray) {
@@ -3360,6 +3448,8 @@ var TypeHelper = (function () {
                     }
                     return null;
                 }
+            case ts.SyntaxKind.RegularExpressionLiteral:
+                return exports.RegexVarType;
             case ts.SyntaxKind.ArrayLiteralExpression:
                 return this.arrayLiteralsTypes[node.pos];
             case ts.SyntaxKind.ObjectLiteralExpression:
@@ -3655,6 +3745,8 @@ var TypeHelper = (function () {
                     }
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "sort")
                         varData.isDynamicArray = true;
+                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "reverse")
+                        varData.isDynamicArray = true;
                     if (propAccess.expression.kind == ts.SyntaxKind.Identifier && propName == "splice") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
@@ -3700,7 +3792,10 @@ var TypeHelper = (function () {
                         if (elemAccess.parent && elemAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                             var binExpr = elemAccess.parent;
                             if (binExpr.left.pos == elemAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                                if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+                                if (promiseKind == TypePromiseKind.dictOf) {
+                                    this.addTypePromise(varPos, binExpr.right, promiseKind);
+                                }
+                                else if (elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                                     this.addTypePromise(varPos, binExpr.right, promiseKind, propName);
                                 }
                             }
@@ -4004,7 +4099,7 @@ var TypeHelper = (function () {
 exports.TypeHelper = TypeHelper;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./resolver":14}],30:[function(require,module,exports){
+},{"./resolver":15}],32:[function(require,module,exports){
 (function (process,global){
 "use strict";
 var program_1 = require("./src/program");
@@ -4046,4 +4141,4 @@ if (typeof window !== 'undefined')
 })();
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./src/program":12,"_process":2,"fs":1}]},{},[30]);
+},{"./src/program":13,"_process":2,"fs":1}]},{},[32]);
