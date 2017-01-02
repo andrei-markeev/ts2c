@@ -15,7 +15,7 @@ class ArrayConcatResolver implements IResolver {
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "join" && objType instanceof ArrayType;
+        return (propAccess.name.getText() == "join" || propAccess.name.getText() == "toString") && objType instanceof ArrayType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return StringVarType;
@@ -75,7 +75,7 @@ class CArrayJoin {
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);
-            if (call.arguments.length > 0)
+            if (call.arguments.length > 0 && propAccess.name.getText() == "join")
                 this.separator = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             else
                 this.separator = new CString(scope, ',');

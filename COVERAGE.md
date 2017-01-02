@@ -124,7 +124,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] call
  - [ ] Array
      - [ ] new
-     - [ ] toString
+     - [x] **toString**
      - [ ] toLocaleString
      - [x] **concat**
      - [x] **join**
