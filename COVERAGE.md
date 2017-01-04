@@ -152,7 +152,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] match
      - [ ] replace
      - [x] **search**
-     - [ ] slice
+     - [x] **slice**
      - [ ] split
      - [x] **substring**
      - [ ] toLowerCase

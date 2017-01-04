@@ -8,19 +8,19 @@ import {CExpression} from '../../nodes/expressions';
 import {CElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
-class StringConcatResolver implements IResolver {
+class StringSliceResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
         if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "substring" && objType == StringVarType;
+        return propAccess.name.getText() == "slice" && objType == StringVarType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return StringVarType;
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
-        return new CStringSubstring(scope, node);
+        return new CStringSlice(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
         // if parent is expression statement, then this is the top expression
@@ -34,13 +34,13 @@ class StringConcatResolver implements IResolver {
 
 @CodeTemplate(`
 {#if !topExpressionOfStatement && start && end}
-    ({tempVarName} = str_substring({varAccess}, {start}, {end}))
+    ({tempVarName} = str_slice({varAccess}, {start}, {end}))
 {#elseif !topExpressionOfStatement && start && !end}
-    ({tempVarName} = str_substring({varAccess}, {start}, str_len({varAccess})))
+    ({tempVarName} = str_slice({varAccess}, {start}, str_len({varAccess})))
 {#elseif !topExpressionOfStatement && !start && !end}
-    /* Error: String.substring requires at least one parameter! */
+    /* Error: String.slice requires at least one parameter! */
 {/if}`)
-class CStringSubstring {
+class CStringSlice {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess = null;
     public start: CExpression = null;
@@ -62,7 +62,7 @@ class CStringSubstring {
                     this.end = CodeTemplateFactory.createForNode(scope, call.arguments[1]);
             }
         }
-        scope.root.headerFlags.str_substring = true;
+        scope.root.headerFlags.str_slice = true;
     }
 
 }

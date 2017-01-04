@@ -27,6 +27,7 @@ import './standard/string/search';
 import './standard/string/charCodeAt';
 import './standard/string/concat';
 import './standard/string/substring';
+import './standard/string/slice';
 
 
 export interface IScope {
@@ -60,6 +61,7 @@ class HeaderFlags {
     str_len: boolean = false;
     str_char_code_at: boolean = false;
     str_substring: boolean = false;
+    str_slice: boolean = false;
     atoi: boolean = false;
     regex: boolean = false;
 }
@@ -72,10 +74,11 @@ class HeaderFlags {
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring}
+{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring 
+    || headerFlags.str_slice}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf}
@@ -94,7 +97,7 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
-     headerFlags.str_char_code_at || headerFlags.str_substring }
+     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice }
     typedef int int16_t;
 {/if}
 {#if headerFlags.regex}
@@ -258,7 +261,7 @@ class HeaderFlags {
         return pos;
     }
 {/if}
-{#if headerFlags.str_len || headerFlags.str_substring}
+{#if headerFlags.str_len || headerFlags.str_substring || headerFlags.str_slice}
     int16_t str_len(const char * str) {
         int16_t len = 0;
         int16_t i = 0;
@@ -295,9 +298,9 @@ class HeaderFlags {
         return -1;
     }
 {/if}
-{#if headerFlags.str_substring}
+{#if headerFlags.str_substring || headerFlags.str_slice}
     const char * str_substring(const char * str, int16_t start, int16_t end) {
-        int16_t i, tmp, pos, byte_start = 0, len = str_len(str);
+        int16_t i, tmp, pos, len = str_len(str), byte_start = -1;
         char *p, *buf;
         start = start < 0 ? 0 : (start > len ? len : start);
         end = end < 0 ? 0 : (end > len ? len : end);
@@ -306,8 +309,6 @@ class HeaderFlags {
             start = end;
             end = tmp;
         }
-        if (end - start <= 0)
-            return NULL;
         i = 0;
         pos = 0;
         p = (char *)str;
@@ -323,12 +324,22 @@ class HeaderFlags {
             p += i;
             pos += i == 4 ? 2 : 1;
         }
-        len = p - str - byte_start;
+        len = byte_start == -1 ? 0 : p - str - byte_start;
         buf = malloc(len + 1);
         assert(buf != NULL);
         memcpy(buf, str + byte_start, len);
         buf[len] = '\\0';
         return buf;
+    }
+{/if}
+{#if headerFlags.str_slice}
+    const char * str_slice(const char * str, int16_t start, int16_t end) {
+        int16_t len = str_len(str);
+        start = start < 0 ? len + start : start;
+        end = end < 0 ? len + end : end;
+        if (end - start < 0)
+            end = start;
+        return str_substring(str, start, end);
     }
 {/if}
 {#if headerFlags.str_int16_t_cat}

@@ -74,7 +74,7 @@ Overview of currently supported language features (compared to ES3 Standard):
 
  - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
  - expressions [47%]:
-    - primary expressions [78%]: variables, number, string and boolean literals, array and object initializers, grouping operator
+    - primary expressions [81%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
     - left-hand-side expressions [60%]: property accessors, function calls
     - postfix expressions [100%]: `++`, `--`
     - unary operators [44%]: `++`, `--`, `+`, `!`
@@ -93,7 +93,7 @@ Overview of currently supported language features (compared to ES3 Standard):
     - Object [0%]
     - Function [0%]
     - Array [78%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `toString()`, `sort()`, `reverse()`, `indexOf()`, `lastIndexOf()`, `length`
-    - String [32%]: `indexOf()`, `lastIndexOf()`, `search()`, `charCodeAt()`, `concat()`, `substring()`, `length`
+    - String [37%]: `indexOf()`, `lastIndexOf()`, `search()`, `charCodeAt()`, `concat()`, `substring()`, `slice()`, `length`
     - Boolean [0%]
     - Number [0%]
     - Math [0%]
