@@ -88,12 +88,12 @@ Overview of currently supported language features (compared to ES3 Standard):
     - conditional operator [100%]: `?`-`:`
     - assignment operators [25%]: `=`
     - comma operator [0%]
- - built-in objects [9%]:
+ - built-in objects [11%]:
     - Global [0%]
     - Object [0%]
     - Function [0%]
     - Array [78%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `toString()`, `sort()`, `reverse()`, `indexOf()`, `lastIndexOf()`, `length`
-    - String [10%]: `indexOf()`, `length`
+    - String [30%]: `indexOf()`, `lastIndexOf()`, `search()`, `charCodeAt()`, `length`
     - Boolean [0%]
     - Number [0%]
     - Math [0%]

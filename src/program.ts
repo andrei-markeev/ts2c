@@ -24,6 +24,7 @@ import './standard/array/lastIndexOf';
 import './standard/array/sort';
 import './standard/array/reverse';
 import './standard/string/search';
+import './standard/string/charCodeAt';
 
 
 export interface IScope {
@@ -55,6 +56,7 @@ class HeaderFlags {
     str_pos: boolean = false;
     str_rpos: boolean = false;
     str_len: boolean = false;
+    str_char_code_at: boolean = false;
     atoi: boolean = false;
     regex: boolean = false;
 }
@@ -87,7 +89,8 @@ class HeaderFlags {
     typedef unsigned char uint8_t;
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
-     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len}
+     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
+     headerFlags.str_char_code_at }
     typedef int int16_t;
 {/if}
 {#if headerFlags.regex}
@@ -264,6 +267,28 @@ class HeaderFlags {
             len += i == 4 ? 2 : 1;
         }
         return len;
+    }
+{/if}
+{#if headerFlags.str_char_code_at}
+    int16_t str_char_code_at(const char * str, int16_t pos) {
+        int16_t i, res = 0;
+        while (*str) {
+            i = 1;
+            if ((*str & 0xE0) == 0xC0) i=2;
+            else if ((*str & 0xF0) == 0xE0) i=3;
+            else if ((*str & 0xF8) == 0xF0) i=4;
+            if (pos == 0) {
+                res += (unsigned char)*str++;
+                if (i > 1) {
+                    res <<= 6; res -= 0x3080;
+                    res += (unsigned char)*str++;
+                }
+                return res;
+            }
+            str += i;
+            pos -= i == 4 ? 2 : 1;
+        }
+        return -1;
     }
 {/if}
 {#if headerFlags.str_int16_t_cat}

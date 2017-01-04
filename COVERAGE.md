@@ -144,7 +144,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] valueOf
      - [ ] charAt
-     - [ ] charCodeAt
+     - [x] **charCodeAt** _(partial: UTF8 symbols of length 3 and 4 bytes aren't supported)_
      - [ ] concat
      - [x] **indexOf**
      - [x] **lastIndexOf**
