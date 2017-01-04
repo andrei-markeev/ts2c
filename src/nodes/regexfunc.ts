@@ -2,6 +2,7 @@ import {IScope} from '../program';
 import {CodeTemplate} from '../template';
 import {CString} from './literals';
 import {RegexBuilder, RegexMachine, RegexState} from '../regex';
+import {CExpression} from './expressions';
 
 @CodeTemplate(`
 int16_t {regexName}_search(const char *str) {
@@ -116,4 +117,9 @@ class ContinueBlock {
 
 class CharCondition {
     constructor(public ch: string, public next: number) {}
+}
+
+@CodeTemplate(`{expression}.str`)
+export class CRegexAsString {
+    constructor (public expression: CExpression) { }
 }

@@ -1,9 +1,10 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, StringVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
+import {CType, ArrayType, StructType, StringVarType, RegexVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
 import {CVariable} from './variable';
 import {CElementAccess} from './elementaccess';
+import {CRegexAsString} from './regexfunc';
 
 export interface CExpression { }
 
@@ -69,6 +70,16 @@ export class CSimpleBinaryExpression {
     constructor(scope: IScope, public left: CExpression, leftType: CType, public right: CExpression, rightType: CType, operatorKind: ts.SyntaxKind, node: ts.Node) {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
+        
+        if (leftType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
+            leftType = StringVarType;
+            this.left = new CRegexAsString(left);
+        }
+        if (rightType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
+            rightType = StringVarType;
+            this.right = new CRegexAsString(right);
+        }
+
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
         if (leftType == NumberVarType && rightType == NumberVarType) {

@@ -4,7 +4,7 @@ function print(string, regex, expect) {
     count++;
     var pos = string.search(regex);
     if (pos != expect)
-        console.log(string, ".search(/", regex, "/) -> FAIL, returned ", pos, ", expected ", expect);
+        console.log(string, ".search(", regex, ") -> FAIL, returned ", pos, ", expected ", expect);
     else
         matched++;
 }
