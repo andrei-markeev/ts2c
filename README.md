@@ -93,7 +93,7 @@ Overview of currently supported language features (compared to ES3 Standard):
     - Object [0%]
     - Function [0%]
     - Array [78%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `toString()`, `sort()`, `reverse()`, `indexOf()`, `lastIndexOf()`, `length`
-    - String [30%]: `indexOf()`, `lastIndexOf()`, `search()`, `charCodeAt()`, `length`
+    - String [32%]: `indexOf()`, `lastIndexOf()`, `search()`, `charCodeAt()`, `concat()`, `substring()`, `length`
     - Boolean [0%]
     - Number [0%]
     - Math [0%]

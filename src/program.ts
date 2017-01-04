@@ -26,6 +26,7 @@ import './standard/array/reverse';
 import './standard/string/search';
 import './standard/string/charCodeAt';
 import './standard/string/concat';
+import './standard/string/substring';
 
 
 export interface IScope {
@@ -58,6 +59,7 @@ class HeaderFlags {
     str_rpos: boolean = false;
     str_len: boolean = false;
     str_char_code_at: boolean = false;
+    str_substring: boolean = false;
     atoi: boolean = false;
     regex: boolean = false;
 }
@@ -66,13 +68,14 @@ class HeaderFlags {
 @CodeTemplate(`
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
+    || headerFlags.str_substring
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array}
+{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf}
@@ -91,7 +94,7 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
-     headerFlags.str_char_code_at }
+     headerFlags.str_char_code_at || headerFlags.str_substring }
     typedef int int16_t;
 {/if}
 {#if headerFlags.regex}
@@ -255,7 +258,7 @@ class HeaderFlags {
         return pos;
     }
 {/if}
-{#if headerFlags.str_len}
+{#if headerFlags.str_len || headerFlags.str_substring}
     int16_t str_len(const char * str) {
         int16_t len = 0;
         int16_t i = 0;
@@ -290,6 +293,42 @@ class HeaderFlags {
             pos -= i == 4 ? 2 : 1;
         }
         return -1;
+    }
+{/if}
+{#if headerFlags.str_substring}
+    const char * str_substring(const char * str, int16_t start, int16_t end) {
+        int16_t i, tmp, pos, byte_start = 0, len = str_len(str);
+        char *p, *buf;
+        start = start < 0 ? 0 : (start > len ? len : start);
+        end = end < 0 ? 0 : (end > len ? len : end);
+        if (end < start) {
+            tmp = start;
+            start = end;
+            end = tmp;
+        }
+        if (end - start <= 0)
+            return NULL;
+        i = 0;
+        pos = 0;
+        p = (char *)str;
+        while (*p) {
+            if (start == pos)
+                byte_start = p - str;
+            if (end == pos)
+                break;
+            i = 1;
+            if ((*p & 0xE0) == 0xC0) i=2;
+            else if ((*p & 0xF0) == 0xE0) i=3;
+            else if ((*p & 0xF8) == 0xF0) i=4;
+            p += i;
+            pos += i == 4 ? 2 : 1;
+        }
+        len = p - str - byte_start;
+        buf = malloc(len + 1);
+        assert(buf != NULL);
+        memcpy(buf, str + byte_start, len);
+        buf[len] = '\\0';
+        return buf;
     }
 {/if}
 {#if headerFlags.str_int16_t_cat}

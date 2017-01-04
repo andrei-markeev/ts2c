@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType} from '../types';
+import {ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, CType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 
@@ -141,13 +141,15 @@ export class CVariableDestructors {
                 let type = scope.root.typeHelper.getCType(r.node);
                 if (type instanceof ArrayType)
                     this.destructors.push(r.varName + "->data");
-                if (type instanceof DictType) {
+                else if (type instanceof DictType) {
                     this.destructors.push(r.varName + "->index->data");
                     this.destructors.push(r.varName + "->index");
                     this.destructors.push(r.varName + "->values->data");
                     this.destructors.push(r.varName + "->values");
-                }
-                this.destructors.push(r.varName);
+                } else if (type == StringVarType)
+                    this.destructors.push("(char *)" + r.varName);
+                else
+                    this.destructors.push(r.varName);
             })
     }
 }

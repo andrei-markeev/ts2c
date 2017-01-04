@@ -145,7 +145,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] valueOf
      - [ ] charAt
      - [x] **charCodeAt** _(partial: UTF8 symbols of length 3 and 4 bytes aren't supported)_
-     - [ ] concat
+     - [x] **concat**
      - [x] **indexOf**
      - [x] **lastIndexOf**
      - [ ] localeCompare
@@ -154,7 +154,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **search**
      - [ ] slice
      - [ ] split
-     - [ ] substring
+     - [x] **substring**
      - [ ] toLowerCase
      - [ ] toLocaleLowerCase
      - [ ] toUpperCase
