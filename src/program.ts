@@ -25,6 +25,7 @@ import './standard/array/sort';
 import './standard/array/reverse';
 import './standard/string/search';
 import './standard/string/charCodeAt';
+import './standard/string/concat';
 
 
 export interface IScope {
