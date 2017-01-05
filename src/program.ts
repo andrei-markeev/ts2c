@@ -25,6 +25,7 @@ import './standard/array/sort';
 import './standard/array/reverse';
 import './standard/string/search';
 import './standard/string/charCodeAt';
+import './standard/string/charAt';
 import './standard/string/concat';
 import './standard/string/substring';
 import './standard/string/slice';

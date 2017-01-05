@@ -8,19 +8,19 @@ import {CExpression} from '../../nodes/expressions';
 import {CElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
-class StringSubstringResolver implements IResolver {
+class StringCharAtResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
         if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "substring" && objType == StringVarType;
+        return propAccess.name.getText() == "charAt" && objType == StringVarType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return StringVarType;
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
-        return new CStringSubstring(scope, node);
+        return new CStringCharAt(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
         // if parent is expression statement, then this is the top expression
@@ -28,23 +28,20 @@ class StringSubstringResolver implements IResolver {
         return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
-        return "substr";
+        return "char_at";
     }
 }
 
 @CodeTemplate(`
-{#if !topExpressionOfStatement && start && end}
-    ({tempVarName} = str_substring({varAccess}, {start}, {end}))
-{#elseif !topExpressionOfStatement && start && !end}
-    ({tempVarName} = str_substring({varAccess}, {start}, str_len({varAccess})))
-{#elseif !topExpressionOfStatement && !start && !end}
-    /* Error: String.substring requires at least one parameter! */
+{#if !topExpressionOfStatement && start != null}
+    ({tempVarName} = str_substring({varAccess}, {start}, ({start}) + 1))
+{#elseif !topExpressionOfStatement && start == null}
+    /* Error: parameter expected for charAt */
 {/if}`)
-class CStringSubstring {
+class CStringCharAt {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess = null;
     public start: CExpression = null;
-    public end: CExpression = null;
     public tempVarName: string;
     constructor(scope: IScope, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
@@ -53,17 +50,14 @@ class CStringSubstring {
 
         if (!this.topExpressionOfStatement) {
             if (call.arguments.length == 0) {
-                console.log("Error in " + call.getText() + ". At least one parameter expected!");
+                console.log("Error in " + call.getText() + ". Parameter expected!");
             } else {
                 this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
                 this.start = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
-                if (call.arguments.length >= 2)
-                    this.end = CodeTemplateFactory.createForNode(scope, call.arguments[1]);
             }
         }
         scope.root.headerFlags.str_substring = true;
     }
 
 }
-
