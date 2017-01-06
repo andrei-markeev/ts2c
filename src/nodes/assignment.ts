@@ -97,7 +97,7 @@ export class CAssignment {
             this.objInitializers = objLiteral.properties
                 .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
                 .map(p => <ts.PropertyAssignment>p)
-                .map(p => new CAssignment(scope, argAccessor, p.name.getText(), argType, p.initializer));
+                .map(p => new CAssignment(scope, argAccessor, this.isDict ? '"' + p.name.getText() + '"' : p.name.getText(), argType, p.initializer));
         } else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression && !isTempVar) {
             this.isArrayLiteralAssignment = true;
             let arrLiteral = <ts.ArrayLiteralExpression>right;
