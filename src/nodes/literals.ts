@@ -124,10 +124,19 @@ export class CString {
     }
 }
 
-@CodeTemplate(`{value}`, [ts.SyntaxKind.NumericLiteral])
+@CodeTemplate(`{value}`, ts.SyntaxKind.NumericLiteral)
 export class CNumber {
     public value: string;
     constructor(scope: IScope, value: ts.Node) {
         this.value = value.getText();
+    }
+}
+
+@CodeTemplate(`{value}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
+export class CBoolean {
+    public value: string;
+    constructor(scope: IScope, value: ts.Node) {
+        this.value = value.kind == ts.SyntaxKind.TrueKeyword ? "1" : "0";
+        scope.root.headerFlags.bool = true;
     }
 }
