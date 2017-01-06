@@ -1,8 +1,8 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType} from '../types';
-import {CVariable} from './variable';
+import {ArrayType, StructType, DictType} from '../types';
+import {CVariable, CVariableAllocation} from './variable';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 
@@ -64,33 +64,35 @@ class CArrayLiteralExpression {
 
 @CodeTemplate(`
 {#statements}
-    {#if varName}
-        {varName} = malloc(sizeof(*{varName}));
-        assert({varName} != NULL);
+    {#if isStruct || isDict}
+        {allocator}
         {initializers}
     {/if}
 {/statements}
 {expression}`, ts.SyntaxKind.ObjectLiteralExpression)
 class CObjectLiteralExpression {
     public expression: string = '';
-    public varName: string = '';
-    public initializers: CAssignment[] = [];
+    public isStruct: boolean;
+    public isDict: boolean;
+    public allocator: CVariableAllocation;
+    public initializers: CAssignment[];
     constructor(scope: IScope, node: ts.ObjectLiteralExpression) {
-        if (node.properties.length == 0)
-            return;
         let type = scope.root.typeHelper.getCType(node);
-        if (type instanceof StructType) {
-            this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-            scope.func.variables.push(new CVariable(scope, this.varName, type, { initializer: "NULL" }));
+        this.isStruct = type instanceof StructType;
+        this.isDict = type instanceof DictType;
+        if (this.isStruct || this.isDict) {
+            let varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             
+            scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+            
+            this.allocator = new CVariableAllocation(scope, varName, type, node);
             this.initializers = node.properties
-                .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
-                .map(p => <ts.PropertyAssignment>p)
-                .map(p => new CAssignment(scope, this.varName, p.name.getText(), type, p.initializer));
+                 .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
+                 .map(p => <ts.PropertyAssignment>p)
+                 .map(p => new CAssignment(scope, varName, this.isDict ? '"' + p.name.getText() + '"' : p.name.getText(), type, p.initializer));
             
-            this.expression = this.varName;
-        }
-        else
+            this.expression = varName;
+        } else
             this.expression = "/* Unsupported use of object literal expression */";
     }
 }

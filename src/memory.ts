@@ -59,7 +59,7 @@ export class MemoryManager {
                     }
 
                     let type = this.typeHelper.getCType(node);
-                    if (type && type instanceof StructType)
+                    if (type && (type instanceof StructType || type instanceof DictType))
                         this.scheduleNodeDisposal(node);
                 }
                 break;
@@ -264,9 +264,9 @@ export class MemoryManager {
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
         else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
-        else if (heapNode.kind == ts.SyntaxKind.CallExpression) {
+        else if (heapNode.kind == ts.SyntaxKind.CallExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
-        } else
+        else
             varName = heapNode.getText();
 
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);

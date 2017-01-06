@@ -657,7 +657,8 @@ export class TypeHelper {
                     }
                 }
                 else if (varType instanceof DictType) {
-                    this.variables[k].requiresAllocation = true;
+                    if (!this.variablesData[k].parameterFuncDeclPos)
+                        this.variables[k].requiresAllocation = true;
                     let elemType = varType.elementType;
                     for (let addPropKey in this.variablesData[k].addedProperties) {
                         let addPropType = this.variablesData[k].addedProperties[addPropKey];
