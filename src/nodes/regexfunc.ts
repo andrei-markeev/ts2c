@@ -43,7 +43,7 @@ export class CRegexSearchFunction {
     public templateString: CString;
     public stateTransitionBlocks: CStateTransitionsBlock[] = [];
     constructor(scope: IScope, template: string, public regexName: string, regexMachine: RegexMachine = null) {
-        this.templateString = new CString(scope, template.replace(/\\/g,'\\\\'));
+        this.templateString = new CString(scope, template.replace(/\\/g,'\\\\').replace(/"/g, '\\"'));
         regexMachine = regexMachine || RegexBuilder.build(template.slice(1, -1));
         this.hasChars = regexMachine.states.filter(s => s && (Object.keys(s.chars).length > 0 || s.except && Object.keys(s.except).length > 0)).length > 0;
         for (let s = 0; s < regexMachine.states.length - 1; s++) {
@@ -84,9 +84,9 @@ class CStateTransitionsBlock {
     public next: string;
     constructor(scope: IScope, public stateNumber: string, state: RegexState) {
         for (let ch in state.chars)
-            this.charConditions.push(new CharCondition(ch.replace('\\','\\\\'), state.chars[ch]));
+            this.charConditions.push(new CharCondition(ch, state.chars[ch]));
         for (let ch in state.except)
-            this.exceptConditions.push(new CharCondition(ch.replace('\\','\\\\'), -1));
+            this.exceptConditions.push(new CharCondition(ch, -1));
         if (state.anyChar != null) {
             this.anyChar = true;
             this.next = state.anyChar+"";
@@ -116,7 +116,9 @@ class ContinueBlock {
 }
 
 class CharCondition {
-    constructor(public ch: string, public next: number) {}
+    constructor(public ch: string, public next: number) {
+        this.ch = this.ch.replace('\\','\\\\').replace("'","\\'");
+    }
 }
 
 @CodeTemplate(`{expression}.str`)
