@@ -29,6 +29,7 @@ import './standard/string/charAt';
 import './standard/string/concat';
 import './standard/string/substring';
 import './standard/string/slice';
+import './standard/string/toString';
 
 
 export interface IScope {
