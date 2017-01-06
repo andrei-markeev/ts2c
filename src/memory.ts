@@ -187,9 +187,9 @@ export class MemoryManager {
                     }
                 }
 
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.PropertyAssignment) {
                     console.log(heapNode.getText() + " -> Detected passing to object literal: " + ref.parent.getText() + ".");
-                    queue.push(ref.parent);
+                    queue.push(ref.parent.parent);
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.ArrayLiteralExpression) {
                     console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");

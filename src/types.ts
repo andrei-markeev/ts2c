@@ -96,7 +96,7 @@ export class VariableInfo {
     /** Contains all references to this variable */
     references: ts.Node[] = [];
     /** Where variable was declared */
-    declaration: ts.VariableDeclaration;
+    declaration: ts.Declaration;
     /** Determines if the variable requires memory allocation */
     requiresAllocation: boolean;
 }
@@ -116,7 +116,8 @@ enum TypePromiseKind {
     propertyType,
     dynamicArrayOf,
     arrayOf,
-    dictOf
+    dictOf,
+    void
 }
 
 class TypePromise {
@@ -131,7 +132,6 @@ class TypePromise {
 type PromiseDictionary = { [promiseId: string]: TypePromise };
 
 class VariableData {
-    tsType: ts.Type;
     typePromises: { [id: string]: TypePromise } = {};
     addedProperties: { [propName: string]: CType } = {};
     parameterIndex: number;
@@ -148,10 +148,8 @@ export class TypeHelper {
     private userStructs: { [name: string]: StructType } = {};
     private variablesData: { [varDeclPos: number]: VariableData } = {};
     private functionCallsData: { [funcDeclPos: number]: PromiseDictionary[] } = {};
-    private functionReturnsData: { [funcDeclPos: number]: PromiseDictionary } = {};
 
     public variables: { [varDeclPos: number]: VariableInfo } = {};
-    private functionReturnTypes: { [funcDeclPos: number]: CType } = {};
     private functionPrototypes: { [funcDeclPos: number]: ts.FunctionDeclaration } = {};
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
@@ -231,8 +229,9 @@ export class TypeHelper {
                     } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
                         let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (funcSymbol != null) {
-                            let funcDeclPos = funcSymbol.valueDeclaration.pos + 1;
-                            return this.functionReturnTypes[funcDeclPos];
+                            let funcDeclPos = funcSymbol.valueDeclaration.pos;
+                            let varInfo = this.variables[funcDeclPos];
+                            return varInfo && varInfo.type;
                         }
                     }
                     return null;
@@ -243,8 +242,10 @@ export class TypeHelper {
                 return this.arrayLiteralsTypes[node.pos];
             case ts.SyntaxKind.ObjectLiteralExpression:
                 return this.objectLiteralsTypes[node.pos];
-            case ts.SyntaxKind.FunctionDeclaration:
-                return this.functionReturnTypes[node.pos + 1] || 'void';
+            case ts.SyntaxKind.FunctionDeclaration: {
+                let varInfo = this.variables[node.pos];
+                return varInfo && varInfo.type;
+            }
             default:
                 {
                     let tsType = this.typeChecker.getTypeAtLocation(node);
@@ -381,12 +382,12 @@ export class TypeHelper {
         return PointerVarType;
     }
 
-    private findParentFunction(node: ts.Node) {
+    private findParentFunction(node: ts.Node): ts.FunctionDeclaration {
         let parentFunc = node;
         while (parentFunc && parentFunc.kind != ts.SyntaxKind.FunctionDeclaration) {
             parentFunc = parentFunc.parent;
         }
-        return parentFunc;
+        return <ts.FunctionDeclaration>parentFunc;
     }
 
     private findVariablesRecursively(node: ts.Node) {
@@ -413,21 +414,25 @@ export class TypeHelper {
         else if (node.kind == ts.SyntaxKind.ReturnStatement) {
             let ret = <ts.ReturnStatement>node;
             let parentFunc = this.findParentFunction(node);
-            let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-            let promiseId = node.pos + "_" + node.end;
-            if (!this.functionReturnsData[scopeId])
-                this.functionReturnsData[scopeId] = {};
-            if (ret.expression) {
-                if (ret.expression.kind == ts.SyntaxKind.ConditionalExpression) {
-                    let ternary = <ts.ConditionalExpression>ret.expression;
-                    let whenTrueId = ternary.whenTrue.pos + "_" + ternary.whenTrue.end;
-                    let whenFalseId = ternary.whenFalse.pos + "_" + ternary.whenFalse.end;
-                    this.functionReturnsData[scopeId][whenTrueId] = new TypePromise(ternary.whenTrue);
-                    this.functionReturnsData[scopeId][whenFalseId] = new TypePromise(ternary.whenFalse);
-                } else
-                    this.functionReturnsData[scopeId][promiseId] = new TypePromise(ret.expression);
-            } else {
-                this.functionReturnsData[scopeId][promiseId] = "void";
+            let funcPos = parentFunc && parentFunc.pos;
+            if (funcPos != null) {
+                if (ret.expression) {
+                    if (ret.expression.kind == ts.SyntaxKind.ConditionalExpression) {
+                        let ternary = <ts.ConditionalExpression>ret.expression;
+                        this.addTypePromise(funcPos, ternary.whenTrue);
+                        this.addTypePromise(funcPos, ternary.whenFalse);
+                    } else if (ret.expression.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+                        this.addTypePromise(funcPos, ret.expression);
+                        let objLiteral = <ts.ObjectLiteralExpression>ret.expression;
+                        for (let propAssignment of objLiteral.properties.filter(p => p.kind == ts.SyntaxKind.PropertyAssignment).map(p => <ts.PropertyAssignment>p)) {
+                            this.addTypePromise(funcPos, propAssignment.initializer, TypePromiseKind.propertyType, propAssignment.name.getText());
+                        }
+                    } else
+                        this.addTypePromise(funcPos, ret.expression);
+                } else {
+                    this.addTypePromise(funcPos, ret, TypePromiseKind.void);
+                }
+
             }
         }
         else if (node.kind == ts.SyntaxKind.ArrayLiteralExpression) {
@@ -461,8 +466,7 @@ export class TypeHelper {
                     this.variables[varPos] = new VariableInfo();
                     this.variablesData[varPos] = new VariableData();
                     this.variables[varPos].name = node.getText();
-                    this.variables[varPos].declaration = <ts.VariableDeclaration>symbol.declarations[0];
-                    this.variablesData[varPos].tsType = this.typeChecker.getTypeAtLocation(node);
+                    this.variables[varPos].declaration = <ts.Declaration>symbol.declarations[0];
                 }
                 let varInfo = this.variables[varPos];
                 let varData = this.variablesData[varPos];
@@ -472,8 +476,13 @@ export class TypeHelper {
                     let varDecl = <ts.VariableDeclaration>node.parent;
                     if (varDecl.name.getText() == node.getText()) {
                         this.addTypePromise(varPos, varDecl.initializer);
-                        if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                        if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                             varData.objLiteralAssigned = true;
+                            let objLiteral = <ts.ObjectLiteralExpression>varDecl.initializer;
+                            for (let propAssignment of objLiteral.properties.filter(p => p.kind == ts.SyntaxKind.PropertyAssignment).map(p => <ts.PropertyAssignment>p)) {
+                                this.addTypePromise(varPos, propAssignment.initializer, TypePromiseKind.propertyType, propAssignment.name.getText());
+                            }
+                        }
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression)
                             varData.arrLiteralAssigned = true;
                         if (varDecl.parent && varDecl.parent.parent && varDecl.parent.parent.kind == ts.SyntaxKind.ForOfStatement) {
@@ -496,6 +505,9 @@ export class TypeHelper {
                         }
                     }
                 }
+                else if (node.parent && node.parent.kind == ts.SyntaxKind.FunctionDeclaration) {
+                    this.addTypePromise(varPos, node.parent, TypePromiseKind.void);
+                }
                 else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
                     let funcDecl = <ts.FunctionDeclaration>node.parent.parent;
                     for (let i = 0; i < funcDecl.parameters.length; i++) {
@@ -516,8 +528,13 @@ export class TypeHelper {
                         && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                         this.addTypePromise(varPos, binExpr.left);
                         this.addTypePromise(varPos, binExpr.right);
-                        if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                        if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                             varData.objLiteralAssigned = true;
+                            let objLiteral = <ts.ObjectLiteralExpression>binExpr.right;
+                            for (let propAssignment of objLiteral.properties.filter(p => p.kind == ts.SyntaxKind.PropertyAssignment).map(p => <ts.PropertyAssignment>p)) {
+                                this.addTypePromise(varPos, propAssignment.initializer, TypePromiseKind.propertyType, propAssignment.name.getText());
+                            }
+                        }
                         if (binExpr.right && binExpr.right.kind == ts.SyntaxKind.ArrayLiteralExpression)
                             varData.arrLiteralAssigned = true;
                     }
@@ -680,14 +697,15 @@ export class TypeHelper {
 
     private postProcessArrays(varType: CType) {
 
-        if (varType instanceof ArrayType && varType.isDynamicArray) {
+        if (varType instanceof ArrayType && varType.isDynamicArray && varType != varType.elementType) {
             this.ensureArrayStruct(varType.elementType);
             this.postProcessArrays(varType.elementType);
-        } else if (varType instanceof DictType) {
+        } else if (varType instanceof DictType && varType != varType.elementType) {
             this.postProcessArrays(varType.elementType);
         } else if (varType instanceof StructType) {
             for (let k in varType.properties) {
-                this.postProcessArrays(varType.properties[k]);
+                if (varType != varType.properties[k])
+                    this.postProcessArrays(varType.properties[k]);
             }
         }
 
@@ -718,19 +736,6 @@ export class TypeHelper {
             }
         }
 
-        /** Function return types */
-        for (let funcDeclPos in this.functionReturnsData) {
-            let promises = this.functionReturnsData[funcDeclPos];
-            for (let id in promises) {
-                let resolvedType = this.getCType(promises[id].associatedNode) || PointerVarType;
-
-                let mergeResult = this.mergeTypes(this.functionReturnTypes[funcDeclPos], resolvedType);
-                if (mergeResult.replaced)
-                    somePromisesAreResolved = true;
-                this.functionReturnTypes[funcDeclPos] = mergeResult.type;
-            }
-        }
-
         /** Variables */
         for (let varPos of Object.keys(this.variables).map(k => +k)) {
 
@@ -756,6 +761,9 @@ export class TypeHelper {
                 }
                 else if (resolvedType instanceof DictType && promise.promiseKind == TypePromiseKind.forInIterator) {
                     finalType = StringVarType;
+                }
+                else if (promise.promiseKind == TypePromiseKind.void) {
+                    finalType = "void";
                 }
 
                 let bestType = promise.bestType;
@@ -881,6 +889,10 @@ export class TypeHelper {
         else if (!newType)
             return currentResult;
         else if (this.getTypeString(currentType) == this.getTypeString(newType))
+            return currentResult;
+        else if (currentType == "void")
+            return newResult;
+        else if (newType == "void")
             return currentResult;
         else if (currentType == PointerVarType)
             return newResult;

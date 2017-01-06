@@ -143,10 +143,10 @@ export class CVariableDestructors {
                     this.destructors.push(r.varName + "->data");
                     this.destructors.push(r.varName);
                 } else if (type instanceof DictType) {
-                    this.destructors.push(r.varName + ".index->data");
-                    this.destructors.push(r.varName + ".index");
-                    this.destructors.push(r.varName + ".values->data");
-                    this.destructors.push(r.varName + ".values");
+                    this.destructors.push(r.varName + "->index->data");
+                    this.destructors.push(r.varName + "->index");
+                    this.destructors.push(r.varName + "->values->data");
+                    this.destructors.push(r.varName + "->values");
                     this.destructors.push(r.varName);
                 } else if (type == StringVarType) {
                     this.destructors.push("(char *)" + r.varName);
