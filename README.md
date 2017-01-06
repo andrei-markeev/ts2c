@@ -86,7 +86,7 @@ Overview of currently supported language features (compared to ES3 Standard):
     - binary bitwise operators [0%]
     - binary logical operators [100%]: `&&`, `||`
     - conditional operator [100%]: `?`-`:`
-    - assignment operators [25%]: `=`
+    - assignment operators [29%]: `=`, `+=`
     - comma operator [0%]
  - built-in objects [13%]:
     - Global [0%]

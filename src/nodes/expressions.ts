@@ -50,6 +50,8 @@ class CBinaryExpression {
     {left} {operator} {right}
 {#elseif replacedWithCall}
     {call}({left}, {right}){callCondition}
+{#elseif replacedWithVarAssignment}
+    ({left} = {replacementVarName})
 {#elseif replacedWithVar}
     {replacementVarName}
 {#else}
@@ -62,6 +64,7 @@ export class CSimpleBinaryExpression {
     public call: string;
     public callCondition: string;
     public replacedWithVar: boolean = false;
+    public replacedWithVarAssignment: boolean = false;
     public replacementVarName: string;
     public gcVarName: string = null;
     public strPlusStr: boolean = false;
@@ -95,6 +98,7 @@ export class CSimpleBinaryExpression {
             operatorMap[ts.SyntaxKind.SlashToken] = '/';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
+            operatorMap[ts.SyntaxKind.FirstCompoundAssignment] = '+=';
         }
         else if (leftType == StringVarType && rightType == StringVarType) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
@@ -105,11 +109,12 @@ export class CSimpleBinaryExpression {
             if (callReplaceMap[operatorKind])
                 scope.root.headerFlags.strings = true;
 
-            if (operatorKind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.FirstCompoundAssignment) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
+                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.FirstCompoundAssignment;
                 this.replacementVarName = tempVarName;
                 this.strPlusStr = true;
                 scope.root.headerFlags.strings = true;
@@ -134,11 +139,12 @@ export class CSimpleBinaryExpression {
                 }
             }
 
-            if (operatorKind == ts.SyntaxKind.PlusToken) {
+            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.FirstCompoundAssignment) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
+                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.FirstCompoundAssignment;
                 this.replacementVarName = tempVarName;
                 if (leftType == NumberVarType)
                     this.numberPlusStr = true;

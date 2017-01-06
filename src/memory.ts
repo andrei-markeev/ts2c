@@ -66,7 +66,8 @@ export class MemoryManager {
             case ts.SyntaxKind.BinaryExpression:
                 {
                     let binExpr = <ts.BinaryExpression>node;
-                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
+                        || binExpr.operatorToken.kind == ts.SyntaxKind.FirstCompoundAssignment) {
                         let leftType = this.typeHelper.getCType(binExpr.left);
                         let rightType = this.typeHelper.getCType(binExpr.right);
                         if (leftType == StringVarType || rightType == StringVarType)

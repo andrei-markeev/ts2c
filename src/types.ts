@@ -417,11 +417,7 @@ export class TypeHelper {
             let funcPos = parentFunc && parentFunc.pos;
             if (funcPos != null) {
                 if (ret.expression) {
-                    if (ret.expression.kind == ts.SyntaxKind.ConditionalExpression) {
-                        let ternary = <ts.ConditionalExpression>ret.expression;
-                        this.addTypePromise(funcPos, ternary.whenTrue);
-                        this.addTypePromise(funcPos, ternary.whenFalse);
-                    } else if (ret.expression.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+                    if (ret.expression.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                         this.addTypePromise(funcPos, ret.expression);
                         let objLiteral = <ts.ObjectLiteralExpression>ret.expression;
                         for (let propAssignment of objLiteral.properties.filter(p => p.kind == ts.SyntaxKind.PropertyAssignment).map(p => <ts.PropertyAssignment>p)) {
@@ -875,6 +871,13 @@ export class TypeHelper {
     private addTypePromise(varPos: number, associatedNode: ts.Node, promiseKind: TypePromiseKind = TypePromiseKind.variable, propName: string = null) {
         if (!associatedNode)
             return;
+        if (associatedNode.kind == ts.SyntaxKind.ConditionalExpression) {
+            let ternary = <ts.ConditionalExpression>associatedNode;
+            this.addTypePromise(varPos, ternary.whenTrue, promiseKind, propName);
+            this.addTypePromise(varPos, ternary.whenFalse, promiseKind, propName);
+            return;
+        }
+
         let promiseId = associatedNode.pos + "_" + associatedNode.end;
         let promise = new TypePromise(associatedNode, promiseKind, propName);
         this.variablesData[varPos].typePromises[promiseId] = promise;

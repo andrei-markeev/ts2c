@@ -92,7 +92,18 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **Conditional operator `?` `:`**
  - [ ] Assignment operators
     - [x] **Simple assignment `=`** _(only as statement)_
-    - [ ] Compound assignments `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `>>>=`, `&=`, `^=`, `|=`
+    - [ ] Compound assignments
+        - [x] **`+=`**
+        - [ ] `-=`
+        - [ ] `*=`
+        - [ ] `/=`
+        - [ ] `%=`
+        - [ ] `<<=`
+        - [ ] `>>=`
+        - [ ] `>>>=`
+        - [ ] `&=`
+        - [ ] `^=`
+        - [ ] `|=`
  - [ ] Comma operator
 
 ### Built-in objects
