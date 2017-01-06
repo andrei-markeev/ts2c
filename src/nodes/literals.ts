@@ -136,7 +136,12 @@ export class CNumber {
 export class CBoolean {
     public value: string;
     constructor(scope: IScope, value: ts.Node) {
-        this.value = value.kind == ts.SyntaxKind.TrueKeyword ? "1" : "0";
+        this.value = value.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
     }
+}
+
+@CodeTemplate(`NULL`, ts.SyntaxKind.NullKeyword)
+export class CNull {
+    constructor(scope: IScope, value: ts.Node) { }
 }

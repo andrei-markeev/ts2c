@@ -187,6 +187,15 @@ export class MemoryManager {
                     }
                 }
 
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ObjectLiteralExpression) {
+                    console.log(heapNode.getText() + " -> Detected passing to object literal: " + ref.parent.getText() + ".");
+                    queue.push(ref.parent);
+                }
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+                    console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");
+                    queue.push(ref.parent);
+                }
+
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     let call = <ts.CallExpression>ref.parent;
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
@@ -204,24 +213,18 @@ export class MemoryManager {
                     } else {
                         let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
-                            if (call.expression.getText() != "console.log") {
-                                let isPush = false;
-                                if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
-                                    let propAccess = <ts.PropertyAccessExpression>call.expression;
-                                    let propName = propAccess.name.getText();
-                                    let type = this.typeHelper.getCType(propAccess.expression);
-                                    if (type && (type instanceof ArrayType) && (propName == "push" || propName == "unshift" || propName == "splice" || propName == "concat")) {
-                                        isPush = true;
-                                        console.log(heapNode.getText() + " is pushed to array '" + propAccess.expression.getText() + "'.");
-                                        queue.push(propAccess.expression);
-                                    }
+                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call) || call.expression.getText() == "console.log";
+                            
+                            if (isStandardCall) {
+                                let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
+                                if (standardCallEscapeNode) {
+                                    console.log(heapNode.getText() + " escapes to '" + standardCallEscapeNode.getText() + "' via standard call '" + call.getText() + "'.");
+                                    queue.push(standardCallEscapeNode);
                                 }
-
-                                if (!isPush) {
-                                    console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
-                                    topScope = "main";
-                                    isSimple = false;
-                                }
+                            } else {
+                                console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
+                                topScope = "main";
+                                isSimple = false;
                             }
                         }
                         else {

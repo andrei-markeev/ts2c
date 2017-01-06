@@ -31,6 +31,9 @@ class ArraySpliceResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "tmp_removed_values";
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return (<ts.PropertyAccessExpression>node.expression).expression;
+    }
 }
 
 @CodeTemplate(`

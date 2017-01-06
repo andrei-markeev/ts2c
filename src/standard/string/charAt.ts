@@ -30,6 +30,9 @@ class StringCharAtResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "char_at";
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
 }
 
 @CodeTemplate(`

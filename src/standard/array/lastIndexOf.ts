@@ -28,6 +28,9 @@ class ArrayLastIndexOfResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return null;
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
 }
 
 @CodeTemplate(`

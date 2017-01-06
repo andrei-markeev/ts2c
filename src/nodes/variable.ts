@@ -139,16 +139,18 @@ export class CVariableDestructors {
         scope.root.memoryManager.getDestructorsForScope(node)
             .forEach(r => {
                 let type = scope.root.typeHelper.getCType(r.node);
-                if (type instanceof ArrayType)
+                if (type instanceof ArrayType) {
                     this.destructors.push(r.varName + "->data");
-                else if (type instanceof DictType) {
+                    this.destructors.push(r.varName);
+                } else if (type instanceof DictType) {
                     this.destructors.push(r.varName + "->index->data");
                     this.destructors.push(r.varName + "->index");
                     this.destructors.push(r.varName + "->values->data");
                     this.destructors.push(r.varName + "->values");
-                } else if (type == StringVarType)
+                    this.destructors.push(r.varName);
+                } else if (type == StringVarType) {
                     this.destructors.push("(char *)" + r.varName);
-                else
+                } else
                     this.destructors.push(r.varName);
             })
     }

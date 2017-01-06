@@ -440,7 +440,7 @@ export class TypeHelper {
                 && node.parent.parent.kind == ts.SyntaxKind.CallExpression)
             {
                 let propAccess = <ts.PropertyAccessExpression>node.parent;
-                // if array literal is concated, we need to ensure that we
+                // if array literal is concatenated, we need to ensure that we
                 // have corresponding dynamic array type for the temporary variable
                 if (propAccess.name.getText() == "concat")
                     this.ensureArrayStruct(arrType.elementType);

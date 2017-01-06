@@ -30,6 +30,8 @@ import './standard/string/concat';
 import './standard/string/substring';
 import './standard/string/slice';
 import './standard/string/toString';
+import './standard/string/indexOf';
+import './standard/string/lastIndexOf';
 
 
 export interface IScope {

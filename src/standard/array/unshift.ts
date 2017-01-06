@@ -28,6 +28,9 @@ class ArrayUnshiftResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return null;
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return (<ts.PropertyAccessExpression>node.expression).expression;
+    }
 }
 
 @CodeTemplate(`

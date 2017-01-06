@@ -30,6 +30,9 @@ class StringConcatResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "concatenated_str";
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
 }
 
 @CodeTemplate(`

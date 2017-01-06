@@ -31,6 +31,9 @@ class ArraySliceResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "tmp_slice";
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
 }
 
 @CodeTemplate(`

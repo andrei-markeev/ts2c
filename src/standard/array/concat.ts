@@ -32,6 +32,9 @@ class ArrayConcatResolver implements IResolver {
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "tmp_array";
     }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return node;
+    }
 }
 
 @CodeTemplate(`
