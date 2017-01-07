@@ -91,9 +91,9 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`||`**
  - [x] **Conditional operator `?` `:`**
  - [ ] Assignment operators
-    - [x] **Simple assignment `=`** _(only as statement)_
+    - [x] **Simple assignment `=`**
     - [ ] Compound assignments
-        - [x] **`+=`**
+        - [x] **`+=`** _(partial: only numbers and strings)_
         - [ ] `-=`
         - [ ] `*=`
         - [ ] `/=`
@@ -104,7 +104,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
         - [ ] `&=`
         - [ ] `^=`
         - [ ] `|=`
- - [ ] Comma operator
+ - [x] **Comma operator**
 
 ### Built-in objects
 

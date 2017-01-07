@@ -68,12 +68,12 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only about 45% of ES3 syntax is currently supported.
+__**Work in progress:**__ it works, but only about 48% of ES3 syntax is currently supported.
 
 Overview of currently supported language features (compared to ES3 Standard):
 
  - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
- - expressions [47%]:
+ - expressions [56%]:
     - primary expressions [81%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
     - left-hand-side expressions [60%]: property accessors, function calls
     - postfix expressions [100%]: `++`, `--`
@@ -86,8 +86,8 @@ Overview of currently supported language features (compared to ES3 Standard):
     - binary bitwise operators [0%]
     - binary logical operators [100%]: `&&`, `||`
     - conditional operator [100%]: `?`-`:`
-    - assignment operators [29%]: `=`, `+=`
-    - comma operator [0%]
+    - assignment operators [52%]: `=`, `+=`
+    - comma operator [100%]
  - built-in objects [13%]:
     - Global [0%]
     - Object [0%]

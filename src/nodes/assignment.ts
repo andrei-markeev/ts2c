@@ -7,7 +7,7 @@ import {CExpression} from './expressions';
 import {CVariableAllocation} from './variable';
 
 export class AssignmentHelper {
-    public static create(scope: IScope, left: ts.Node, right: ts.Expression) {
+    public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
         let accessor;
         let varType;
         let argumentExpression;
@@ -33,7 +33,7 @@ export class AssignmentHelper {
             accessor = new CElementAccess(scope, left);
             argumentExpression = null;
         }
-        return new CAssignment(scope, accessor, argumentExpression, varType, right);
+        return new CAssignment(scope, accessor, argumentExpression, varType, right, inline);
     }
 }
 
@@ -43,19 +43,19 @@ export class AssignmentHelper {
 {#elseif isArrayLiteralAssignment}
     {arrInitializers}
 {#elseif isDynamicArray && argumentExpression == null}
-    {accessor} = ((void *){expression});\n
+    {accessor} = ((void *){expression}){CR}
 {#elseif argumentExpression == null}
-    {accessor} = {expression};\n
+    {accessor} = {expression}{CR}
 {#elseif isStruct}
-    {accessor}->{argumentExpression} = {expression};\n
+    {accessor}->{argumentExpression} = {expression}{CR}
 {#elseif isDict}
-    DICT_SET({accessor}, {argumentExpression}, {expression});\n
+    DICT_SET({accessor}, {argumentExpression}, {expression}){CR}
 {#elseif isDynamicArray}
-    {accessor}->data[{argumentExpression}] = {expression};\n
+    {accessor}->data[{argumentExpression}] = {expression}{CR}
 {#elseif isStaticArray}
-    {accessor}[{argumentExpression}] = {expression};\n
+    {accessor}[{argumentExpression}] = {expression}{CR}
 {#else}
-    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */;\n
+    /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */{CR}
 {/if}`
 )
 export class CAssignment {
@@ -71,8 +71,9 @@ export class CAssignment {
     public isDict: boolean = false;
     public expression: CExpression;
     public nodeText: string;
-    constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression) {
-
+    public CR: string;
+    constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression, inline: boolean = false) {
+        this.CR = inline ? "" : ";\n";
         this.isSimpleVar = typeof type === 'string';
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;

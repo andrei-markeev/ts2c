@@ -1,3 +1,4 @@
+import { AssignmentHelper, CAssignment } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
@@ -10,12 +11,25 @@ export interface CExpression { }
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.BinaryExpression)
 class CBinaryExpression {
-    public expression: CSimpleBinaryExpression;
+    public expression: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression)
     {
+        if (node.operatorToken.kind == ts.SyntaxKind.FirstAssignment) {
+            this.expression = AssignmentHelper.create(scope, node.left, node.right, true);
+            return;
+        }
+        if (node.operatorToken.kind == ts.SyntaxKind.CommaToken) {
+            let nodeAsStatement = <ts.ExpressionStatement>ts.createNode(ts.SyntaxKind.ExpressionStatement);
+            nodeAsStatement.expression = node.left;
+            nodeAsStatement.parent = node.getSourceFile();
+            scope.statements.push(CodeTemplateFactory.createForNode(scope, nodeAsStatement));
+            this.expression = CodeTemplateFactory.createForNode(scope, node.right);
+            return;
+        }
+
         let leftType = scope.root.typeHelper.getCType(node.left);
-        let rightType = scope.root.typeHelper.getCType(node.right);
         let left = CodeTemplateFactory.createForNode(scope, node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
         let right = CodeTemplateFactory.createForNode(scope, node.right);
         this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
     }

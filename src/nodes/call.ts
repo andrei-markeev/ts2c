@@ -1,12 +1,9 @@
+import { IScope } from '../program';
+import { StandardCallHelper } from '../resolver';
+import { ConsoleLogHelper } from '../standard/console/log';
+import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CExpression } from './expressions';
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {IScope} from '../program';
-import {ArrayType, StringVarType, NumberVarType} from '../types';
-import {CElementAccess, CSimpleElementAccess} from './elementaccess';
-import {CExpression, CSimpleBinaryExpression} from './expressions';
-import {CVariable} from './variable';
-import {ConsoleLogHelper} from '../standard/console/log';
-import {StandardCallHelper} from '../resolver';
 
 @CodeTemplate(`
 {#statements}
