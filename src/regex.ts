@@ -205,7 +205,6 @@ export class RegexBuilder {
             for (let charT of charTransitions) {
                 let anyCharT_token = <ComplexRegexToken>anyCharT.token;
                 if (anyCharT.toState != charT.toState && anyCharT_token.tokens.indexOf(charT.token) == -1) {
-                    anyCharT_token.tokens.push(charT.token);
                     addedTransitions.push({ fromState: anyCharT.fromState, toState: anyCharT.toState, token: charT.token });
                 }
             }
