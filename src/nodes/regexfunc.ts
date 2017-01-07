@@ -15,22 +15,27 @@ int16_t {regexName}_search(const char *str) {
             ch = str[iterator];
 {/if}
 
-        {stateTransitionBlocks {        }=> {this}}
+        {stateBlocks}
 
         if (next == -1) {
-            {continueBlock}
+            if ({finals { || }=> state == {this}})
+                break;
+            iterator = index;
+            index++;
+            state = 0;
         } else {
             state = next;
             next = -1;
         }
+
+        if (iterator == len-1 && index < len-1 && {finals { && }=> state != {this}}) {
+            iterator = index;
+            index++;
+            state = 0;
+        }
     }
-{#if fixedEnd}
-        if (({finals { && }=> state != {this}}) || iterator != len)
-            index = -1;
-{#else}
-        if ({finals { && }=> state != {this}})
-            index = -1;
-{/if}
+    if ({finals { && }=> state != {this}})
+        index = -1;
     return index;
 }
 struct regex_struct_t {regexName} = { {templateString}, {regexName}_search };
@@ -38,86 +43,65 @@ struct regex_struct_t {regexName} = { {templateString}, {regexName}_search };
 export class CRegexSearchFunction {
     public hasChars: boolean;
     public finals: string[];
-    public fixedEnd: boolean;
-    public continueBlock: ContinueBlock;
     public templateString: CString;
-    public stateTransitionBlocks: CStateTransitionsBlock[] = [];
+    public stateBlocks: CStateBlock[] = [];
     constructor(scope: IScope, template: string, public regexName: string, regexMachine: RegexMachine = null) {
         this.templateString = new CString(scope, template.replace(/\\/g,'\\\\').replace(/"/g, '\\"'));
         regexMachine = regexMachine || RegexBuilder.build(template.slice(1, -1));
-        this.hasChars = regexMachine.states.filter(s => s && (Object.keys(s.chars).length > 0 || s.except && Object.keys(s.except).length > 0)).length > 0;
+        this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || c.condition.tokens.length > 0)).length > 0;
         for (let s = 0; s < regexMachine.states.length - 1; s++) {
             if (regexMachine.states[s] == null)
                 continue;
-            this.stateTransitionBlocks.push(new CStateTransitionsBlock(
-                scope,
-                s+"",
-                regexMachine.states[s]
-            ));
+            this.stateBlocks.push(new CStateBlock(scope, s+"", regexMachine.states[s]));
         }
         this.finals = regexMachine.states.length > 0 ? regexMachine.states.map((s, i) => s.final ? i : -1).filter(f => f > -1).map(f => f+"") : ["-1"];
-        this.fixedEnd = regexMachine.fixedEnd;
-        this.continueBlock = new ContinueBlock(scope, 
-            regexMachine.fixedStart,
-            this.fixedEnd,
-            this.finals
-        );
         scope.root.headerFlags.strings = true;
     }
 
 }
 
-@CodeTemplate(`if (state == {stateNumber}) {
-            {charConditions {\n            }=> if (ch == '{ch}') next = {next};}
-{#if anyChar && exceptConditions.length}
-                if ({exceptConditions { && }=> (ch != '{ch}')} && next == -1)
-                    next = {next};
-{#elseif anyChar}
-                if (next == -1) next = {next};
-{/if}
-        }
+@CodeTemplate(`
+if (state == {stateNumber}) {
+    {conditions}
+}
 `)
-class CStateTransitionsBlock {
-    public charConditions: CharCondition[] = [];
-    public exceptConditions: CharCondition[] = [];
-    public anyChar: boolean = false;
-    public next: string;
+class CStateBlock {
+    public conditions: any[] = [];
     constructor(scope: IScope, public stateNumber: string, state: RegexState) {
-        for (let ch in state.chars)
-            this.charConditions.push(new CharCondition(ch, state.chars[ch]));
-        for (let ch in state.except)
-            this.exceptConditions.push(new CharCondition(ch, -1));
-        if (state.anyChar != null) {
-            this.anyChar = true;
-            this.next = state.anyChar+"";
+        for (let tr of state.transitions) {
+            this.conditions.push(new CharCondition(tr.condition, tr.next, tr.fixedStart, tr.fixedEnd));
         }
     }
 }
 
 @CodeTemplate(`
-{#if !fixedStart && !fixedEnd}
-    if ({finals { || }=> state == {this}})
-        break;
-    iterator = index;
-    index++;
-    state = 0;
-{#elseif !fixedStart && fixedEnd}
-    iterator = index;
-    index++;
-    state = 0;
+{#if anyCharExcept}
+    if ({except { && }=> ch != '{this}'}{fixedConditions}) next = {next};
+{#elseif anyChar}
+    if (next == -1{fixedConditions}) next = {next};
 {#else}
-    break;
-{/if}`)
-class ContinueBlock {
-    constructor(scope: IScope, 
-        public fixedStart: boolean, 
-        public fixedEnd: boolean, 
-        public finals: string[]) { }
-}
-
+    if (ch == '{ch}'{fixedConditions}) next = {next};
+{/if}
+`)
 class CharCondition {
-    constructor(public ch: string, public next: number) {
-        this.ch = this.ch.replace('\\','\\\\').replace("'","\\'");
+    public anyCharExcept: boolean = false;
+    public anyChar: boolean = false;
+    public ch: string;
+    public except: string[];
+    public fixedConditions: string = '';
+    constructor(condition: any, public next: number, fixedStart: boolean, fixedEnd: boolean) {
+        if (fixedStart)
+            this.fixedConditions = " && iterator == 0";
+        else if (fixedEnd)
+            this.fixedConditions = " && iterator == len - 1";
+        
+        if (typeof condition === "string")
+            this.ch = condition.replace('\\','\\\\').replace("'","\\'");
+        else if (condition.tokens.length) {
+            this.anyCharExcept = true;
+            this.except = condition.tokens.map(ch => ch.replace('\\','\\\\').replace("'","\\'"));
+        } else
+            this.anyChar = true;
     }
 }
 

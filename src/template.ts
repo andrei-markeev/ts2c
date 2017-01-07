@@ -103,106 +103,10 @@ function processTemplate(template: string, args: any): [string, string] {
         if (k == "resolve")
             continue;
         if (args[k] && args[k].push) {
-            let pos = template.indexOf("{" + k + '}');
-            if (pos == -1)
-                pos = template.indexOf("{" + k + ' ');
-            else {
-                let elementsResolved = '';
-                for (let element of args[k]) {
-                    let [resolvedElement, elementStatements] = processTemplate("{this}", element);
-                    statements += elementStatements;
-                    elementsResolved += resolvedElement;
-                }
-
-                template = template.slice(0, pos) + elementsResolved + template.slice(pos + k.length + 2);
+            let data = { template };
+            while (replaceArray(data, k, args[k], statements))
                 replaced = true;
-                continue;
-            }
-            if (pos == -1)
-                pos = template.indexOf("{" + k + '=');
-            if (pos == -1)
-                pos = template.indexOf("{" + k + '{');
-            if (pos == -1)
-                continue;
-            let startPos = pos;
-            pos += k.length + 1;
-            while (template[pos] == ' ')
-                pos++;
-            let separator = '';
-
-            if (template[pos] == '{') {
-                pos++;
-                while (template[pos] != '}' && pos < template.length) {
-                    separator += template[pos]
-                    pos++;
-                }
-                pos++;
-            }
-            if (pos >= template.length - 2 || template[pos] !== "=" || template[pos + 1] !== ">")
-                throw new Error("Internal error: incorrect template format for array " + k + ".");
-
-            pos += 2;
-            if (template[pos] == ' ' && template[pos + 1] != ' ')
-                pos++;
-
-            let curlyBracketCounter = 1;
-            let elementTemplateStart = pos;
-            while (curlyBracketCounter > 0) {
-                if (pos == template.length)
-                    throw new Error("Internal error: incorrect template format for array " + k + ".");
-                if (template[pos] == '{')
-                    curlyBracketCounter++;
-                if (template[pos] == '}')
-                    curlyBracketCounter--;
-                pos++;
-            }
-            let elementTemplate = template.slice(elementTemplateStart, pos - 1);
-            let elementsResolved = "";
-
-            for (let element of args[k]) {
-                let [resolvedElement, elementStatements] = processTemplate(elementTemplate, element);
-                statements += elementStatements;
-
-                if (k == 'statements') {
-                    resolvedElement = resolvedElement.replace(/[;\n]+;/g, ';');
-                    if (resolvedElement.search(/\n/) > -1) {
-                        for (let line of resolvedElement.split('\n')) {
-                            if (line != '') {
-                                if (elementsResolved != "")
-                                    elementsResolved += separator;
-                                elementsResolved += line + '\n';
-                            }
-                        }
-                    }
-                    else {
-                        if (elementsResolved != "")
-                            elementsResolved += separator;
-                        if (resolvedElement.search(/^[\n\s]*$/) == -1)
-                            elementsResolved += resolvedElement + '\n';
-                    }
-                }
-                else {
-                    if (elementsResolved != "")
-                        elementsResolved += separator;
-                    elementsResolved += resolvedElement;
-                } 
-
-            }
-
-            if (args[k].length == 0) {
-                while (pos < template.length && template[pos] == ' ')
-                    pos++;
-                while (pos < template.length && template[pos] == '\n')
-                    pos++;
-                while (startPos > 0 && template[startPos - 1] == ' ')
-                    startPos--;
-                while (startPos > 0 && template[startPos - 1] == '\n')
-                    startPos--;
-                if (template[startPos] == '\n')
-                    startPos++;
-            }
-            template = template.slice(0, startPos) + elementsResolved + template.slice(pos);
-            replaced = true;
+            template = data.template;
         }
         else {
             let index = -1;
@@ -227,4 +131,106 @@ function processTemplate(template: string, args: any): [string, string] {
     }
     template = template.replace(/^[\n]*/, '').replace(/\n\s*\n[\n\s]*\n/g, '\n\n');
     return [template, statements];
+}
+
+function replaceArray(data, k, array, statements) {
+    let pos = data.template.indexOf("{" + k + '}');
+    if (pos != -1) {
+        let elementsResolved = '';
+        for (let element of array) {
+            let [resolvedElement, elementStatements] = processTemplate("{this}", element);
+            statements += elementStatements;
+            elementsResolved += resolvedElement;
+        }
+
+        data.template = data.template.slice(0, pos) + elementsResolved + data.template.slice(pos + k.length + 2);
+        return true;
+    }
+    if (pos == -1)
+        pos = data.template.indexOf("{" + k + ' ');
+    if (pos == -1)
+        pos = data.template.indexOf("{" + k + '=');
+    if (pos == -1)
+        pos = data.template.indexOf("{" + k + '{');
+    if (pos == -1)
+        return false;
+    let startPos = pos;
+    pos += k.length + 1;
+    while (data.template[pos] == ' ')
+        pos++;
+    let separator = '';
+
+    if (data.template[pos] == '{') {
+        pos++;
+        while (data.template[pos] != '}' && pos < data.template.length) {
+            separator += data.template[pos]
+            pos++;
+        }
+        pos++;
+    }
+    if (pos >= data.template.length - 2 || data.template[pos] !== "=" || data.template[pos + 1] !== ">")
+        throw new Error("Internal error: incorrect template format for array " + k + ".");
+
+    pos += 2;
+    if (data.template[pos] == ' ' && data.template[pos + 1] != ' ')
+        pos++;
+
+    let curlyBracketCounter = 1;
+    let elementTemplateStart = pos;
+    while (curlyBracketCounter > 0) {
+        if (pos == data.template.length)
+            throw new Error("Internal error: incorrect template format for array " + k + ".");
+        if (data.template[pos] == '{')
+            curlyBracketCounter++;
+        if (data.template[pos] == '}')
+            curlyBracketCounter--;
+        pos++;
+    }
+    let elementTemplate = data.template.slice(elementTemplateStart, pos - 1);
+    let elementsResolved = "";
+
+    for (let element of array) {
+        let [resolvedElement, elementStatements] = processTemplate(elementTemplate, element);
+        statements += elementStatements;
+
+        if (k == 'statements') {
+            resolvedElement = resolvedElement.replace(/[;\n]+;/g, ';');
+            if (resolvedElement.search(/\n/) > -1) {
+                for (let line of resolvedElement.split('\n')) {
+                    if (line != '') {
+                        if (elementsResolved != "")
+                            elementsResolved += separator;
+                        elementsResolved += line + '\n';
+                    }
+                }
+            }
+            else {
+                if (elementsResolved != "")
+                    elementsResolved += separator;
+                if (resolvedElement.search(/^[\n\s]*$/) == -1)
+                    elementsResolved += resolvedElement + '\n';
+            }
+        }
+        else {
+            if (elementsResolved != "")
+                elementsResolved += separator;
+            elementsResolved += resolvedElement;
+        } 
+
+    }
+
+    if (array.length == 0) {
+        while (pos < data.template.length && data.template[pos] == ' ')
+            pos++;
+        while (pos < data.template.length && data.template[pos] == '\n')
+            pos++;
+        while (startPos > 0 && data.template[startPos - 1] == ' ')
+            startPos--;
+        while (startPos > 0 && data.template[startPos - 1] == '\n')
+            startPos--;
+        if (data.template[startPos] == '\n')
+            startPos++;
+    }
+    data.template = data.template.slice(0, startPos) + elementsResolved + data.template.slice(pos);
+    return true;
 }

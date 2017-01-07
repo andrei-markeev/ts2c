@@ -4,7 +4,7 @@ function print(string, regex, expect) {
     count++;
     var pos = string.search(regex);
     if (pos != expect)
-        console.log(string, ".search(", regex, ") -> FAIL, returned ", pos, ", expected ", expect);
+        console.log("\"", string, "\".search(", regex, ") -> FAIL, returned ", pos, ", expected ", expect);
     else
         matched++;
 }
@@ -50,8 +50,6 @@ print("abcc", /^abc/, 0);
 print("aabc", /^abc$/, -1);
 print("aabc", /abc$/, 1);
 print("ababcabc", /abc$/, 5);
-print("abc", /^/, 0);
-print("abc", /$/, 3);
 print("abc", /a.c/, 0);
 print("axc", /a.c/, 0);
 print("axyzc", /a.*c/, 0);
@@ -64,7 +62,6 @@ print("aac", /a[b-d]/, 1);
 print("a-", /a[-b]/, 0);
 print("a-", /a[\-b]/, 0);
 print("a]", /a]/, 0);
-// print("a]b", /a[]]b/, -1);
 print("aed", /a[^bc]d/, 0);
 print("abd", /a[^bc]d/, -1);
 print("adc", /a[^-b]c/, 0);
