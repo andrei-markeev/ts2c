@@ -41,6 +41,14 @@ class RegexParser {
     static parseEscaped(c) {
         if (c == 'd')
             return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        else if (c == 'w')
+            return [
+                'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'W', 'Z',
+                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'w', 'z',
+                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '_'
+            ];
         else if (c == 'n')
             return ['\n'];
         else if (c == 's')
@@ -136,16 +144,19 @@ export class RegexBuilder {
             nextFromState = [finalState];
         } else if (token.anyOf) {
             let lastTransitions: Transition[] = [];
+            if (token.tokens.indexOf(NOTHING) > -1)
+                nextFromState = [firstFromState];
+            else
+                nextFromState = [];
             for (let tok of token.tokens.filter(t => t != NOTHING && t != FIXED_START && t != FIXED_END)) {
                 let l = transitions.length;
                 let result = this.convert(tok, transitions, firstFromState, finalState);
                 finalState = result.finalState;
+                nextFromState = nextFromState.concat(result.nextFromState);
                 lastTransitions = lastTransitions.concat(transitions.slice(l).filter(t => t.toState == finalState));
             }
-            if (token.tokens.indexOf(NOTHING) > -1)
-                nextFromState = [firstFromState, finalState];
-            else
-                nextFromState = [finalState];
+            nextFromState.push(finalState);
+            nextFromState = (<any>nextFromState).removeDuplicates();
             lastTransitions.forEach(ls => ls.toState = finalState);
         } else {
             for (let tok of token.tokens.filter(t => t != FIXED_START && t != FIXED_END)) {
@@ -225,6 +236,31 @@ export class RegexBuilder {
                 queue.unshift(closure);
             }
 
+        }
+        for (let state of states) {
+            let charTransitions = state.transitions.filter(t => typeof t.condition == "string").sort((a, b) => a.condition > b.condition ? 1 : -1);
+            if (charTransitions.length > 1) {
+                let classTransitions = [];
+                let condition = { fromChar: charTransitions[0].condition, toChar: charTransitions[0].condition };
+                for (let i = 1; i <= charTransitions.length; i++) {
+                    if (i < charTransitions.length
+                        && charTransitions[i].condition.charCodeAt(0) == charTransitions[i - 1].condition.charCodeAt(0) + 1
+                        && charTransitions[i].next == charTransitions[i - 1].next
+                        && charTransitions[i].fixedStart == charTransitions[i - 1].fixedStart
+                        && charTransitions[i].fixedEnd == charTransitions[i - 1].fixedEnd) {
+                        condition.toChar = charTransitions[i].condition;
+                    } else {
+                        if (condition.fromChar == condition.toChar) {
+                            classTransitions.push(charTransitions[i - 1]);
+                        } else {
+                            classTransitions.push({ ...charTransitions[i - 1], condition });
+                        }
+                        if (i < charTransitions.length)
+                            condition = { fromChar: charTransitions[i].condition, toChar: charTransitions[i].condition };
+                    }
+                }
+                state.transitions = classTransitions.concat(state.transitions.filter(t => typeof t.condition != "string"));
+            }
         }
         return states;
     }

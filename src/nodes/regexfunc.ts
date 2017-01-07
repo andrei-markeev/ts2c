@@ -15,7 +15,7 @@ int16_t {regexName}_search(const char *str) {
             ch = str[iterator];
 {/if}
 
-        {stateBlocks}
+{stateBlocks}
 
         if (next == -1) {
             if ({finals { || }=> state == {this}})
@@ -48,7 +48,7 @@ export class CRegexSearchFunction {
     constructor(scope: IScope, template: string, public regexName: string, regexMachine: RegexMachine = null) {
         this.templateString = new CString(scope, template.replace(/\\/g,'\\\\').replace(/"/g, '\\"'));
         regexMachine = regexMachine || RegexBuilder.build(template.slice(1, -1));
-        this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || c.condition.tokens.length > 0)).length > 0;
+        this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || c.condition.fromChar || c.condition.tokens.length > 0)).length > 0;
         for (let s = 0; s < regexMachine.states.length - 1; s++) {
             if (regexMachine.states[s] == null)
                 continue;
@@ -61,9 +61,9 @@ export class CRegexSearchFunction {
 }
 
 @CodeTemplate(`
-if (state == {stateNumber}) {
-    {conditions}
-}
+        if (state == {stateNumber}) {
+{conditions}
+        }
 `)
 class CStateBlock {
     public conditions: any[] = [];
@@ -76,16 +76,20 @@ class CStateBlock {
 
 @CodeTemplate(`
 {#if anyCharExcept}
-    if ({except { && }=> ch != '{this}'}{fixedConditions}) next = {next};
+                if ({except { && }=> ch != '{this}'}{fixedConditions}) next = {next};
 {#elseif anyChar}
-    if (next == -1{fixedConditions}) next = {next};
+                if (next == -1{fixedConditions}) next = {next};
+{#elseif charClass}
+                if (ch >= '{chFrom}' && ch <= '{ch}'{fixedConditions}) next = {next};
 {#else}
-    if (ch == '{ch}'{fixedConditions}) next = {next};
+                if (ch == '{ch}'{fixedConditions}) next = {next};
 {/if}
 `)
 class CharCondition {
     public anyCharExcept: boolean = false;
     public anyChar: boolean = false;
+    public charClass: boolean = false;
+    public chFrom: string;
     public ch: string;
     public except: string[];
     public fixedConditions: string = '';
@@ -97,6 +101,11 @@ class CharCondition {
         
         if (typeof condition === "string")
             this.ch = condition.replace('\\','\\\\').replace("'","\\'");
+        else if (condition.fromChar) {
+            this.charClass = true;
+            this.chFrom = condition.fromChar;
+            this.ch = condition.toChar;
+        }
         else if (condition.tokens.length) {
             this.anyCharExcept = true;
             this.except = condition.tokens.map(ch => ch.replace('\\','\\\\').replace("'","\\'"));
