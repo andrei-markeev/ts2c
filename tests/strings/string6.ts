@@ -122,6 +122,8 @@ print("ab", /(a)(b)c|ab/, 0);
 print("aaax", /(a)+x/, 0);
 print("aacx", /([ac])+x/, 0);
 print("d:msgs/tdir/sub1/trial/away.cpp", /([^\/]*\/)*sub1\//, 0);
+print("sub1/trial/away.cpp", /([^\/]*\/)*sub1\//, 0);
+print("some/things/sub2/sub1.cpp", /([^\/]*\/)*sub1\//, -1);
 print("track1.title:TBlah blah blah", /([^.]*)\.([^:]*):[T ]+(.*)/, 0);
 print("abNNxyzN", /([^N]*N)+/, 0);
 print("abNNxyz", /([^N]*N)+/, 0);

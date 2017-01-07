@@ -152,11 +152,11 @@ export class RegexBuilder {
                 let l = transitions.length;
                 let result = this.convert(tok, transitions, firstFromState, finalState);
                 finalState = result.finalState;
-                nextFromState = nextFromState.concat(result.nextFromState);
+                if (result.nextFromState.length > 1)
+                    nextFromState = nextFromState.concat(result.nextFromState.filter(n => n != finalState));
                 lastTransitions = lastTransitions.concat(transitions.slice(l).filter(t => t.toState == finalState));
             }
-            nextFromState.push(finalState);
-            nextFromState = (<any>nextFromState).removeDuplicates();
+            nextFromState = (<any>nextFromState.concat(finalState)).removeDuplicates();
             lastTransitions.forEach(ls => ls.toState = finalState);
         } else {
             for (let tok of token.tokens.filter(t => t != FIXED_START && t != FIXED_END)) {
@@ -197,12 +197,23 @@ export class RegexBuilder {
                 transitions.filter(t => t.fromState == finalState).forEach(t => t.final = true);
         }
 
+        // split anyChar transitions
+        var addedTransitions = [];
+        var charTransitions = transitions.filter(t => typeof t.token == "string");
+        var anyCharTransitions = transitions.filter(t => typeof t.token != "string" && t.token != null);
+        for (let anyCharT of anyCharTransitions) {
+            for (let charT of charTransitions) {
+                let anyCharT_token = <ComplexRegexToken>anyCharT.token;
+                if (anyCharT.toState != charT.toState && anyCharT_token.tokens.indexOf(charT.token) == -1) {
+                    anyCharT_token.tokens.push(charT.token);
+                    addedTransitions.push({ fromState: anyCharT.fromState, toState: anyCharT.toState, token: charT.token });
+                }
+            }
+        }
+        transitions = transitions.concat(addedTransitions);
+
         let stateIndices = {};
-        let queue = [transitions.filter(t => t.fromState == 0)];
         let processed = {};
-        let tokenMoreOrEqual = (token: RegexToken, other: RegexToken) => {
-            return JSON.stringify(token) === JSON.stringify(other);
-        };
         let ensureId = tt => {
             let id = tt.map(t => t.fromState).removeDuplicates().sort().join(",");
             if (stateIndices[id] == null) {
@@ -210,6 +221,7 @@ export class RegexBuilder {
             }
             return stateIndices[id];
         };
+        let queue = [transitions.filter(t => t.fromState == 0)];
         while (queue.length) {
             let trgroup = queue.pop();
             let id = ensureId(trgroup);
@@ -224,7 +236,7 @@ export class RegexBuilder {
 
             let processedTr = [];
             for (let tr of trgroup.filter(t => !!t.token)) {
-                let group = trgroup.filter(t => tokenMoreOrEqual(tr.token, t.token) && processedTr.indexOf(t) == -1);
+                let group = trgroup.filter(t => JSON.stringify(tr.token) === JSON.stringify(t.token) && processedTr.indexOf(t) == -1);
                 if (!group.length)
                     continue;
                 group.forEach(g => processedTr.push(g));
@@ -232,7 +244,7 @@ export class RegexBuilder {
                 let closure = transitions.filter(t => reachableStates.indexOf(t.fromState) > -1);
                 let closureId = ensureId(closure);
                 states[id].transitions.push({ condition: tr.token, next: closureId, fixedStart: tr.fixedStart, fixedEnd: tr.fixedEnd });
-                console.log("FROM: ", id, "----", tr.fixedStart ? "^" : "", tr.token, tr.fixedStart ? "$" : "", "---> ", closureId);
+                //console.log("FROM: ", id, "----", tr.fixedStart ? "(start of line)" : "", tr.token, tr.fixedEnd ? "(end of line)" : "", "---> ", closureId);
                 queue.unshift(closure);
             }
 

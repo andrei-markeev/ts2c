@@ -76,7 +76,7 @@ class CStateBlock {
 
 @CodeTemplate(`
 {#if anyCharExcept}
-                if ({except { && }=> ch != '{this}'}{fixedConditions}) next = {next};
+                if (next == -1 && {except { && }=> ch != '{this}'}{fixedConditions}) next = {next};
 {#elseif anyChar}
                 if (next == -1{fixedConditions}) next = {next};
 {#elseif charClass}
