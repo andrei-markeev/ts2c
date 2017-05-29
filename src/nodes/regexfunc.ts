@@ -5,8 +5,9 @@ import {RegexBuilder, RegexMachine, RegexState} from '../regex';
 import {CExpression} from './expressions';
 
 @CodeTemplate(`
-int16_t {regexName}_search(const char *str) {
+struct regex_match_struct_t {regexName}_search(const char *str) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0;
+    struct regex_match_struct_t result;
 {#if hasChars}
         char ch;
 {/if}
@@ -36,7 +37,9 @@ int16_t {regexName}_search(const char *str) {
     }
     if ({finals { && }=> state != {this}})
         index = -1;
-    return index;
+    result.index = index;
+    result.end = iterator;
+    return result;
 }
 struct regex_struct_t {regexName} = { {templateString}, {regexName}_search };
 `)

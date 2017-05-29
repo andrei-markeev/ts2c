@@ -204,8 +204,9 @@ export class RegexBuilder {
         for (let anyCharT of anyCharTransitions) {
             for (let charT of charTransitions) {
                 let anyCharT_token = <ComplexRegexToken>anyCharT.token;
-                if (anyCharT.toState != charT.toState && anyCharT_token.tokens.indexOf(charT.token) == -1) {
-                    addedTransitions.push({ fromState: anyCharT.fromState, toState: anyCharT.toState, token: charT.token });
+                if (charT.fromState == anyCharT.fromState && anyCharT.toState != charT.toState && anyCharT_token.tokens.indexOf(charT.token) == -1) {
+                    if (transitions.filter(t => t.fromState == anyCharT.fromState && t.toState == anyCharT.toState && t.token == charT.token).length == 0)
+                        addedTransitions.push({ fromState: anyCharT.fromState, toState: anyCharT.toState, token: charT.token });
                 }
             }
         }

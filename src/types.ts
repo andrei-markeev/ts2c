@@ -8,6 +8,7 @@ export const StringVarType = "const char *";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
 export const RegexVarType = "struct regex_struct_t";
+export const RegexMatchVarType = "struct regex_match_struct_t";
 
 /** Type that represents static or dynamic array */
 export class ArrayType {
@@ -326,7 +327,7 @@ export class TypeHelper {
     public addNewTemporaryVariable(scopeNode: ts.Node, proposedName: string): string {
         let parentFunc = this.findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
+        let existingSymbolNames = scopeNode == null ? [] : this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);

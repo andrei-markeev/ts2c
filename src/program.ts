@@ -23,6 +23,7 @@ import './standard/array/indexOf';
 import './standard/array/lastIndexOf';
 import './standard/array/sort';
 import './standard/array/reverse';
+
 import './standard/string/search';
 import './standard/string/charCodeAt';
 import './standard/string/charAt';
@@ -32,6 +33,7 @@ import './standard/string/slice';
 import './standard/string/toString';
 import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
+import './standard/string/match';
 
 
 export interface IScope {
@@ -101,11 +103,18 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
-     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice }
+     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
+     headerFlags.regex }
     typedef int int16_t;
 {/if}
 {#if headerFlags.regex}
-    typedef int16_t regex_func_t(const char*);
+    struct regex_match_struct_t {
+        int16_t index;
+        int16_t end;
+        struct regex_match_struct_t *matches;
+        int16_t matches_count;
+    };
+    typedef struct regex_match_struct_t regex_func_t(const char*);
     struct regex_struct_t {
         const char * str;
         regex_func_t * func;
