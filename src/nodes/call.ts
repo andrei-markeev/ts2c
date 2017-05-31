@@ -34,6 +34,10 @@ export class CCallExpression {
         if (this.funcName != "console.log") {
             this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
         }
+        if (call.expression.kind == ts.SyntaxKind.Identifier && this.funcName == "parseInt") {
+            scope.root.headerFlags.int16_t = true;
+            scope.root.headerFlags.parseInt = true;
+        }
         if (call.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
 

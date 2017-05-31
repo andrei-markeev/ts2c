@@ -69,6 +69,7 @@ class HeaderFlags {
     str_substring: boolean = false;
     str_slice: boolean = false;
     atoi: boolean = false;
+    parseInt: boolean = false;
     regex: boolean = false;
 }
 
@@ -87,7 +88,7 @@ class HeaderFlags {
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice}
     #include <assert.h>
 {/if}
-{#if headerFlags.printf}
+{#if headerFlags.printf || headerFlags.parseInt}
     #include <stdio.h>
 {/if}
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
@@ -374,6 +375,13 @@ class HeaderFlags {
     }
 {/if}
 
+{#if headerFlags.parseInt}
+    int16_t parseInt(const char * str) {
+        int r;
+        sscanf(str, "%d", &r);
+        return (int16_t) r;
+    }
+{/if}
 
 {#if headerFlags.gc_iterator}
     int16_t gc_i;
