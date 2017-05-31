@@ -227,6 +227,9 @@ export class TypeHelper {
                                 return NumberVarType;
                         }
                     } else if (call.expression.kind == ts.SyntaxKind.Identifier) {
+                        if (call.expression.getText() == 'parseInt') {
+                            return NumberVarType;
+                        }
                         let funcSymbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (funcSymbol != null) {
                             let funcDeclPos = funcSymbol.valueDeclaration.pos;
