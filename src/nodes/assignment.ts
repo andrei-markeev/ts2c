@@ -5,6 +5,7 @@ import {CType, ArrayType, StructType, DictType} from '../types';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import {CVariableAllocation} from './variable';
+import {StringMatchResolver} from '../standard/string/match';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
@@ -44,6 +45,8 @@ export class AssignmentHelper {
     {arrInitializers}
 {#elseif isDynamicArray && argumentExpression == null}
     {accessor} = ((void *){expression}){CR}
+{#elseif isRegexMatch}
+    /* regex match assignment removed */
 {#elseif argumentExpression == null}
     {accessor} = {expression}{CR}
 {#elseif isStruct}
@@ -69,6 +72,7 @@ export class CAssignment {
     public isStaticArray: boolean = false;
     public isStruct: boolean = false;
     public isDict: boolean = false;
+    public isRegexMatch: boolean = false;
     public expression: CExpression;
     public nodeText: string;
     public CR: string;
@@ -79,6 +83,8 @@ export class CAssignment {
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
+        if (right.kind == ts.SyntaxKind.CallExpression)
+            this.isRegexMatch = new StringMatchResolver().matchesNode(scope.root.typeHelper, <ts.CallExpression>right);
         this.nodeText = right.getText();
 
         let argType = type;
