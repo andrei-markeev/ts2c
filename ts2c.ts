@@ -22,7 +22,7 @@ if (typeof window !== 'undefined')
                 readFile: fileName => fileName == 'source.ts' ? source : null,
                 directoryExists: dirName => dirName == "",
             };
-            var program = ts.createProgram(['source.ts'], { noLib: true}, compilerHost);
+            var program = ts.createProgram(['source.ts'], { noLib: true }, compilerHost);
             return new CProgram(program)["resolve"]();
         }
     };
@@ -38,7 +38,7 @@ if (typeof window !== 'undefined')
             process.exit();
 
         var fileNames = process.argv.slice(2);
-        var program = ts.createProgram(fileNames, { noLib: true });
+        var program = ts.createProgram(fileNames, { noLib: true, allowJs: true });
 
         var output = new CProgram(program)["resolve"]();
         fs.writeFileSync(fileNames[0].slice(0, -3) + '.c', output);
