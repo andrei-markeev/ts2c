@@ -113,6 +113,8 @@ export class CSimpleBinaryExpression {
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.FirstCompoundAssignment] = '+=';
+            operatorMap[ts.SyntaxKind.AmpersandToken] = '&';
+            operatorMap[ts.SyntaxKind.BarToken] = '|';
         }
         else if (leftType == StringVarType && rightType == StringVarType) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
