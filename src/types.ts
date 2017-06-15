@@ -97,7 +97,7 @@ export class VariableInfo {
     /** Contains all references to this variable */
     references: ts.Node[] = [];
     /** Where variable was declared */
-    declaration: ts.Declaration;
+    declaration: ts.Node;
     /** Determines if the variable requires memory allocation */
     requiresAllocation: boolean;
 }
@@ -141,6 +141,8 @@ class VariableData {
     arrLiteralAssigned: boolean = false;
     isDynamicArray: boolean;
     isDict: boolean;
+    /** references to variables that represent properties of this variable */
+    varDeclPosByPropName: { [propName: string]: number } = {};
 }
 
 
@@ -457,24 +459,72 @@ export class TypeHelper {
                 this.objectLiteralsTypes[node.pos] = type;
             }
         }
-        else if (node.kind == ts.SyntaxKind.Identifier) {
-            let symbol = this.typeChecker.getSymbolAtLocation(node);
-            if (symbol) {
-
-                let varPos = symbol.valueDeclaration.pos;
-                if (!this.variables[varPos]) {
-                    this.variables[varPos] = new VariableInfo();
-                    this.variablesData[varPos] = new VariableData();
-                    this.variables[varPos].name = node.getText();
-                    this.variables[varPos].declaration = <ts.Declaration>symbol.declarations[0];
+        else if (node.kind == ts.SyntaxKind.Identifier || node.kind == ts.SyntaxKind.PropertyAccessExpression) {
+            let varPos = null;
+            let varInfo = null;
+            let varData = null;
+            let varNode = null;
+            if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                let propAccess = <ts.PropertyAccessExpression>node;
+                let propName = propAccess.name.getText();
+                // drill down to identifier
+                let topPropAccess = propAccess;
+                let propsChain: ts.Identifier[] = [];
+                while (topPropAccess.expression.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                    topPropAccess = <ts.PropertyAccessExpression>topPropAccess.expression;
+                    propsChain.push(topPropAccess.name);
                 }
-                let varInfo = this.variables[varPos];
-                let varData = this.variablesData[varPos];
-                varInfo.references.push(node);
+                if (topPropAccess.expression.kind == ts.SyntaxKind.Identifier) {
+                    let topSymbol = this.typeChecker.getSymbolAtLocation(topPropAccess.expression);
+                    if (topSymbol) {
 
-                if (node.parent && node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-                    let varDecl = <ts.VariableDeclaration>node.parent;
-                    if (varDecl.name.getText() == node.getText()) {
+                        // go from identifier to property
+                        varPos = topSymbol.valueDeclaration.pos;
+                        let varName = topSymbol.name;
+                        while (propsChain.length) {
+                            let propIdent = propsChain.pop();
+                            varName += "." + propIdent.getText();
+                            let nextVarPos = this.variablesData[varPos].varDeclPosByPropName[propIdent.getText()];
+                            if (nextVarPos == null) {
+                                nextVarPos = propIdent.pos;
+                                // create new variable that represents this property
+                                this.variablesData[varPos].varDeclPosByPropName[propIdent.getText()] = propIdent.pos;
+                                this.variables[nextVarPos] = new VariableInfo();
+                                this.variablesData[nextVarPos] = new VariableData();
+                                this.variables[nextVarPos].name = varName;
+                                this.variables[nextVarPos].declaration = propAccess.expression;
+                            }
+                            varPos = nextVarPos;
+                        }
+                        varInfo = this.variables[varPos];
+                        varData = this.variablesData[varPos];
+                        varInfo.references.push(propAccess.expression);
+                        varNode = propAccess.expression;
+                    }
+                }
+            } else if (node.kind == ts.SyntaxKind.Identifier) {
+                let symbol = this.typeChecker.getSymbolAtLocation(node);
+                if (symbol) {
+
+                    varPos = symbol.valueDeclaration.pos;
+                    if (!this.variables[varPos]) {
+                        this.variables[varPos] = new VariableInfo();
+                        this.variablesData[varPos] = new VariableData();
+                        this.variables[varPos].name = node.getText();
+                        this.variables[varPos].declaration = symbol.declarations[0].name;
+                    }
+                    varInfo = this.variables[varPos];
+                    varData = this.variablesData[varPos];
+                    varInfo.references.push(node);
+                    varNode = node;
+                }
+            }
+
+            if (varData) {
+
+                if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.VariableDeclaration) {
+                    let varDecl = <ts.VariableDeclaration>varNode.parent;
+                    if (varDecl.name.getText() == varNode.getText()) {
                         this.addTypePromise(varPos, varDecl.initializer);
                         if (varDecl.initializer && varDecl.initializer.kind == ts.SyntaxKind.ObjectLiteralExpression) {
                             varData.objLiteralAssigned = true;
@@ -505,13 +555,13 @@ export class TypeHelper {
                         }
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.FunctionDeclaration) {
-                    this.addTypePromise(varPos, node.parent, TypePromiseKind.void);
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.FunctionDeclaration) {
+                    this.addTypePromise(varPos, varNode.parent, TypePromiseKind.void);
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.Parameter) {
-                    let funcDecl = <ts.FunctionDeclaration>node.parent.parent;
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.Parameter) {
+                    let funcDecl = <ts.FunctionDeclaration>varNode.parent.parent;
                     for (let i = 0; i < funcDecl.parameters.length; i++) {
-                        if (funcDecl.parameters[i].pos == node.pos) {
+                        if (funcDecl.parameters[i].pos == varNode.pos) {
                             let param = funcDecl.parameters[i];
                             varData.parameterIndex = i;
                             varData.parameterFuncDeclPos = funcDecl.pos + 1;
@@ -521,10 +571,10 @@ export class TypeHelper {
                         }
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                    let binExpr = <ts.BinaryExpression>node.parent;
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                    let binExpr = <ts.BinaryExpression>varNode.parent;
                     if (binExpr.left.kind == ts.SyntaxKind.Identifier
-                        && binExpr.left.getText() == node.getText()
+                        && binExpr.left.getText() == varNode.getText()
                         && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                         this.addTypePromise(varPos, binExpr.left);
                         this.addTypePromise(varPos, binExpr.right);
@@ -539,17 +589,17 @@ export class TypeHelper {
                             varData.arrLiteralAssigned = true;
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
-                    let propAccess = <ts.PropertyAccessExpression>node.parent;
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                    let propAccess = <ts.PropertyAccessExpression>varNode.parent;
                     let propName = propAccess.name.getText(); 
-                    if (propAccess.expression.pos == node.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                    if (propAccess.expression.pos == varNode.pos && propAccess.parent.kind == ts.SyntaxKind.BinaryExpression) {
                         let binExpr = <ts.BinaryExpression>propAccess.parent;
                         if (binExpr.left.pos == propAccess.pos && binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
                             this.addTypePromise(varPos, binExpr.left, TypePromiseKind.propertyType, propAccess.name.getText());
                             this.addTypePromise(varPos, binExpr.right, TypePromiseKind.propertyType, propAccess.name.getText());
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "push" || propName == "unshift")) {
+                    if (propName == "push" || propName == "unshift") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             let call = <ts.CallExpression>propAccess.parent;
@@ -557,7 +607,7 @@ export class TypeHelper {
                                 this.addTypePromise(varPos, arg, TypePromiseKind.dynamicArrayOf);
                         }
                     }
-                    if (propAccess.expression.kind == ts.SyntaxKind.Identifier && (propName == "pop" || propName == "shift")) {
+                    if (propName == "pop" || propName == "shift") {
                         varData.isDynamicArray = true;
                         if (propAccess.parent && propAccess.parent.kind == ts.SyntaxKind.CallExpression) {
                             let call = <ts.CallExpression>propAccess.parent;
@@ -592,9 +642,9 @@ export class TypeHelper {
                         }
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
-                    let elemAccess = <ts.ElementAccessExpression>node.parent;
-                    if (elemAccess.expression.pos == node.pos) {
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.ElementAccessExpression) {
+                    let elemAccess = <ts.ElementAccessExpression>varNode.parent;
+                    if (elemAccess.expression.pos == varNode.pos) {
 
                         let propName;
                         let promiseKind;
@@ -624,15 +674,15 @@ export class TypeHelper {
                         }
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.ForOfStatement) {
-                    let forOfStatement = <ts.ForOfStatement>node.parent;
-                    if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == node.pos) {
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.ForOfStatement) {
+                    let forOfStatement = <ts.ForOfStatement>varNode.parent;
+                    if (forOfStatement.initializer.kind == ts.SyntaxKind.Identifier && forOfStatement.initializer.pos == varNode.pos) {
                         this.addTypePromise(varPos, forOfStatement.expression, TypePromiseKind.forOfIterator);
                     }
                 }
-                else if (node.parent && node.parent.kind == ts.SyntaxKind.ForInStatement) {
-                    let forInStatement = <ts.ForInStatement>node.parent;
-                    if (forInStatement.initializer.kind == ts.SyntaxKind.Identifier && forInStatement.initializer.pos == node.pos) {
+                else if (varNode.parent && varNode.parent.kind == ts.SyntaxKind.ForInStatement) {
+                    let forInStatement = <ts.ForInStatement>varNode.parent;
+                    if (forInStatement.initializer.kind == ts.SyntaxKind.Identifier && forInStatement.initializer.pos == varNode.pos) {
                         this.addTypePromise(varPos, forInStatement.expression, TypePromiseKind.forInIterator);
                     }
                 }
@@ -668,20 +718,32 @@ export class TypeHelper {
                 else if (varType instanceof StructType) {
                     if (this.variablesData[k].objLiteralAssigned)
                         this.variables[k].requiresAllocation = true;
-                    for (let addPropKey in this.variablesData[k].addedProperties) {
-                        let addPropType = this.variablesData[k].addedProperties[addPropKey];
-                        varType.properties[addPropKey] = addPropType;
+                    let keys1 = Object.keys(this.variablesData[k].addedProperties);
+                    let keys2 = Object.keys(this.variablesData[k].varDeclPosByPropName);
+                    let allPropKeys = keys1.concat(keys2);
+                    for (let propKey of allPropKeys) {
+                        let propVarPos = this.variablesData[k].varDeclPosByPropName[propKey];
+                        let type1 = this.variablesData[k].addedProperties[propKey];
+                        let type2 = propVarPos && this.variables[propVarPos].type;
+                        varType.properties[propKey] = this.mergeTypes(type1, type2).type;
                     }
+
                 }
                 else if (varType instanceof DictType) {
                     if (!this.variablesData[k].parameterFuncDeclPos)
                         this.variables[k].requiresAllocation = true;
                     let elemType = varType.elementType;
-                    for (let addPropKey in this.variablesData[k].addedProperties) {
-                        let addPropType = this.variablesData[k].addedProperties[addPropKey];
-                        let mergeResult = this.mergeTypes(elemType, addPropType);
-                        elemType = mergeResult.type;
+                    let keys1 = Object.keys(this.variablesData[k].addedProperties);
+                    let keys2 = Object.keys(this.variablesData[k].varDeclPosByPropName);
+                    let allPropKeys = keys1.concat(keys2);
+                    for (let propKey of allPropKeys) {
+                        let propVarPos = this.variablesData[k].varDeclPosByPropName[propKey];
+                        let type1 = this.variablesData[k].addedProperties[propKey];
+                        let type2 = propVarPos && this.variables[propVarPos].type;
+                        elemType = this.mergeTypes(elemType, type1).type;
+                        elemType = this.mergeTypes(elemType, type2).type;
                     }
+
                     varType.elementType = elemType;
                 }
                 this.variables[k].type = varType;
@@ -767,16 +829,30 @@ export class TypeHelper {
                 }
 
                 let bestType = promise.bestType;
-                if (promise.promiseKind == TypePromiseKind.propertyType)
-                    bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
+                if (promise.promiseKind == TypePromiseKind.propertyType) {
+                    let propVarPos = this.variablesData[varPos].varDeclPosByPropName[promise.propertyName];
+                    if (propVarPos) {
+                        bestType = this.variables[propVarPos].type;
+                        if (promise.associatedNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
+                            this.variablesData[propVarPos].arrLiteralAssigned = true;
+                        else if (promise.associatedNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
+                            this.variablesData[propVarPos].objLiteralAssigned = true;
+                    } else
+                        bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
+                }
 
                 let mergeResult = this.mergeTypes(bestType, finalType);
                 if (mergeResult.replaced)
                     somePromisesAreResolved = true;
                 promise.bestType = mergeResult.type;
 
-                if (promise.promiseKind == TypePromiseKind.propertyType && mergeResult.replaced)
-                    this.variablesData[varPos].addedProperties[promise.propertyName] = mergeResult.type;
+                if (promise.promiseKind == TypePromiseKind.propertyType && mergeResult.replaced) {
+                    let propVarPos = this.variablesData[varPos].varDeclPosByPropName[promise.propertyName];
+                    if (propVarPos)
+                        this.variables[propVarPos].type = mergeResult.type;
+                    else
+                        this.variablesData[varPos].addedProperties[promise.propertyName] = mergeResult.type;
+                }
             }
 
         }

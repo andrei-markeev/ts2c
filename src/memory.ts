@@ -22,7 +22,7 @@ export class MemoryManager {
         for (let k in this.typeHelper.variables) {
             let v = this.typeHelper.variables[k];
             if (v.requiresAllocation)
-                this.scheduleNodeDisposal(v.declaration.name);
+                this.scheduleNodeDisposal(v.declaration);
         }
 
     }
@@ -179,6 +179,17 @@ export class MemoryManager {
                 let parentNode = this.findParentFunctionNode(ref);
                 if (!parentNode)
                     topScope = "main";
+
+                if (ref.kind == ts.SyntaxKind.PropertyAccessExpression) {
+                    let elemAccess = <ts.PropertyAccessExpression>ref;
+                    while (elemAccess.expression.kind == ts.SyntaxKind.PropertyAccessExpression)
+                        elemAccess = <ts.PropertyAccessExpression>elemAccess.expression;
+                    if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
+                    {
+                        console.log(heapNode.getText() + " -> Tracking parent variable: " + elemAccess.expression.getText() + ".");
+                        queue.push(elemAccess.expression);
+                    }
+                }
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
                     let binaryExpr = <ts.BinaryExpression>ref.parent;
