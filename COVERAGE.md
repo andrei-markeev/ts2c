@@ -61,7 +61,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Logical NOT `!`**
  - [ ] Multiplicative operators
     - [x] **`*`** _(only numbers)_
-    - [ ] `/`
+    - [x] **`/`** _(only numbers)_
     - [ ] `%`
  - [ ] Additive operators
     - [x] **`+`** _(partial: number+number, string+number, string+string)_
@@ -83,8 +83,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`===`** _(partial: number+number, string+string)_
     - [x] **`!==`** _(partial: number+number, string+string)_
  - [ ] Binary bitwise operators
-    - [ ] `&`
-    - [ ] `|`
+    - [x] **`&`** _(only numbers)_
+    - [x] **`|`** _(only numbers)_
     - [ ] `^`
  - [x] Binary logical operators
     - [x] **`&&`**
