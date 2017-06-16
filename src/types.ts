@@ -263,14 +263,16 @@ export class TypeHelper {
         }
     }
 
-    /** Get information of variable specified by ts.Identifier */
-    public getVariableInfo(node: ts.Identifier): VariableInfo {
-        let ident = node;
-        let symbol = this.typeChecker.getSymbolAtLocation(ident);
-        if (symbol != null)
-            return this.variables[symbol.valueDeclaration.pos];
-        else
-            return null;
+    /** Get information of variable specified by ts.Node */
+    public getVariableInfo(node: ts.Node, propKey?: string): VariableInfo {
+        let symbol = this.typeChecker.getSymbolAtLocation(node);
+        let varPos = symbol ? symbol.valueDeclaration.pos : node.pos;
+        let varInfo = this.variables[varPos];
+        if (varInfo && propKey) {
+            let propPos = this.variablesData[varPos].varDeclPosByPropName[propKey];
+            varInfo = this.variables[propPos];
+        }
+        return varInfo;
     }
 
     /** Get textual representation of type of the parameter for inserting into the C code */
@@ -707,6 +709,9 @@ export class TypeHelper {
                     .filter(p => p.promiseKind != TypePromiseKind.propertyType)
                     .map(p => p.bestType);
 
+                if (this.variables[k].type)
+                    variableBestTypes.push(this.variables[k].type);
+
                 let varType = variableBestTypes.length ? variableBestTypes.reduce((c, n) => this.mergeTypes(c, n).type) : null;
                 varType = varType || PointerVarType;
 
@@ -723,8 +728,8 @@ export class TypeHelper {
                     let allPropKeys = keys1.concat(keys2);
                     for (let propKey of allPropKeys) {
                         let propVarPos = this.variablesData[k].varDeclPosByPropName[propKey];
-                        let type1 = this.variablesData[k].addedProperties[propKey];
-                        let type2 = propVarPos && this.variables[propVarPos].type;
+                        let type1 = propVarPos && this.variables[propVarPos].type;
+                        let type2 = this.variablesData[k].addedProperties[propKey];
                         varType.properties[propKey] = this.mergeTypes(type1, type2).type;
                     }
 
@@ -738,8 +743,8 @@ export class TypeHelper {
                     let allPropKeys = keys1.concat(keys2);
                     for (let propKey of allPropKeys) {
                         let propVarPos = this.variablesData[k].varDeclPosByPropName[propKey];
-                        let type1 = this.variablesData[k].addedProperties[propKey];
-                        let type2 = propVarPos && this.variables[propVarPos].type;
+                        let type1 = propVarPos && this.variables[propVarPos].type;
+                        let type2 = this.variablesData[k].addedProperties[propKey];
                         elemType = this.mergeTypes(elemType, type1).type;
                         elemType = this.mergeTypes(elemType, type2).type;
                     }
@@ -835,8 +840,6 @@ export class TypeHelper {
                         bestType = this.variables[propVarPos].type;
                         if (promise.associatedNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
                             this.variablesData[propVarPos].arrLiteralAssigned = true;
-                        else if (promise.associatedNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
-                            this.variablesData[propVarPos].objLiteralAssigned = true;
                     } else
                         bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
                 }

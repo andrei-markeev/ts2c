@@ -83,9 +83,9 @@ export class CVariableAllocation {
                 let propType = varType.properties[propKey];
                 if (propType instanceof ArrayType && propType.isDynamicArray) {
                     let propElemAccess = new CSimpleElementAccess(scope, varType, varName, propKey);
-                    let propPos = scope.root.typeHelper.variablesData[refNode.pos].varDeclPosByPropName[propKey];
-                    let propNode = scope.root.typeHelper.variables[propPos].declaration;
-                    this.propsAllocation.push(new CVariableAllocation(scope, propElemAccess, propType, propNode));
+                    let propVar = scope.root.typeHelper.getVariableInfo(refNode, propKey);
+                    if (propVar)
+                        this.propsAllocation.push(new CVariableAllocation(scope, propElemAccess, propType, propVar.declaration));
                 }
             }
         }
