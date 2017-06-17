@@ -143,6 +143,8 @@ class VariableData {
     isDict: boolean;
     /** references to variables that represent properties of this variable */
     varDeclPosByPropName: { [propName: string]: number } = {};
+    /** for debugging: log of how the type of this variable was determined */
+    typeResolutionLog: any[] = [];
 }
 
 
@@ -757,6 +759,20 @@ export class TypeHelper {
 
         } while (somePromisesAreResolved);
 
+        for (let k of Object.keys(this.variables).map(k => +k)) {
+            let varInfo = this.variables[k];
+            for (let ref of varInfo.references) {
+                if (ref.parent.kind == ts.SyntaxKind.PropertyAssignment) {
+                    let propAssignment = <ts.PropertyAssignment>ref.parent;
+                    if (propAssignment.initializer && propAssignment.initializer.kind == ts.SyntaxKind.ArrayLiteralExpression) {
+                        let type = this.getCType(ref.parent.parent);
+                        if (type && type instanceof StructType)
+                            this.arrayLiteralsTypes[propAssignment.initializer.pos] = type.properties[varInfo.name];
+                    }
+                }
+            }
+        }
+
         for (let k of Object.keys(this.variables).map(k => +k))
             this.postProcessArrays(this.variables[k].type)
 
@@ -848,8 +864,10 @@ export class TypeHelper {
                 }
 
                 let mergeResult = this.mergeTypes(bestType, finalType);
-                if (mergeResult.replaced)
+                if (mergeResult.replaced) {
                     somePromisesAreResolved = true;
+                    this.variablesData[varPos].typeResolutionLog.push({ prop: promise.propertyName, result: mergeResult.type, finalType: finalType, promise: promise });
+                }
                 promise.bestType = mergeResult.type;
 
                 if (promise.promiseKind == TypePromiseKind.propertyType && mergeResult.replaced) {
@@ -931,14 +949,12 @@ export class TypeHelper {
         return userStructCode;
     }
 
-    private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType | string {
-        var elementType;
-        if (arrLiteral.elements.length > 0)
-            elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
-        else
-            elementType = UniversalVarType;
-
+    private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
+        let elementType: CType = PointerVarType;
         let cap = arrLiteral.elements.length;
+        if (cap > 0)
+            elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
+
         let type = new ArrayType(elementType, cap, false);
         this.arrayLiteralsTypes[arrLiteral.pos] = type;
         return type;
