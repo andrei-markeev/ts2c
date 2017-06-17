@@ -24,10 +24,10 @@ export class StringMatchResolver implements IResolver {
         return new CStringMatch(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
-        return false;
+        return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
-        return null;
+        return "match_array";
     }
     public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
         return null;
@@ -36,20 +36,26 @@ export class StringMatchResolver implements IResolver {
 
 @CodeTemplate(`
 {#statements}
-    {matchInfoVarName} = {regexVar}.func({argAccess});
-    {matchArrayVarName}[0] = {matchInfoVarName}.index == -1 ? NULL : str_substring({argAccess}, {matchInfoVarName}.index, {matchInfoVarName}.end);
+    {#if !topExpressionOfStatement}
+        {matchInfoVarName} = {regexVar}.func({argAccess});
+        {matchArrayVarName}[0] = {matchInfoVarName}.index == -1 ? NULL : str_substring({argAccess}, {matchInfoVarName}.index, {matchInfoVarName}.end);
+    {/if}
+    {#if !topExpressionOfStatement && gcVarName}
+        ARRAY_PUSH({gcVarName}, (void *){matchArrayVarName}[0]);
+    {/if}
 {/statements}
 {#if !topExpressionOfStatement && !isAssignmentRightPart}
     {matchArrayVarName}
 {/if}`)
 class CStringMatch
 {
-    public topExpressionOfStatement: boolean;
+    public topExpressionOfStatement: boolean = false;
     public isAssignmentRightPart: boolean = false;
     public regexVar: CExpression;
     public argAccess: CElementAccess;
     public matchInfoVarName: string;
     public matchArrayVarName: string;
+    public gcVarName: string = null;
     constructor(scope: IScope, call: ts.CallExpression) {
         scope.root.headerFlags.str_substring = true;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
@@ -74,11 +80,14 @@ class CStringMatch
                 this.argAccess = new CElementAccess(scope, propAccess.expression);
                 this.regexVar = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 this.matchInfoVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "match_info");
+                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
                 if (!this.isAssignmentRightPart) {
-                    this.matchArrayVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "match_array");
+                    this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                     scope.variables.push(new CVariable(scope, this.matchArrayVarName, new ArrayType(StringVarType, 1, false)));
                 }
                 scope.variables.push(new CVariable(scope, this.matchInfoVarName, RegexMatchVarType));
+                scope.root.headerFlags.array = true;
+                scope.root.headerFlags.gc_iterator = true;
             } else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
