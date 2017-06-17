@@ -149,11 +149,11 @@ var MemoryManager = (function () {
             case ts.SyntaxKind.ArrayLiteralExpression:
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        return;
+                        break;
                     if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement) {
                         var binExpr = node.parent;
                         if (binExpr.left.kind == ts.SyntaxKind.Identifier)
-                            return;
+                            break;
                     }
                     var type = this.typeHelper.getCType(node);
                     if (type && type instanceof types_1.ArrayType && type.isDynamicArray)
@@ -163,11 +163,11 @@ var MemoryManager = (function () {
             case ts.SyntaxKind.ObjectLiteralExpression:
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        return;
+                        break;
                     if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement) {
                         var binExpr = node.parent;
                         if (binExpr.left.kind == ts.SyntaxKind.Identifier)
-                            return;
+                            break;
                     }
                     var type = this.typeHelper.getCType(node);
                     if (type && (type instanceof types_1.StructType || type instanceof types_1.DictType))
@@ -377,7 +377,7 @@ var MemoryManager = (function () {
         else if (heapNode.kind == ts.SyntaxKind.CallExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, resolver_1.StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
-            varName = heapNode.getText();
+            varName = heapNode.getText().replace(/\./g, "->");
         var foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {
             node: heapNode,
@@ -969,10 +969,6 @@ var regexfunc_1 = require("./regexfunc");
 var CArrayLiteralExpression = (function () {
     function CArrayLiteralExpression(scope, node) {
         var arrSize = node.elements.length;
-        if (arrSize == 0) {
-            this.expression = "/* Empty array is not supported inside expressions */";
-            return;
-        }
         var type = scope.root.typeHelper.getCType(node);
         if (type instanceof types_1.ArrayType) {
             var varName = void 0;
@@ -994,7 +990,7 @@ var CArrayLiteralExpression = (function () {
                     varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                     scope.func.variables.push(new variable_1.CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
-                    scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
+                    scope.statements.push("ARRAY_CREATE(" + varName + ", " + Math.max(arrSize, 2) + ", " + arrSize + ");\n");
                     var gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                     if (gcVarName) {
                         scope.statements.push("ARRAY_PUSH(" + gcVarName + ", (void *)" + varName + ");\n");
@@ -1448,7 +1444,6 @@ var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "unde
 var template_1 = require("../template");
 var types_1 = require("../types");
 var assignment_1 = require("./assignment");
-var elementaccess_1 = require("./elementaccess");
 var CVariableStatement = (function () {
     function CVariableStatement(scope, node) {
         this.declarations = node.declarationList.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
@@ -1486,10 +1481,9 @@ CVariableDeclaration = __decorate([
     template_1.CodeTemplate("\n{allocator}\n{initializer}", ts.SyntaxKind.VariableDeclaration)
 ], CVariableDeclaration);
 exports.CVariableDeclaration = CVariableDeclaration;
-var CVariableAllocation = CVariableAllocation_1 = (function () {
+var CVariableAllocation = (function () {
     function CVariableAllocation(scope, varName, varType, refNode) {
         this.varName = varName;
-        this.propsAllocation = [];
         this.needAllocateArray = varType instanceof types_1.ArrayType && varType.isDynamicArray;
         this.needAllocateStruct = varType instanceof types_1.StructType;
         this.needAllocateDict = varType instanceof types_1.DictType;
@@ -1498,17 +1492,6 @@ var CVariableAllocation = CVariableAllocation_1 = (function () {
         if (varType instanceof types_1.ArrayType) {
             this.initialCapacity = Math.max(varType.capacity * 2, 4);
             this.size = varType.capacity;
-        }
-        if (varType instanceof types_1.StructType) {
-            for (var propKey in varType.properties) {
-                var propType = varType.properties[propKey];
-                if (propType instanceof types_1.ArrayType && propType.isDynamicArray) {
-                    var propElemAccess = new elementaccess_1.CSimpleElementAccess(scope, varType, varName, propKey);
-                    var propVar = scope.root.typeHelper.getVariableInfo(refNode, propKey);
-                    if (propVar)
-                        this.propsAllocation.push(new CVariableAllocation_1(scope, propElemAccess, propType, propVar.declaration));
-                }
-            }
         }
         if (this.needAllocateStruct || this.needAllocateArray || this.needAllocateDict)
             scope.root.headerFlags.malloc = true;
@@ -1521,8 +1504,8 @@ var CVariableAllocation = CVariableAllocation_1 = (function () {
     }
     return CVariableAllocation;
 }());
-CVariableAllocation = CVariableAllocation_1 = __decorate([
-    template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateDict}\n    DICT_CREATE({varName}, {initialCapacity});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n{propsAllocation}\n")
+CVariableAllocation = __decorate([
+    template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateDict}\n    DICT_CREATE({varName}, {initialCapacity});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n")
 ], CVariableAllocation);
 exports.CVariableAllocation = CVariableAllocation;
 var CVariableDestructors = (function () {
@@ -1596,10 +1579,9 @@ var CVariable = (function () {
     return CVariable;
 }());
 exports.CVariable = CVariable;
-var CVariableAllocation_1;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":39,"../types":40,"./assignment":4,"./elementaccess":6}],13:[function(require,module,exports){
+},{"../template":39,"../types":40,"./assignment":4}],13:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4941,11 +4923,8 @@ var TypeHelper = (function () {
                 var bestType = promise.bestType;
                 if (promise.promiseKind == TypePromiseKind.propertyType) {
                     var propVarPos = this.variablesData[varPos].varDeclPosByPropName[promise.propertyName];
-                    if (propVarPos) {
+                    if (propVarPos)
                         bestType = this.variables[propVarPos].type;
-                        if (promise.associatedNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                            this.variablesData[propVarPos].arrLiteralAssigned = true;
-                    }
                     else
                         bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
                 }
@@ -5030,7 +5009,7 @@ var TypeHelper = (function () {
         if (arrLiteral.elements.length > 0)
             elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
         else
-            return exports.UniversalVarType;
+            elementType = exports.UniversalVarType;
         var cap = arrLiteral.elements.length;
         var type = new ArrayType(elementType, cap, false);
         this.arrayLiteralsTypes[arrLiteral.pos] = type;
