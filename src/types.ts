@@ -762,7 +762,12 @@ export class TypeHelper {
 
     }
 
+    private postProcessedTypes: CType[] = [];
     private postProcessArrays(varType: CType) {
+
+        if (this.postProcessedTypes.indexOf(varType) != -1)
+            return;
+        this.postProcessedTypes.push(varType);
 
         if (varType instanceof ArrayType && varType.isDynamicArray && varType != varType.elementType) {
             this.ensureArrayStruct(varType.elementType);
