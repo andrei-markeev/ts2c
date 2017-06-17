@@ -33,13 +33,13 @@ export class MemoryManager {
             case ts.SyntaxKind.ArrayLiteralExpression:
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        return;
+                        break;
 
                     if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
                     {
                         let binExpr = <ts.BinaryExpression>node.parent;
                         if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            return;
+                            break;
                     }
 
                     let type = this.typeHelper.getCType(node);
@@ -50,13 +50,13 @@ export class MemoryManager {
             case ts.SyntaxKind.ObjectLiteralExpression:
                 {
                     if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        return;
+                        break;
 
                     if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
                     {
                         let binExpr = <ts.BinaryExpression>node.parent;
                         if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            return;
+                            break;
                     }
 
                     let type = this.typeHelper.getCType(node);
@@ -282,7 +282,7 @@ export class MemoryManager {
         else if (heapNode.kind == ts.SyntaxKind.CallExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
-            varName = heapNode.getText();
+            varName = heapNode.getText().replace(/\./g, "->");
 
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {

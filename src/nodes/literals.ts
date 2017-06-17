@@ -11,11 +11,6 @@ class CArrayLiteralExpression {
     public expression: string;
     constructor(scope: IScope, node: ts.ArrayLiteralExpression) {
         let arrSize = node.elements.length;
-        if (arrSize == 0) {
-            this.expression = "/* Empty array is not supported inside expressions */";
-            return;
-        }
-
         let type = scope.root.typeHelper.getCType(node);
         if (type instanceof ArrayType) {
             let varName: string;
@@ -37,7 +32,7 @@ class CArrayLiteralExpression {
                     varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                     scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
-                    scope.statements.push("ARRAY_CREATE(" + varName + ", " + arrSize + ", " + arrSize + ");\n");
+                    scope.statements.push("ARRAY_CREATE(" + varName + ", " + Math.max(arrSize, 2) + ", " + arrSize + ");\n");
                     let gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                     if (gcVarName) {
                         scope.statements.push("ARRAY_PUSH(" + gcVarName + ", (void *)" + varName + ");\n");
@@ -50,6 +45,7 @@ class CArrayLiteralExpression {
                     varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
                     scope.variables.push(new CVariable(scope, varName, type));
                 }
+
                 for (let i = 0; i < arrSize; i++) {
                     let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])
                     scope.statements.push(assignment);

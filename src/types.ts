@@ -836,11 +836,9 @@ export class TypeHelper {
                 let bestType = promise.bestType;
                 if (promise.promiseKind == TypePromiseKind.propertyType) {
                     let propVarPos = this.variablesData[varPos].varDeclPosByPropName[promise.propertyName];
-                    if (propVarPos) {
+                    if (propVarPos)
                         bestType = this.variables[propVarPos].type;
-                        if (promise.associatedNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
-                            this.variablesData[propVarPos].arrLiteralAssigned = true;
-                    } else
+                    else
                         bestType = this.variablesData[varPos].addedProperties[promise.propertyName];
                 }
 
@@ -933,7 +931,7 @@ export class TypeHelper {
         if (arrLiteral.elements.length > 0)
             elementType = this.convertType(this.typeChecker.getTypeAtLocation(arrLiteral.elements[0]));
         else
-            return UniversalVarType;
+            elementType = UniversalVarType;
 
         let cap = arrLiteral.elements.length;
         let type = new ArrayType(elementType, cap, false);

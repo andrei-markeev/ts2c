@@ -54,7 +54,6 @@ export class CVariableDeclaration {
 {#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}
     ARRAY_PUSH({gcVarName}, (void *){varName});
 {/if}
-{propsAllocation}
 `)
 export class CVariableAllocation {
     public isArray: boolean;
@@ -64,7 +63,6 @@ export class CVariableAllocation {
     public needAllocateStruct: boolean;
     public needAllocateDict: boolean;
     public gcVarName: string;
-    public propsAllocation: CVariableAllocation[] = [];
     constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: ts.Node)
     {
         this.needAllocateArray = varType instanceof ArrayType && varType.isDynamicArray;
@@ -78,18 +76,6 @@ export class CVariableAllocation {
             this.size = varType.capacity;
         }
 
-        if (varType instanceof StructType) {
-            for(let propKey in varType.properties) {
-                let propType = varType.properties[propKey];
-                if (propType instanceof ArrayType && propType.isDynamicArray) {
-                    let propElemAccess = new CSimpleElementAccess(scope, varType, varName, propKey);
-                    let propVar = scope.root.typeHelper.getVariableInfo(refNode, propKey);
-                    if (propVar)
-                        this.propsAllocation.push(new CVariableAllocation(scope, propElemAccess, propType, propVar.declaration));
-                }
-            }
-        }
-        
         if (this.needAllocateStruct || this.needAllocateArray || this.needAllocateDict)
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
