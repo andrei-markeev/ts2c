@@ -16,6 +16,26 @@ export class CElementAccess {
         if (node.kind == ts.SyntaxKind.Identifier) {
             type = scope.root.typeHelper.getCType(node);
             elementAccess = node.getText();
+            let isLogicalContext = (node.parent.kind == ts.SyntaxKind.IfStatement
+                || node.parent.kind == ts.SyntaxKind.WhileStatement
+                || node.parent.kind == ts.SyntaxKind.DoStatement) && node.parent["expression"] == node;
+            if (!isLogicalContext && node.parent.kind == ts.SyntaxKind.ForStatement && node.parent["condition"] == node)
+                isLogicalContext = true;
+            if (!isLogicalContext && node.parent.kind == ts.SyntaxKind.BinaryExpression) {
+                let binExpr = <ts.BinaryExpression>node.parent;
+                if (binExpr.operatorToken.kind == ts.SyntaxKind.AmpersandAmpersandToken
+                    || binExpr.operatorToken.kind == ts.SyntaxKind.BarBarToken)
+                    isLogicalContext = true;
+            }
+            if (!isLogicalContext && node.parent.kind == ts.SyntaxKind.PrefixUnaryExpression) {
+                let binExpr = <ts.PrefixUnaryExpression>node.parent;
+                if (binExpr.operator == ts.SyntaxKind.ExclamationToken)
+                    isLogicalContext = true;
+            }
+
+            if (isLogicalContext && type instanceof ArrayType && !type.isDynamicArray) {
+                argumentExpression = "0";
+            }
         } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
             type = scope.root.typeHelper.getCType(propAccess.expression);

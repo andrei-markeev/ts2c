@@ -209,11 +209,11 @@ class CUnaryExpression {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
         let type = scope.root.typeHelper.getCType(node.operand);
+        operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
         if (type == NumberVarType) {
             operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
-            operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
         }
         if (type == StringVarType) {
