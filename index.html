@@ -16,16 +16,18 @@
 
             var sourceEditor = CodeMirror.fromTextArea(document.getElementById('source'), {
                 lineNumbers: true,
+                viewportMargin: Infinity,
                 mode: 'javascript'
             });
-            sourceEditor.setSize('auto', 100);
+            sourceEditor.setSize('auto', 'auto');
 
             var targetEditor = CodeMirror.fromTextArea(document.getElementById('target'), {
                 lineNumbers: true,
                 readOnly: true,
+                viewportMargin: Infinity,
                 mode: 'text/x-csrc'
             });
-            targetEditor.setSize('auto', 400);
+            targetEditor.setSize('auto', 'auto');
 
             function transpile()
             {
