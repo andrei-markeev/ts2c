@@ -36,8 +36,13 @@ class StringCharAtResolver implements IResolver {
 }
 
 @CodeTemplate(`
+{#statements}
+    {#if !topExpressionOfStatement && start != null}
+        {tempVarName} = str_substring({varAccess}, {start}, ({start}) + 1);
+    {/if}
+{/statements}
 {#if !topExpressionOfStatement && start != null}
-    ({tempVarName} = str_substring({varAccess}, {start}, ({start}) + 1))
+    {tempVarName}
 {#elseif !topExpressionOfStatement && start == null}
     /* Error: parameter expected for charAt */
 {/if}`)

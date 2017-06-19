@@ -112,7 +112,7 @@ class RegexParser {
                 rootToken.anyOf = true;
                 tokens = [];
             } else if (template.slice(i, i + 3) == '(?:')
-                i += 3, (tok = this.parse(template.slice(i), true)) && tok && tokens.push(tok);
+                i += 3, (tok = this.parse(template.slice(i), true)) && tok && tokens.push(tok) && (i += tok.template.length);
             else if (template[i] == '(')
                 i++ , (tok = this.parse(template.slice(i), true)) && tok && tokens.push(tok) && (i += tok.template.length);
             else if (template[i] == ')' && group)

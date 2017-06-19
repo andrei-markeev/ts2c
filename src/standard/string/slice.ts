@@ -36,11 +36,16 @@ class StringSliceResolver implements IResolver {
 }
 
 @CodeTemplate(`
-{#if !topExpressionOfStatement && start && end}
-    ({tempVarName} = str_slice({varAccess}, {start}, {end}))
-{#elseif !topExpressionOfStatement && start && !end}
-    ({tempVarName} = str_slice({varAccess}, {start}, str_len({varAccess})))
-{#elseif !topExpressionOfStatement && !start && !end}
+{#statements}
+    {#if !topExpressionOfStatement && start && end}
+        {tempVarName} = str_slice({varAccess}, {start}, {end});
+    {#elseif !topExpressionOfStatement && start && !end}
+        {tempVarName} = str_slice({varAccess}, {start}, str_len({varAccess}));
+    {/if}
+{/statements}
+{#if !topExpressionOfStatement && start}
+    {tempVarName}
+{#elseif !topExpressionOfStatement && !start}
     /* Error: String.slice requires at least one parameter! */
 {/if}`)
 class CStringSlice {
