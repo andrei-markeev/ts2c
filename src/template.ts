@@ -205,7 +205,7 @@ function replaceArray(data, k, array, statements) {
                 }
             }
             else {
-                if (elementsResolved != "")
+                if (elementsResolved != "" && resolvedElement != "")
                     elementsResolved += separator;
                 if (resolvedElement.search(/^[\n\s]*$/) == -1)
                     elementsResolved += resolvedElement + '\n';

@@ -137,11 +137,16 @@ export class MemoryManager {
         return destructors;
     }
 
+    /** Variables that need to be disposed should are tracked by memory manager */
     public getReservedTemporaryVarName(node: ts.Node) {
         if (this.scopesOfVariables[node.pos + "_" + node.end])
             return this.scopesOfVariables[node.pos + "_" + node.end].varName;
         else
             return null;
+    }
+    /** To be used in combination with TypeHelper.tryReuseExistingVariable */
+    public updateReservedTemporaryVarName(node: ts.Node, varName: string) {
+        this.scopesOfVariables[node.pos + "_" + node.end].varName = varName;
     }
 
     private scheduleNodeDisposal(heapNode: ts.Node) {
