@@ -131,5 +131,6 @@ print("abcx", /([abc]*)x/, 0);
 print("abc", /([abc]*)x/, -1);
 print("abcx", /([xyz]*)x/, 3);
 print("aac", /(a)+b|aac/, 0);
+print("<html>", /<(ht)*m/, 0);
 
 console.log("Passed: ", matched, "/", count);

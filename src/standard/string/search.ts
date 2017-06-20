@@ -36,7 +36,7 @@ class StringSearchResolver implements IResolver {
 
 @CodeTemplate(`
 {#if !topExpressionOfStatement}
-    {regexVar}.func({argAccess}).index
+    {regexVar}.func({argAccess}, FALSE).index
 {/if}`)
 class CStringSearch
 {

@@ -1,4 +1,4 @@
 thing
 lo worl
-[ "<html lang="en">" ]
-[ "</body>" ]
+[ "<html lang="en">", "html", " lang="en"", "" ]
+[ "</body>", "body" ]

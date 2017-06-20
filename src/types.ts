@@ -169,11 +169,13 @@ export class TypeHelper {
             this.findVariablesRecursively(source);
         this.resolvePromisesAndFinalizeTypes();
 
+    }
+
+    public getStructsAndFunctionPrototypes() {
         let structs = this.getUserStructs();
         let functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
 
         return [structs, functionPrototypes];
-
     }
 
     public getCType(node: ts.Node): CType {
@@ -289,9 +291,10 @@ export class TypeHelper {
         else if (source.name != null && source.flags != null && source.valueDeclaration != null && source.declarations != null) //ts.Symbol
             source = this.variables[source.valueDeclaration.pos].type;
 
-        if (source instanceof ArrayType)
+        if (source instanceof ArrayType) {
+            this.ensureArrayStruct(source.elementType);
             return source.getText();
-        else if (source instanceof StructType)
+        } else if (source instanceof StructType)
             return source.getText();
         else if (source instanceof DictType)
             return source.getText();
@@ -770,30 +773,6 @@ export class TypeHelper {
                             this.arrayLiteralsTypes[propAssignment.initializer.pos] = type.properties[varInfo.name];
                     }
                 }
-            }
-        }
-
-        for (let k of Object.keys(this.variables).map(k => +k))
-            this.postProcessArrays(this.variables[k].type)
-
-    }
-
-    private postProcessedTypes: CType[] = [];
-    private postProcessArrays(varType: CType) {
-
-        if (this.postProcessedTypes.indexOf(varType) != -1)
-            return;
-        this.postProcessedTypes.push(varType);
-
-        if (varType instanceof ArrayType && varType.isDynamicArray && varType != varType.elementType) {
-            this.ensureArrayStruct(varType.elementType);
-            this.postProcessArrays(varType.elementType);
-        } else if (varType instanceof DictType && varType != varType.elementType) {
-            this.postProcessArrays(varType.elementType);
-        } else if (varType instanceof StructType) {
-            for (let k in varType.properties) {
-                if (varType != varType.properties[k])
-                    this.postProcessArrays(varType.properties[k]);
             }
         }
 

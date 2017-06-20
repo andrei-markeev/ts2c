@@ -4,6 +4,7 @@ import {IScope} from '../program';
 import {ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, CType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
+import {StringMatchResolver} from '../standard/string/match';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
@@ -90,6 +91,7 @@ export class CVariableAllocation {
 
 @CodeTemplate(`
 {#statements}
+    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}
     {destructors => free({this});\n}
     {#if gcArraysVarName}
         for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
@@ -123,6 +125,7 @@ export class CVariableDestructors {
     public gcArraysVarName: string = null;
     public gcDictsVarName: string = null;
     public destructors: string[];
+    public arrayDestructors: string[] = [];
     constructor(scope: IScope, node: ts.Node) {
         let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (let gc of gcVarNames)
@@ -140,8 +143,12 @@ export class CVariableDestructors {
             .forEach(r => {
                 let type = scope.root.typeHelper.getCType(r.node);
                 if (type instanceof ArrayType) {
-                    this.destructors.push(r.varName + "->data");
+                    this.destructors.push(r.varName + " ? " + r.varName + "->data : NULL");
                     this.destructors.push(r.varName);
+                    // Elements of Regex match array are dynamically allocated substrings that should be freed
+                    if (r.node.kind == ts.SyntaxKind.CallExpression 
+                        && new StringMatchResolver().matchesNode(scope.root.typeHelper, <ts.CallExpression>r.node))
+                        this.arrayDestructors.push(r.varName);
                 } else if (type instanceof DictType) {
                     this.destructors.push(r.varName + "->index->data");
                     this.destructors.push(r.varName + "->index");

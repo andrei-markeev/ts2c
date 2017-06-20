@@ -56,7 +56,7 @@ function processTemplate(template: string, args: any): [string, string] {
     }
 
     if (typeof args === "string")
-        return [template.replace("{this}", () => args), statements];
+        return [template.replace(/{this}/g, () => args), statements];
 
     let ifPos;
     while ((ifPos = template.indexOf("{#if ")) > -1) {

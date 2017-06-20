@@ -18,7 +18,7 @@ export class StringMatchResolver implements IResolver {
         return propAccess.name.getText() == "match" && objType == StringVarType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
-        return new ArrayType(StringVarType, 1, false);
+        return new ArrayType(StringVarType, 1, true);
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
         return new CStringMatch(scope, node);
@@ -36,56 +36,29 @@ export class StringMatchResolver implements IResolver {
 
 @CodeTemplate(`
 {#statements}
-    {#if !topExpressionOfStatement}
-        {matchInfoVarName} = {regexVar}.func({argAccess});
-        {matchArrayVarName}[0] = {matchInfoVarName}.index == -1 ? NULL : str_substring({argAccess}, {matchInfoVarName}.index, {matchInfoVarName}.end);
-    {/if}
-    {#if !topExpressionOfStatement && gcVarName}
-        ARRAY_PUSH({gcVarName}, (void *){matchArrayVarName}[0]);
-    {/if}
+    {matchArrayVarName} = regex_match({regexVar}, {argAccess});
 {/statements}
-{#if !topExpressionOfStatement && !isAssignmentRightPart}
+{#if !topExpressionOfStatement}
     {matchArrayVarName}
 {/if}`)
 class CStringMatch
 {
     public topExpressionOfStatement: boolean = false;
-    public isAssignmentRightPart: boolean = false;
     public regexVar: CExpression;
     public argAccess: CElementAccess;
-    public matchInfoVarName: string;
     public matchArrayVarName: string;
-    public gcVarName: string = null;
     constructor(scope: IScope, call: ts.CallExpression) {
         scope.root.headerFlags.str_substring = true;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (call.parent.kind == ts.SyntaxKind.BinaryExpression) {
-            let assignment = <ts.BinaryExpression>call.parent;
-            if (assignment.left.kind == ts.SyntaxKind.Identifier) {
-                this.matchArrayVarName = (<ts.Identifier>assignment.left).text;
-                this.isAssignmentRightPart = true;
-            }
-        }
-        if (call.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-            let assignment = <ts.VariableDeclaration>call.parent;
-            if (assignment.name.kind == ts.SyntaxKind.Identifier) {
-                this.matchArrayVarName = (<ts.Identifier>assignment.name).text;
-                this.isAssignmentRightPart = true;
-            }
-        }
-                                    
+
         if (!this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
                 this.argAccess = new CElementAccess(scope, propAccess.expression);
                 this.regexVar = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
-                this.matchInfoVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "match_info");
-                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
-                if (!this.isAssignmentRightPart) {
-                    this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                    scope.variables.push(new CVariable(scope, this.matchArrayVarName, new ArrayType(StringVarType, 1, false)));
-                }
-                scope.variables.push(new CVariable(scope, this.matchInfoVarName, RegexMatchVarType));
+                this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                scope.variables.push(new CVariable(scope, this.matchArrayVarName, new ArrayType(StringVarType, 0, true)));
+                scope.root.headerFlags.regex_match = true;
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.gc_iterator = true;
             } else

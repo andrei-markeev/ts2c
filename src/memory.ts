@@ -1,7 +1,6 @@
 import * as ts from 'typescript';
 import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
 import {StandardCallHelper} from './resolver';
-import {StringMatchResolver} from './standard/string/match';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -151,8 +150,6 @@ export class MemoryManager {
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
         var isSimple = true;
         if (this.isInsideLoop(heapNode))
-            isSimple = false;
-        if (heapNode.kind == ts.SyntaxKind.CallExpression && new StringMatchResolver().matchesNode(this.typeHelper, <ts.CallExpression>heapNode))
             isSimple = false;
 
         var scopeTree = {};

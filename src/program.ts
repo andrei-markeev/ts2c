@@ -71,6 +71,7 @@ class HeaderFlags {
     atoi: boolean = false;
     parseInt: boolean = false;
     regex: boolean = false;
+    regex_match: boolean = false;
 }
 
 
@@ -109,13 +110,17 @@ class HeaderFlags {
     typedef int int16_t;
 {/if}
 {#if headerFlags.regex}
+    struct regex_indices_struct_t {
+        int16_t index;
+        int16_t end;
+    };
     struct regex_match_struct_t {
         int16_t index;
         int16_t end;
-        struct regex_match_struct_t *matches;
+        struct regex_indices_struct_t *matches;
         int16_t matches_count;
     };
-    typedef struct regex_match_struct_t regex_func_t(const char*);
+    typedef struct regex_match_struct_t regex_func_t(const char*, int16_t);
     struct regex_struct_t {
         const char * str;
         regex_func_t * func;
@@ -383,11 +388,37 @@ class HeaderFlags {
     }
 {/if}
 
+{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
+
+{#if headerFlags.regex_match}
+    
+    struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {
+        struct regex_match_struct_t match_info;
+        struct array_string_t *match_array = NULL;
+        int16_t i;
+
+        match_info = regex.func(s, TRUE);
+        if (match_info.index != -1) {
+            ARRAY_CREATE(match_array, match_info.matches_count + 1, match_info.matches_count + 1);
+            match_array->data[0] = str_substring(s, match_info.index, match_info.end);
+            for (i = 0;i < match_info.matches_count; i++) {
+                if (match_info.matches[i].index != -1 && match_info.matches[i].end != -1)
+                    match_array->data[i + 1] = str_substring(s, match_info.matches[i].index, match_info.matches[i].end);
+                else
+                    match_array->data[i + 1] = str_substring(s, 0, 0);
+            }
+        }
+        if (match_info.matches_count)
+            free(match_info.matches);
+
+        return match_array;
+    }
+
+{/if}
+
 {#if headerFlags.gc_iterator}
     int16_t gc_i;
 {/if}
-
-{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
 
 {variables => {this};\n}
 
@@ -425,15 +456,7 @@ export class CProgram implements IScope {
         this.typeHelper = new TypeHelper(this.typeChecker);
         this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper);
 
-        let [structs, functionPrototypes] = this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
-
-        this.userStructs = structs.map(s => {
-            return {
-                name: s.name,
-                properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
-            };
-        });
-        this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
+        this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
 
         this.memoryManager.preprocessVariables();
         for (let source of tsProgram.getSourceFiles())
@@ -453,6 +476,16 @@ export class CProgram implements IScope {
                     this.statements.push(CodeTemplateFactory.createForNode(this, s));
             }
         }
+
+        let [structs, functionPrototypes] = this.typeHelper.getStructsAndFunctionPrototypes();
+
+        this.userStructs = structs.map(s => {
+            return {
+                name: s.name,
+                properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
+            };
+        });
+        this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
 
         this.destructors = new CVariableDestructors(this, null);
     }
