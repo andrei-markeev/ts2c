@@ -9,6 +9,7 @@ type VariableScopeInfo = {
     dict: boolean;
     varName: string;
     scopeId: string;
+    used: boolean;
 };
 
 export class MemoryManager {
@@ -22,7 +23,7 @@ export class MemoryManager {
         for (let k in this.typeHelper.variables) {
             let v = this.typeHelper.variables[k];
             if (v.requiresAllocation)
-                this.scheduleNodeDisposal(v.declaration);
+                this.scheduleNodeDisposal(v.declaration, false);
         }
 
     }
@@ -43,7 +44,7 @@ export class MemoryManager {
 
                     let type = this.typeHelper.getCType(node);
                     if (type && type instanceof ArrayType && type.isDynamicArray)
-                        this.scheduleNodeDisposal(node);
+                        this.scheduleNodeDisposal(node, true);
                 }
                 break;
             case ts.SyntaxKind.ObjectLiteralExpression:
@@ -60,7 +61,7 @@ export class MemoryManager {
 
                     let type = this.typeHelper.getCType(node);
                     if (type && (type instanceof StructType || type instanceof DictType))
-                        this.scheduleNodeDisposal(node);
+                        this.scheduleNodeDisposal(node, true);
                 }
                 break;
             case ts.SyntaxKind.BinaryExpression:
@@ -71,7 +72,7 @@ export class MemoryManager {
                         let leftType = this.typeHelper.getCType(binExpr.left);
                         let rightType = this.typeHelper.getCType(binExpr.right);
                         if (leftType == StringVarType || rightType == StringVarType)
-                            this.scheduleNodeDisposal(binExpr);
+                            this.scheduleNodeDisposal(binExpr, true);
 
                         if (binExpr.left.kind == ts.SyntaxKind.BinaryExpression)
                             this.preprocessTemporaryVariables(binExpr.left);
@@ -85,7 +86,7 @@ export class MemoryManager {
             case ts.SyntaxKind.CallExpression:
                 {
                     if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
-                        this.scheduleNodeDisposal(node);
+                        this.scheduleNodeDisposal(node, true);
                 }
                 break;
         }
@@ -130,7 +131,7 @@ export class MemoryManager {
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
         let destructors: { node: ts.Node, varName: string }[] = [];
         if (this.scopes[scopeId]) {
-            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple)) {
+            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used)) {
                 destructors.push({ node: simpleVarScopeInfo.node, varName: simpleVarScopeInfo.varName });
             }
         }
@@ -139,9 +140,11 @@ export class MemoryManager {
 
     /** Variables that need to be disposed should are tracked by memory manager */
     public getReservedTemporaryVarName(node: ts.Node) {
-        if (this.scopesOfVariables[node.pos + "_" + node.end])
-            return this.scopesOfVariables[node.pos + "_" + node.end].varName;
-        else
+        let scopeOfVar = this.scopesOfVariables[node.pos + "_" + node.end];
+        if (scopeOfVar) {
+            scopeOfVar.used = true;
+            return scopeOfVar.varName;
+        } else
             return null;
     }
     /** To be used in combination with TypeHelper.tryReuseExistingVariable */
@@ -149,7 +152,7 @@ export class MemoryManager {
         this.scopesOfVariables[node.pos + "_" + node.end].varName = varName;
     }
 
-    private scheduleNodeDisposal(heapNode: ts.Node) {
+    private scheduleNodeDisposal(heapNode: ts.Node, isTemp: boolean) {
 
         let varFuncNode = this.findParentFunctionNode(heapNode);
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
@@ -273,7 +276,7 @@ export class MemoryManager {
 
         }
 
-        var type = this.typeHelper.getCType(heapNode);
+        let type = this.typeHelper.getCType(heapNode);
         let varName: string;
         if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
             varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
@@ -293,7 +296,8 @@ export class MemoryManager {
             array: type && type instanceof ArrayType && type.isDynamicArray,
             dict: type && type instanceof DictType,
             varName: varName,
-            scopeId: foundScopes.join("_")
+            scopeId: foundScopes.join("_"),
+            used: !isTemp
         };
         this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
 

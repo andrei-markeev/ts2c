@@ -11,13 +11,13 @@ function f2_wrap()
 function f2()
 {
     let b = f2_wrap();
-    console.log("f2: ", b);
+    console.log("f2:", b);
 }
 function f1()
 {
     let a = alloc();
     a.key1 = "changed";
-    console.log("f1: ", a);
+    console.log("f1:", a);
 }
 
 f1();

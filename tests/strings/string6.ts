@@ -4,7 +4,7 @@ function print(string, regex, expect) {
     count++;
     var pos = string.search(regex);
     if (pos != expect)
-        console.log("\"", string, "\".search(", regex, ") -> FAIL, returned ", pos, ", expected ", expect);
+        console.log("\"" + string + "\".search(" + regex + ") -> FAIL, returned " + pos + ", expected " + expect);
     else
         matched++;
 }
@@ -133,4 +133,4 @@ print("abcx", /([xyz]*)x/, 3);
 print("aac", /(a)+b|aac/, 0);
 print("<html>", /<(ht)*m/, 0);
 
-console.log("Passed: ", matched, "/", count);
+console.log("Passed:", matched, "/", count);

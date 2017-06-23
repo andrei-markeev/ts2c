@@ -42,9 +42,9 @@ export class CCallExpression {
             let propAccess = <ts.PropertyAccessExpression>call.expression;
 
             if (this.funcName == "console.log" && call.arguments.length) {
-                for (let i = 0; i < call.arguments.length-1; i++)
-                    this.printfCalls.push(ConsoleLogHelper.create(scope, call.arguments[i], i == call.arguments.length - 1));
-                this.printfCall = ConsoleLogHelper.create(scope, call.arguments[call.arguments.length-1], true)
+                let printfs = ConsoleLogHelper.create(scope, call.arguments);
+                this.printfCalls = printfs.slice(0, -1);
+                this.printfCall = printfs[printfs.length - 1];
                 scope.root.headerFlags.printf = true;
             }
         }
