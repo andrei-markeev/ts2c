@@ -4,7 +4,6 @@ import {IScope} from '../program';
 import {ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, CType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
-import {StringMatchResolver} from '../standard/string/match';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
@@ -93,6 +92,16 @@ export class CVariableAllocation {
 {#statements}
     {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}
     {destructors => free({this});\n}
+    {#if gcArraysCVarName}
+        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {
+            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)
+                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n
+            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);
+            free({gcArraysCVarName}->data[gc_i]);
+        }
+        free({gcArraysCVarName}->data);
+        free({gcArraysCVarName});
+    {/if}
     {#if gcArraysVarName}
         for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
             free({gcArraysVarName}->data[gc_i]->data);
@@ -123,6 +132,7 @@ export class CVariableAllocation {
 export class CVariableDestructors {
     public gcVarName: string = null;
     public gcArraysVarName: string = null;
+    public gcArraysCVarName: string = null;
     public gcDictsVarName: string = null;
     public destructors: string[];
     public arrayDestructors: string[] = [];
@@ -130,10 +140,12 @@ export class CVariableDestructors {
         let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (let gc of gcVarNames)
         {
-            if (gc.indexOf("_arrays") > -1)
-                this.gcArraysVarName = gc;
+            if (gc.indexOf("_arrays_c") > -1)
+                this.gcArraysCVarName = gc;
             else if (gc.indexOf("_dicts") > -1)
                 this.gcDictsVarName = gc;
+            else if (gc.indexOf("_arrays") > -1)
+                this.gcArraysVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -141,21 +153,21 @@ export class CVariableDestructors {
         this.destructors = [];
         scope.root.memoryManager.getDestructorsForScope(node)
             .forEach(r => {
-                let type = scope.root.typeHelper.getCType(r.node);
-                if (type instanceof ArrayType) {
+                if (r.array) {
+                    this.destructors.push(r.varName + "->data");
+                    this.destructors.push(r.varName);
+                } else if (r.arrayWithContents) {
+                    scope.root.headerFlags.gc_iterator2 = true;
+                    this.arrayDestructors.push(r.varName);
                     this.destructors.push(r.varName + " ? " + r.varName + "->data : NULL");
                     this.destructors.push(r.varName);
-                    // Elements of Regex match array are dynamically allocated substrings that should be freed
-                    if (r.node.kind == ts.SyntaxKind.CallExpression 
-                        && new StringMatchResolver().matchesNode(scope.root.typeHelper, <ts.CallExpression>r.node))
-                        this.arrayDestructors.push(r.varName);
-                } else if (type instanceof DictType) {
+                } else if (r.dict) {
                     this.destructors.push(r.varName + "->index->data");
                     this.destructors.push(r.varName + "->index");
                     this.destructors.push(r.varName + "->values->data");
                     this.destructors.push(r.varName + "->values");
                     this.destructors.push(r.varName);
-                } else if (type == StringVarType) {
+                } else if (r.string) {
                     this.destructors.push("(char *)" + r.varName);
                 } else
                     this.destructors.push(r.varName);

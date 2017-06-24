@@ -59,6 +59,7 @@ class HeaderFlags {
     array_int16_t_cmp: boolean = false;
     array_str_cmp: boolean = false;
     gc_iterator: boolean = false;
+    gc_iterator2: boolean = false;
     dict: boolean = false;
     str_int16_t_cmp: boolean = false;
     str_int16_t_cat: boolean = false;
@@ -419,6 +420,9 @@ class HeaderFlags {
 {#if headerFlags.gc_iterator}
     int16_t gc_i;
 {/if}
+{#if headerFlags.gc_iterator2}
+    int16_t gc_j;
+{/if}
 
 {variables => {this};\n}
 
@@ -464,7 +468,9 @@ export class CProgram implements IScope {
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
-            let gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
+            let gcType = "ARRAY(void *)";
+            if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
+            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 

@@ -1,11 +1,13 @@
 import * as ts from 'typescript';
 import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
 import {StandardCallHelper} from './resolver';
+import {StringMatchResolver} from './standard/string/match';
 
 type VariableScopeInfo = {
     node: ts.Node;
     simple: boolean,
     array: boolean;
+    arrayWithContents: boolean;
     dict: boolean;
     varName: string;
     scopeId: string;
@@ -15,6 +17,8 @@ type VariableScopeInfo = {
 export class MemoryManager {
     private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
+    private reusedVariables: { [key: string]: string } = {};
+    private originalNodes: { [key: string]: ts.Node } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
 
@@ -85,8 +89,15 @@ export class MemoryManager {
                 break;
             case ts.SyntaxKind.CallExpression:
                 {
-                    if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
-                        this.scheduleNodeDisposal(node, true);
+                    if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node)) {
+                        let nodeToDispose = this.tryReuseExistingVariable(node) || node;
+                        let isTempVar = nodeToDispose == node;
+                        if (!isTempVar) {
+                            this.reusedVariables[node.pos + "_" + node.end] = nodeToDispose.pos + "_" + nodeToDispose.end;
+                            this.originalNodes[nodeToDispose.pos + "_" + nodeToDispose.end] = node;
+                        }
+                        this.scheduleNodeDisposal(nodeToDispose, isTempVar);
+                    }
                 }
                 break;
         }
@@ -98,11 +109,14 @@ export class MemoryManager {
         var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict).length) {
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
             gcVars.push("gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
             gcVars.push("gc_" + realScopeId + "_arrays");
+        }
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.arrayWithContents).length) {
+            gcVars.push("gc_" + realScopeId + "_arrays_c");
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.dict).length) {
             gcVars.push("gc_" + realScopeId + "_dicts");
@@ -113,10 +127,14 @@ export class MemoryManager {
     public getGCVariableForNode(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
         let key = node.pos + "_" + node.end;
+        if (this.reusedVariables[key])
+            key = this.reusedVariables[key];
 
         if (this.scopesOfVariables[key] && !this.scopesOfVariables[key].simple) {
             if (this.scopesOfVariables[key].array)
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays";
+            else if (this.scopesOfVariables[key].arrayWithContents)
+                return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays_c";
             else if (this.scopesOfVariables[key].dict)
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_dicts";
             else
@@ -129,27 +147,53 @@ export class MemoryManager {
     public getDestructorsForScope(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        let destructors: { node: ts.Node, varName: string }[] = [];
+        let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean }[] = [];
         if (this.scopes[scopeId]) {
-            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used)) {
-                destructors.push({ node: simpleVarScopeInfo.node, varName: simpleVarScopeInfo.varName });
-            }
+
+            // string match allocates array of strings, and each of those strings should be also disposed
+            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used))
+                destructors.push({ 
+                    varName: simpleVarScopeInfo.varName,
+                    array: simpleVarScopeInfo.array,
+                    dict: simpleVarScopeInfo.dict,
+                    string: this.typeHelper.getCType(simpleVarScopeInfo.node) == StringVarType,
+                    arrayWithContents: simpleVarScopeInfo.arrayWithContents
+                });
         }
         return destructors;
     }
 
-    /** Variables that need to be disposed should are tracked by memory manager */
+    public variableWasReused(node: ts.Node) {
+        let key = node.pos + "_" + node.end;
+        return !!this.reusedVariables[key];
+    }
+
+    /** Variables that need to be disposed are tracked by memory manager */
     public getReservedTemporaryVarName(node: ts.Node) {
-        let scopeOfVar = this.scopesOfVariables[node.pos + "_" + node.end];
+        let key = node.pos + "_" + node.end;
+        if (this.reusedVariables[key])
+            key = this.reusedVariables[key];
+        let scopeOfVar = this.scopesOfVariables[key];
         if (scopeOfVar) {
             scopeOfVar.used = true;
             return scopeOfVar.varName;
         } else
             return null;
     }
-    /** To be used in combination with TypeHelper.tryReuseExistingVariable */
-    public updateReservedTemporaryVarName(node: ts.Node, varName: string) {
-        this.scopesOfVariables[node.pos + "_" + node.end].varName = varName;
+
+    /** Sometimes we can reuse existing variable instead of creating a temporary one. */
+    public tryReuseExistingVariable(node: ts.Node) {
+        if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
+            let assignment = <ts.BinaryExpression>node.parent;
+            if (assignment.left.kind == ts.SyntaxKind.Identifier)
+                return assignment.left;
+        }
+        if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
+            let assignment = <ts.VariableDeclaration>node.parent;
+            if (assignment.name.kind == ts.SyntaxKind.Identifier)
+                return assignment.name;
+        }
+        return null;
     }
 
     private scheduleNodeDisposal(heapNode: ts.Node, isTemp: boolean) {
@@ -289,11 +333,20 @@ export class MemoryManager {
         else
             varName = heapNode.getText().replace(/\./g, "->");
 
+        let vnode = heapNode;
+        let key = vnode.pos + "_" + vnode.end;
+        let arrayWithContents = false;
+        if (this.originalNodes[key])
+            vnode = this.originalNodes[key];
+        if (vnode.kind == ts.SyntaxKind.CallExpression && new StringMatchResolver().matchesNode(this.typeHelper, <ts.CallExpression>vnode))
+            arrayWithContents = true;
+
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {
             node: heapNode,
             simple: isSimple,
-            array: type && type instanceof ArrayType && type.isDynamicArray,
+            arrayWithContents: arrayWithContents,
+            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray,
             dict: type && type instanceof DictType,
             varName: varName,
             scopeId: foundScopes.join("_"),

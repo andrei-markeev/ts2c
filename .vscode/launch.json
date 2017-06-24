@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/ts2c.js",
             "stopOnEntry": false,
-            "args": ["tests/realworld/gray.ts"],
+            "args": ["tests/strings/string9.ts"],
             "cwd": "${workspaceRoot}",
             "preLaunchTask": null,
             "runtimeExecutable": null,
@@ -34,7 +34,7 @@
             "name": "Attach to Process",
             "type": "node",
             "request": "attach",
-            "processId": "${command.PickProcess}",
+            "processId": "${command:PickProcess}",
             "port": 5858,
             "sourceMaps": false
         }

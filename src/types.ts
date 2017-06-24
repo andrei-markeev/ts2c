@@ -354,21 +354,6 @@ export class TypeHelper {
         return proposedName;
     }
 
-    /** Sometimes we can reuse existing variable instead of creating a temporary one. */
-    public tryReuseExistingVariable(node: ts.Node) {
-        if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-            let assignment = <ts.BinaryExpression>node.parent;
-            if (assignment.left.kind == ts.SyntaxKind.Identifier)
-                return (<ts.Identifier>assignment.left).text;
-        }
-        if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-            let assignment = <ts.VariableDeclaration>node.parent;
-            if (assignment.name.kind == ts.SyntaxKind.Identifier)
-                return (<ts.Identifier>assignment.name).text;
-        }
-        return null;
-    }
-
     private getUserStructs() {
         return Object.keys(this.userStructs)
             .filter(k => Object.keys(this.userStructs[k].properties).length > 0)
