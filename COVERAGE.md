@@ -53,22 +53,22 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [ ] `delete`
     - [ ] `void`
     - [ ] `typeof`
-    - [x] **Prefix increment operator `++`**
-    - [x] **Prefix decrement operator `--`**
+    - [x] **Prefix increment operator `++`** _(only numbers)_
+    - [x] **Prefix decrement operator `--`** _(only numbers)_
     - [x] **Unary `+`**
-    - [ ] Unary `-`
-    - [ ] Bitwise NOT `~`
+    - [x] **Unary `-`** _(only numbers)_
+    - [x] **Bitwise NOT `~`** _(only numbers)_
     - [x] **Logical NOT `!`**
  - [ ] Multiplicative operators
     - [x] **`*`** _(only numbers)_
     - [x] **`/`** _(only numbers)_
-    - [ ] `%`
+    - [x] **`%`** _(only numbers)_
  - [ ] Additive operators
     - [x] **`+`** _(partial: number+number, string+number, string+string)_
     - [x] **`-`** _(only numbers)_
  - [ ] Bitwise shift operators
-    - [ ] `<<`
-    - [ ] `>>`
+    - [x] **`<<`** _(only numbers)_
+    - [x] **`>>`** _(only numbers)_
     - [ ] `>>>`
  - [ ] Relational operators
     - [x] **`<`** _(only numbers)_
@@ -85,7 +85,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [ ] Binary bitwise operators
     - [x] **`&`** _(only numbers)_
     - [x] **`|`** _(only numbers)_
-    - [ ] `^`
+    - [x] **`^`** _(only numbers)_
  - [x] Binary logical operators
     - [x] **`&&`**
     - [x] **`||`**
@@ -93,7 +93,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [ ] Assignment operators
     - [x] **Simple assignment `=`**
     - [ ] Compound assignments
-        - [x] **`+=`** _(partial: only numbers and strings)_
+        - [x] **`+=`** _(partial: number+number, string+number, string+string)_
         - [ ] `-=`
         - [ ] `*=`
         - [ ] `/=`

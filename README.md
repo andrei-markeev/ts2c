@@ -68,19 +68,19 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only about 48% of ES3 syntax is currently supported.
+__**Work in progress:**__ it works, but only about 50% of ES3 syntax is currently supported.
 
 Overview of currently supported language features (compared to ES3 Standard):
 
  - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
- - expressions [53%]:
+ - expressions [63%]:
     - primary expressions [80%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
     - left-hand-side expressions [60%]: property accessors, function calls
     - postfix expressions [100%]: `++`, `--`
     - unary operators [44%]: `++`, `--`, `+`, `!`
-    - multiplicative operators [16%]: `*`
+    - multiplicative operators [50%]: `*`, `/`, `%`
     - additive operators [50%]: `+`, `-`
-    - bitwise shift operators [0%]
+    - bitwise shift operators [33%]: `<<`, `>>`
     - relational operators [33%]: `<`, `>`, `<=`, `>=`
     - equality operators [50%]: `==`, `!=`, `===`, `!==`
     - binary bitwise operators [33%]: `&`, `|`
@@ -102,6 +102,8 @@ Overview of currently supported language features (compared to ES3 Standard):
 
 Note: some of these features supported only partially.
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
+
+Notable NOT supported features include, for example: float numbers, `this`, `new`, `function` inside expression, `typeof`, etc.
 
 Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
 

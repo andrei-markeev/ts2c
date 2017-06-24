@@ -110,11 +110,15 @@ export class CSimpleBinaryExpression {
             operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
             operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
             operatorMap[ts.SyntaxKind.SlashToken] = '/';
+            operatorMap[ts.SyntaxKind.PercentToken] = '%';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.FirstCompoundAssignment] = '+=';
             operatorMap[ts.SyntaxKind.AmpersandToken] = '&';
             operatorMap[ts.SyntaxKind.BarToken] = '|';
+            operatorMap[ts.SyntaxKind.CaretToken] = '^';
+            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanToken] = '>>';
+            operatorMap[ts.SyntaxKind.LessThanLessThanToken] = '<<';
         }
         else if (leftType == StringVarType && rightType == StringVarType) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
@@ -215,6 +219,7 @@ class CUnaryExpression {
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
+            operatorMap[ts.SyntaxKind.TildeToken] = '~';
         }
         if (type == StringVarType) {
             callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
