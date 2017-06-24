@@ -36,7 +36,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
         - [x] **`true` / `false`**
         - [x] **number literal** _(partial: only 16-bit integers)_
         - [x] **string literal**
-        - [x] **regular expression literal**
+        - [x] **regular expression literal** _(partial: backreferences and regexp flags not supported)_
     - [x] **Array initializer `[` ... `]`** 
     - [x] **Object initializer `{` ... `}`**
     - [x] **Grouping operator `(` `)`**
@@ -160,7 +160,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [x] **indexOf**
      - [x] **lastIndexOf**
      - [ ] localeCompare
-     - [ ] match
+     - [x] **match**
      - [ ] replace
      - [x] **search**
      - [x] **slice**

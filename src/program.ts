@@ -114,6 +114,7 @@ class HeaderFlags {
     struct regex_indices_struct_t {
         int16_t index;
         int16_t end;
+        int16_t state;
     };
     struct regex_match_struct_t {
         int16_t index;
@@ -392,7 +393,14 @@ class HeaderFlags {
 {userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
 
 {#if headerFlags.regex_match}
-    
+
+    void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {
+        int16_t i;
+        for (i = 0; i < groupN; i++) {
+            match_info->matches[i].index = -1;
+            match_info->matches[i].end = -1;
+        }
+    }
     struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {
         struct regex_match_struct_t match_info;
         struct array_string_t *match_array = NULL;

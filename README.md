@@ -73,8 +73,8 @@ __**Work in progress:**__ it works, but only about 48% of ES3 syntax is currentl
 Overview of currently supported language features (compared to ES3 Standard):
 
  - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
- - expressions [56%]:
-    - primary expressions [81%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
+ - expressions [53%]:
+    - primary expressions [80%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
     - left-hand-side expressions [60%]: property accessors, function calls
     - postfix expressions [100%]: `++`, `--`
     - unary operators [44%]: `++`, `--`, `+`, `!`
@@ -83,17 +83,17 @@ Overview of currently supported language features (compared to ES3 Standard):
     - bitwise shift operators [0%]
     - relational operators [33%]: `<`, `>`, `<=`, `>=`
     - equality operators [50%]: `==`, `!=`, `===`, `!==`
-    - binary bitwise operators [0%]
+    - binary bitwise operators [33%]: `&`, `|`
     - binary logical operators [100%]: `&&`, `||`
     - conditional operator [100%]: `?`-`:`
     - assignment operators [52%]: `=`, `+=`
     - comma operator [100%]
- - built-in objects [13%]:
+ - built-in objects [14%]:
     - Global [0%]
     - Object [0%]
     - Function [0%]
     - Array [78%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `toString()`, `sort()`, `reverse()`, `indexOf()`, `lastIndexOf()`, `length`
-    - String [52%]: `indexOf()`, `lastIndexOf()`, `search()`, `charAt()`, `charCodeAt()`, `concat()`, `substring()`, `slice()`, `toString()`, `valueOf()`, `length`
+    - String [61%]: `indexOf()`, `lastIndexOf()`, `search()`, `match()`, `charAt()`, `charCodeAt()`, `concat()`, `substring()`, `slice()`, `toString()`, `valueOf()`, `length`
     - Boolean [0%]
     - Number [0%]
     - Math [0%]

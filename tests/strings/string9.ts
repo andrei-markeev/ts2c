@@ -14,5 +14,10 @@ var match2 = html.match(startTagRegex);
 if (match2)
     console.log(match2);
 
+console.log('<img src="test.png" />'.match(startTagRegex));
+
 var endTagRegex = /^<\/([-A-Za-z0-9_]+)[^>]*>/;
 console.log(html.slice(22).match(endTagRegex));
+
+console.log("abababc".match(/(a(ba)b+)+(c)/));
+console.log("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy".match(/(x+x+)+y/));

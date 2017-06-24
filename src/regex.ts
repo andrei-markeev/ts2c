@@ -269,8 +269,11 @@ export class RegexBuilder {
                 let reachableStates = group.map(g => g.toState);
                 let closure = transitions.filter(t => reachableStates.indexOf(t.fromState) > -1);
                 let closureId = ensureId(closure);
-                states[id].transitions.push({ condition: tr.token, next: closureId, fixedStart: tr.fixedStart, fixedEnd: tr.fixedEnd, startGroup: tr.startGroup, endGroup: tr.endGroup });
-                //console.log("FROM: ", id, "----", tr.fixedStart ? "(start of line)" : "", tr.token, tr.fixedEnd ? "(end of line)" : "", "---> ", closureId);
+                let sameTokenTransactions = trgroup.filter(t => JSON.stringify(tr.token) === JSON.stringify(t.token));
+                let startGr = sameTokenTransactions.map(t => t.startGroup).reduce((a,c) => c == null ? a : a.concat(c),[]).reduce((a,c) => { a.indexOf(c) == -1 && a.push(c); return a; }, []);
+                let endGr = sameTokenTransactions.map(t => t.endGroup).reduce((a,c) => c == null ? a : a.concat(c),[]).reduce((a,c) => { a.indexOf(c) == -1 && a.push(c); return a; }, []);
+                states[id].transitions.push({ condition: tr.token, next: closureId, fixedStart: tr.fixedStart, fixedEnd: tr.fixedEnd, startGroup: startGr, endGroup: endGr });
+                console.log("FROM: ", id, "----", tr.fixedStart ? "(start of line)" : "", tr.token, tr.fixedEnd ? "(end of line)" : "", "---> ", closureId);
                 queue.unshift(closure);
             }
 

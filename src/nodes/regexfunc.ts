@@ -12,15 +12,10 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
         char ch;
 {/if}
 {#if groupNumber}
-        int16_t capturing = 0;
-
         if (capture) {
             result.matches = malloc({groupNumber} * sizeof(*result.matches));
             assert(result.matches != NULL);
-            for (iterator = 0; iterator < {groupNumber}; iterator++) {
-                result.matches[iterator].index = -1;
-                result.matches[iterator].end = -1;
-            }
+            regex_clear_matches(&result, {groupNumber});
         }
 {/if}
     for (iterator = 0; iterator < len; iterator++) {
@@ -37,7 +32,8 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             index++;
             state = 0;
 {#if groupNumber}
-                capturing = 0;
+                if (capture)
+                    regex_clear_matches(&result, {groupNumber});
 {/if}
         } else {
             state = next;
@@ -49,7 +45,8 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             index++;
             state = 0;
 {#if groupNumber}
-                capturing = 0;
+                if (capture)
+                    regex_clear_matches(&result, {groupNumber});
 {/if}
         }
     }
@@ -71,6 +68,8 @@ export class CRegexSearchFunction {
     public gcVarName: string;
     constructor(scope: IScope, template: string, public regexName: string, regexMachine: RegexMachine = null) {
         this.templateString = new CString(scope, template.replace(/\\/g,'\\\\').replace(/"/g, '\\"'));
+        if (/\/[a-z]+$/.test(template))
+            throw new Error("Flags not supported in regex literals yet (" + template + ").");
         regexMachine = regexMachine || RegexBuilder.build(template.slice(1, -1));
         let max = (arr, func) => arr && arr.reduce((acc, t) => Math.max(acc, func(t), 0), 0) || 0;
         this.groupNumber = max(regexMachine.states, s => max(s.transitions, t => max(t.startGroup, g => g)));
@@ -144,9 +143,9 @@ class CharCondition {
 
         let groupCaptureCode = '';
         for (var g of startGroup || [])
-            groupCaptureCode += " if (capture && capturing == " + (g-1) + ") result.matches[capturing++].index = iterator;";
+            groupCaptureCode += " if (capture && (result.matches[" + (g-1) + "].index == -1 || iterator > result.matches[" + (g-1) + "].end)) result.matches[" + (g-1) + "].index = iterator;";
         for (var g of endGroup || [])
-            groupCaptureCode += " if (capture && capturing >= " + g + ") result.matches[" + (g-1) + "].end = iterator + 1;"
+            groupCaptureCode += " if (capture && result.matches[" + (g-1) + "].index != -1) result.matches[" + (g-1) + "].end = iterator + 1;";
 
         this.nextCode = "next = " + next + ";";
         if (groupCaptureCode)
