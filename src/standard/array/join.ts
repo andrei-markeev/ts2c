@@ -41,11 +41,11 @@ class ArrayConcatResolver implements IResolver {
     {#if !topExpressionOfStatement}
         {tempVarName} = malloc({calculatedStringLength});
         assert({tempVarName} != NULL);
-        {tempVarName}[0] = '\\0';
+        ((char *){tempVarName})[0] = '\\0';
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
             if ({iteratorVarName} > 0)
-                strcat({tempVarName}, {separator});
-            {catFuncName}({tempVarName}, {arrayElement}[{iteratorVarName}]);
+                strcat((char *){tempVarName}, {separator});
+            {catFuncName}((char *){tempVarName}, {arrayElement}[{iteratorVarName}]);
         }
     {/if}
 {/statements}

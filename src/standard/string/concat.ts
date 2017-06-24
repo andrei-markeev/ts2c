@@ -40,7 +40,7 @@ class StringConcatResolver implements IResolver {
     {#if !topExpressionOfStatement}
         {tempVarName} = malloc({sizes{+}=>{this}} + 1);
         assert({tempVarName} != NULL);
-        {tempVarName}[0] = '\\0';
+        ((char *){tempVarName})[0] = '\\0';
         {concatValues}
     {/if}
 {/statements}
@@ -91,9 +91,9 @@ class CGetSize {
 
 @CodeTemplate(`
 {#if isNumber}
-    str_int16_t_cat({tempVarName}, {value});
+    str_int16_t_cat((char *){tempVarName}, {value});
 {#else}
-    strcat({tempVarName}, {value});
+    strcat((char *){tempVarName}, {value});
 {/if}
 `)
 class CConcatValue {
