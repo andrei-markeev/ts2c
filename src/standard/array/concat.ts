@@ -64,7 +64,8 @@ class CArrayConcat {
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
-            scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(type.elementType, 0, true)));
+            if (!scope.root.memoryManager.variableWasReused(call))
+                scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(type.elementType, 0, true)));
             this.indexVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new CVariable(scope, this.indexVarName, NumberVarType));
             let args = call.arguments.map(a => ({ node: a, template: CodeTemplateFactory.createForNode(scope, a) }));

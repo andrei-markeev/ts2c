@@ -74,7 +74,8 @@ class CArraySplice {
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             let type = scope.root.typeHelper.getCType(propAccess.expression);
-            scope.variables.push(new CVariable(scope, this.tempVarName, type));
+            if (!scope.root.memoryManager.variableWasReused(call))
+                scope.variables.push(new CVariable(scope, this.tempVarName, type));
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         }

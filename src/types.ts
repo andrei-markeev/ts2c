@@ -4,7 +4,7 @@ import {StandardCallHelper} from './resolver';
 export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var *";
 export const PointerVarType = "void *";
-export const StringVarType = "const char *";
+export const StringVarType = "char *";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
 export const RegexVarType = "struct regex_struct_t";
@@ -29,7 +29,8 @@ export class ArrayType {
             elementTypeText
                 .replace(/^static /, '').replace('{var}', '').replace(/[\[\]]/g, '')
                 .replace(/ /g, '_')
-                .replace(/const char */g, 'string')
+                .replace(/const char \*/g, 'string')
+                .replace(/char \*/g, 'string')
                 .replace(/\*/g, '8') + "_t";
     }
 

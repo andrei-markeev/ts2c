@@ -61,7 +61,8 @@ class CStringCharAt {
                 console.log("Error in " + call.getText() + ". Parameter expected!");
             } else {
                 this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
+                if (!scope.root.memoryManager.variableWasReused(call))
+                    scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
                 this.start = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             }
         }

@@ -74,7 +74,8 @@ class CArrayJoin {
             this.arrayElement = new CArrayElement(scope, this.varAccess, type);
             this.catFuncName = type.elementType == NumberVarType ? "str_int16_t_cat" : "strcat";
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-            scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
+            if (!scope.root.memoryManager.variableWasReused(call))
+                scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
             this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);

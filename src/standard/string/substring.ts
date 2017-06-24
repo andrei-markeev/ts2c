@@ -64,7 +64,8 @@ class CStringSubstring {
                 console.log("Error in " + call.getText() + ". At least one parameter expected!");
             } else {
                 this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
+                if (!scope.root.memoryManager.variableWasReused(call))
+                    scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
                 this.start = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 if (call.arguments.length >= 2)
                     this.end = CodeTemplateFactory.createForNode(scope, call.arguments[1]);

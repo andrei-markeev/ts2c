@@ -61,7 +61,8 @@ class CStringConcat {
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-            scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
+            if (!scope.root.memoryManager.variableWasReused(call))
+                scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
             let args = call.arguments.map(a => ({ node: a, template: CodeTemplateFactory.createForNode(scope, a) }));
             let toConcatenate = [{node: <ts.Node>propAccess.expression, template: this.varAccess}].concat(args);
             this.sizes = toConcatenate.map(a => new CGetSize(scope, a.node, a.template))
