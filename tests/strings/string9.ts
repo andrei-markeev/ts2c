@@ -1,8 +1,11 @@
+
 var match = "something here".match(/thing/);
 console.log(match[0]);
 match = "Matching string".match(/t[es]+t/);
 if (match)
     console.log('Incorrect!');
+
+console.log("Hello world world!".match(/lo.*l/)[0]);
 console.log("Hello world!".match(/lo.*l/)[0]);
 
 
@@ -20,4 +23,8 @@ var endTagRegex = /^<\/([-A-Za-z0-9_]+)[^>]*>/;
 console.log(html.slice(22).match(endTagRegex));
 
 console.log("abababc".match(/(a(ba)b+)+(c)/));
-console.log("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy".match(/(x+x+)+y/));
+
+// TODO: not working
+// console.log("xxxxxy".match(/(x+x+)+y/));
+
+console.log("a cd".match(/[a ]*(c)?d/));

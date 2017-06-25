@@ -3,8 +3,28 @@ export interface RegexMachine {
 }
 
 export interface RegexState {
-    transitions: { condition: any, next: number, fixedStart: boolean, fixedEnd: boolean, startGroup: number[], endGroup: number[] }[];
+    transitions: RegexStateTransition[];
     final: boolean;
+}
+
+export interface RegexStateTransition {
+    condition: any;
+    next: number;
+    fixedStart: boolean;
+    fixedEnd: boolean;
+    startGroup: number[];
+    endGroup: number[];
+}
+
+interface Transition {
+    fromState: number;
+    token?: RegexToken;
+    toState?: number;
+    startGroup?: number[];
+    endGroup?: number[];
+    fixedStart?: boolean;
+    fixedEnd?: boolean;
+    final?: boolean;
 }
 
 type RegexToken = string | ComplexRegexToken;
@@ -19,17 +39,6 @@ interface ComplexRegexToken {
     endGroup?: number;
     fixedStart?: boolean;
     fixedEnd?: boolean;
-}
-
-interface Transition {
-    fromState: number;
-    token?: RegexToken;
-    toState?: number;
-    startGroup?: number[];
-    endGroup?: number[];
-    fixedStart?: boolean;
-    fixedEnd?: boolean;
-    final?: boolean;
 }
 
 const NOTHING = { nothing: true };
@@ -273,7 +282,7 @@ export class RegexBuilder {
                 let startGr = sameTokenTransactions.map(t => t.startGroup).reduce((a,c) => c == null ? a : a.concat(c),[]).reduce((a,c) => { a.indexOf(c) == -1 && a.push(c); return a; }, []);
                 let endGr = sameTokenTransactions.map(t => t.endGroup).reduce((a,c) => c == null ? a : a.concat(c),[]).reduce((a,c) => { a.indexOf(c) == -1 && a.push(c); return a; }, []);
                 states[id].transitions.push({ condition: tr.token, next: closureId, fixedStart: tr.fixedStart, fixedEnd: tr.fixedEnd, startGroup: startGr, endGroup: endGr });
-                console.log("FROM: ", id, "----", tr.fixedStart ? "(start of line)" : "", tr.token, tr.fixedEnd ? "(end of line)" : "", "---> ", closureId);
+                //console.log("FROM: ", id, "----", tr.fixedStart ? "(start of line)" : "", tr.token, tr.fixedEnd ? "(end of line)" : "", "---> ", closureId);
                 queue.unshift(closure);
             }
 
@@ -289,6 +298,7 @@ export class RegexBuilder {
                         && charTransitions[i].next == charTransitions[i - 1].next
                         && charTransitions[i].fixedStart == charTransitions[i - 1].fixedStart
                         && charTransitions[i].fixedEnd == charTransitions[i - 1].fixedEnd
+                        && charTransitions[i].final == charTransitions[i - 1].final
                         && JSON.stringify(charTransitions[i].startGroup) == JSON.stringify(charTransitions[i - 1].startGroup)
                         && JSON.stringify(charTransitions[i].endGroup) == JSON.stringify(charTransitions[i - 1].endGroup)) {
                         condition.toChar = charTransitions[i].condition;

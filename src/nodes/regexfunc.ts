@@ -1,21 +1,23 @@
 import {IScope} from '../program';
 import {CodeTemplate} from '../template';
 import {CString} from './literals';
-import {RegexBuilder, RegexMachine, RegexState} from '../regex';
+import {RegexBuilder, RegexMachine, RegexState, RegexStateTransition} from '../regex';
 import {CExpression} from './expressions';
 
 @CodeTemplate(`
 struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture) {
-    int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0;
+    int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
 {#if hasChars}
         char ch;
 {/if}
 {#if groupNumber}
+        int16_t started[{groupNumber}];
         if (capture) {
             result.matches = malloc({groupNumber} * sizeof(*result.matches));
             assert(result.matches != NULL);
             regex_clear_matches(&result, {groupNumber});
+            memset(started, 0, sizeof started);
         }
 {/if}
     for (iterator = 0; iterator < len; iterator++) {
@@ -31,9 +33,12 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             iterator = index;
             index++;
             state = 0;
+            end = -1;
 {#if groupNumber}
-                if (capture)
+                if (capture) {
                     regex_clear_matches(&result, {groupNumber});
+                    memset(started, 0, sizeof started);
+                }
 {/if}
         } else {
             state = next;
@@ -41,19 +46,23 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
         }
 
         if (iterator == len-1 && index < len-1 && {finals { && }=> state != {this}}) {
+            if (end > -1)
+                break;
             iterator = index;
             index++;
             state = 0;
 {#if groupNumber}
-                if (capture)
+                if (capture) {
                     regex_clear_matches(&result, {groupNumber});
+                    memset(started, 0, sizeof started);
+                }
 {/if}
         }
     }
-    if ({finals { && }=> state != {this}})
+    if (end == -1 && {finals { && }=> state != {this}})
         index = -1;
     result.index = index;
-    result.end = iterator;
+    result.end = end == -1 ? iterator : end;
     result.matches_count = {groupNumber};
     return result;
 }
@@ -75,9 +84,9 @@ export class CRegexSearchFunction {
         this.groupNumber = max(regexMachine.states, s => max(s.transitions, t => max(t.startGroup, g => g)));
         this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || c.condition.fromChar || c.condition.tokens.length > 0)).length > 0;
         for (let s = 0; s < regexMachine.states.length; s++) {
-            if (regexMachine.states[s] == null || regexMachine.states[s].transitions.length == 0 || regexMachine.states[s].final)
+            if (regexMachine.states[s] == null || regexMachine.states[s].transitions.length == 0)
                 continue;
-            this.stateBlocks.push(new CStateBlock(scope, s+"", regexMachine.states[s]));
+            this.stateBlocks.push(new CStateBlock(scope, s+"", regexMachine.states[s], this.groupNumber));
         }
         this.finals = regexMachine.states.length > 0 ? regexMachine.states.map((s, i) => s.final ? i : -1).filter(f => f > -1).map(f => f+"") : ["-1"];
         if (this.groupNumber > 0)
@@ -90,14 +99,30 @@ export class CRegexSearchFunction {
 
 @CodeTemplate(`
         if (state == {stateNumber}) {
-{conditions}
+{#if final}
+                end = iterator;
+{/if}
+{conditions {\n}=> {this}}
+{#if groupNumber && groupsToReset.length}
+                if (capture && next == -1) {
+                    {groupsToReset {\n                    }=> started[{this}] = 0;}
+                }
+{/if}
         }
 `)
 class CStateBlock {
     public conditions: any[] = [];
-    constructor(scope: IScope, public stateNumber: string, state: RegexState) {
+    public groupsToReset: string[] = [];
+    public final: boolean;
+    constructor(scope: IScope, public stateNumber: string, state: RegexState, public groupNumber: number) {
+        this.final = state.final;
+        let allGroups = [];
+        state.transitions.forEach(t => allGroups = allGroups.concat(t.startGroup || []).concat(t.endGroup || []));
+        for (var i = 0; i < groupNumber; i++)
+            if (allGroups.indexOf(i+1) == -1)
+                this.groupsToReset.push(i+"");
         for (let tr of state.transitions) {
-            this.conditions.push(new CharCondition(tr.condition, tr.next, tr.fixedStart, tr.fixedEnd, tr.startGroup, tr.endGroup));
+            this.conditions.push(new CharCondition(tr, groupNumber));
         }
     }
 }
@@ -111,8 +136,7 @@ class CStateBlock {
                 if (ch >= '{chFrom}' && ch <= '{ch}'{fixedConditions}) {nextCode}
 {#else}
                 if (ch == '{ch}'{fixedConditions}) {nextCode}
-{/if}
-`)
+{/if}`)
 class CharCondition {
     public anyCharExcept: boolean = false;
     public anyChar: boolean = false;
@@ -122,32 +146,32 @@ class CharCondition {
     public except: string[];
     public fixedConditions: string = '';
     public nextCode;
-    constructor(condition: any, public next: number, fixedStart: boolean, fixedEnd: boolean, startGroup: number[], endGroup: number[]) {
-        if (fixedStart)
+    constructor(tr: RegexStateTransition, groupN: number) {
+        if (tr.fixedStart)
             this.fixedConditions = " && iterator == 0";
-        else if (fixedEnd)
+        else if (tr.fixedEnd)
             this.fixedConditions = " && iterator == len - 1";
         
-        if (typeof condition === "string")
-            this.ch = condition.replace('\\','\\\\').replace("'","\\'");
-        else if (condition.fromChar) {
+        if (typeof tr.condition === "string")
+            this.ch = tr.condition.replace('\\','\\\\').replace("'","\\'");
+        else if (tr.condition.fromChar) {
             this.charClass = true;
-            this.chFrom = condition.fromChar;
-            this.ch = condition.toChar;
+            this.chFrom = tr.condition.fromChar;
+            this.ch = tr.condition.toChar;
         }
-        else if (condition.tokens.length) {
+        else if (tr.condition.tokens.length) {
             this.anyCharExcept = true;
-            this.except = condition.tokens.map(ch => ch.replace('\\','\\\\').replace("'","\\'"));
+            this.except = tr.condition.tokens.map(ch => ch.replace('\\','\\\\').replace("'","\\'"));
         } else
             this.anyChar = true;
 
         let groupCaptureCode = '';
-        for (var g of startGroup || [])
-            groupCaptureCode += " if (capture && (result.matches[" + (g-1) + "].index == -1 || iterator > result.matches[" + (g-1) + "].end)) result.matches[" + (g-1) + "].index = iterator;";
-        for (var g of endGroup || [])
-            groupCaptureCode += " if (capture && result.matches[" + (g-1) + "].index != -1) result.matches[" + (g-1) + "].end = iterator + 1;";
+        for (var g of tr.startGroup || [])
+            groupCaptureCode += " if (capture && (!started[" + (g-1) + "] || iterator > result.matches[" + (g-1) + "].end)) { started[" + (g-1) + "] = 1; result.matches[" + (g-1) + "].index = iterator; }";
+        for (var g of tr.endGroup || [])
+            groupCaptureCode += " if (capture && started[" + (g-1) + "]) result.matches[" + (g-1) + "].end = iterator + 1;";
 
-        this.nextCode = "next = " + next + ";";
+        this.nextCode = "next = " + tr.next + ";";
         if (groupCaptureCode)
             this.nextCode = "{ " + this.nextCode + groupCaptureCode + " }";
     }
