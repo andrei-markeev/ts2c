@@ -7,7 +7,7 @@ COVER = $(TS:%.ts=coverage/%)
 .PHONY: all clean cover
 
 %.c: %.ts
-	node ../ts2c.js $<
+	node ../bin/ts2c $<
 %.elf: %.c
 	gcc $< -ansi -pedantic -Wall -g -o $@
 %.res: %.elf

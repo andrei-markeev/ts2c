@@ -1,3 +1,17 @@
 #!/usr/bin/env node
 var path = require('path');
-require(path.join(__dirname, "..", "ts2c.js"));
+var fs = require('fs');
+var ts = require('typescript');
+var ts2c = require(path.join(__dirname, "..", "ts2c.js"));
+var ts2cprogram = require(path.join(__dirname, "../src/", "program.js"));
+
+if (process.argv.length < 2)
+    process.exit();
+
+var fileNames = process.argv.slice(2);
+var program = ts.createProgram(fileNames, { noLib: true, allowJs: true });
+
+var output = new ts2cprogram.CProgram(program)["resolve"]();
+fs.writeFileSync(fileNames[0].slice(0, -3) + '.c', output);
+
+process.exit();
