@@ -2,7 +2,7 @@
   "name": "ts2c",
   "version": "2.1.0",
   "description": "TypeScript/JavaScript to C transpiler",
-  "main": "ts2c.js",
+  "main": "main.js",
   "bin": {
     "ts2c": "./bin/ts2c"
   },
@@ -27,7 +27,7 @@
   },
   "scripts": {
     "prepublish": "tsc",
-    "build": "browserify ts2c.js -x typescript > ts2c.bundle.js",
+    "build": "browserify main.js -x typescript -s ts2c -o ts2c.bundle.js",
     "cover": "cd tests && make -B cover",
     "test": "cd tests && make -B"
   },
