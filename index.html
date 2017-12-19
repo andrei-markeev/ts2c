@@ -1,29 +1,36 @@
 <!doctype html>
 <html>
     <head>
+        <title>ts2c - Convert JavaScript/TypeScript to C</title>
         <meta charset="utf-8" />
         <script src="https://npmcdn.com/typescript"></script>
         <script src="ts2c.bundle.js"></script>
+        <link rel="stylesheet" href="style.css" />
 
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.15.2/codemirror.min.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.15.2/codemirror.min.css" />
         <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.15.2/codemirror.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.15.2/mode/javascript/javascript.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.15.2/mode/clike/clike.min.js"></script>
     </head>
     <body>
+        <header>
+            <div class="container header">
+                <div class="title">ts2c - Convert JavaScript/TypeScript to C</div>
+                <a href="https://github.com/andrei-markeev/ts2c">GitHub</a>
+            </div>
+        </header>
 
-        <p><strong>Please note</strong>: many features aren't supported yet. See <a href="https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md">COVERAGE.md</a> for details.</p>
-        <article>
-            <p>
-                <textarea id="source" cols="50" rows="3">console.log("Hello world!");</textarea>
-            </p>
-        </article>
-        <p>
+        <div class="container note"><strong>Please note</strong>: Many features aren't supported yet. See <a href="https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md">COVERAGE.md</a> for details.</div>
+        <div class="container main">
+            <div class="editor">
+                <textarea id="source">console.log("Hello world!");</textarea>
+            </div>
             <button onclick="transpile()">Transpile</button>
-        </p>
-        <article>
-            <textarea id="target"></textarea>
-        </article>
+            <div class="editor">
+                <textarea id="target"></textarea>
+            </div>
+        </div>
+
         <script type="text/javascript">
             var sourceEditor = CodeMirror.fromTextArea(document.getElementById('source'), {
                 lineNumbers: true,
@@ -38,12 +45,12 @@
                 mode: 'text/x-csrc'
             });
             targetEditor.setSize('auto', 'auto');
-            function transpile()
-            {
+            function transpile() {
                 var source = sourceEditor.getValue();
                 var transpiled = ts2c.transpile(source);
                 targetEditor.setValue(transpiled);
             }
+            transpile();
         </script>
     </body>
 </html>
