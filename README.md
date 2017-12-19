@@ -157,3 +157,10 @@ In browser (also see **index.html** file):
     alert(cCode);
 </script>
 ```
+
+In Node.js:
+```javascript
+const ts2c = require("ts2c");
+const cCode = ts2c.transpile("console.log('Hello world!')");
+console.log(cCode);
+```
