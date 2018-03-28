@@ -372,7 +372,7 @@ class HeaderFlags {
 
 {#if headerFlags.array_int16_t_cmp}
     int array_int16_t_cmp(const void* a, const void* b) {
-        return ( *(int*)a - *(int*)b );
+        return ( *(int16_t*)a - *(int16_t*)b );
     }
 {/if}
 {#if headerFlags.array_str_cmp}
