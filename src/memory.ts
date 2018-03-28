@@ -278,7 +278,7 @@ export class MemoryManager {
                         let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
                             let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call) || call.expression.getText() == "console.log";
-                            
+
                             if (isStandardCall) {
                                 let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
                                 if (standardCallEscapeNode) {

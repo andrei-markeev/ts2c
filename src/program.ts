@@ -6,34 +6,35 @@ import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
-import './nodes/statements';
-import './nodes/expressions';
 import './nodes/call';
+import './nodes/expressions';
 import './nodes/literals';
+import './nodes/statements';
 
-import './standard/array/push';
-import './standard/array/pop';
-import './standard/array/unshift';
-import './standard/array/shift';
-import './standard/array/splice';
-import './standard/array/slice';
 import './standard/array/concat';
-import './standard/array/join';
+import './standard/array/forEach';
 import './standard/array/indexOf';
+import './standard/array/join';
 import './standard/array/lastIndexOf';
-import './standard/array/sort';
+import './standard/array/pop';
+import './standard/array/push';
 import './standard/array/reverse';
+import './standard/array/shift';
+import './standard/array/slice';
+import './standard/array/sort';
+import './standard/array/splice';
+import './standard/array/unshift';
 
-import './standard/string/search';
-import './standard/string/charCodeAt';
 import './standard/string/charAt';
+import './standard/string/charCodeAt';
 import './standard/string/concat';
-import './standard/string/substring';
-import './standard/string/slice';
-import './standard/string/toString';
 import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
 import './standard/string/match';
+import './standard/string/search';
+import './standard/string/slice';
+import './standard/string/substring';
+import './standard/string/toString';
 
 
 export interface IScope {
@@ -83,7 +84,7 @@ class HeaderFlags {
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring 
+{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring
     || headerFlags.str_slice}
     #include <stdlib.h>
 {/if}
@@ -376,7 +377,7 @@ class HeaderFlags {
     }
 {/if}
 {#if headerFlags.array_str_cmp}
-    int array_str_cmp(const void* a, const void* b) { 
+    int array_str_cmp(const void* a, const void* b) {
         return strcmp(*(const char **)a, *(const char **)b);
     }
 {/if}

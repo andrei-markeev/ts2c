@@ -87,7 +87,7 @@ export class CSimpleBinaryExpression {
     constructor(scope: IScope, public left: CExpression, leftType: CType, public right: CExpression, rightType: CType, operatorKind: ts.SyntaxKind, node: ts.Node) {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
-        
+
         if (leftType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
             leftType = StringVarType;
             this.left = new CRegexAsString(left);
