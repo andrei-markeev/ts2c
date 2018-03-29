@@ -11,6 +11,7 @@ import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
 
+import './standard/array/forEach';
 import './standard/array/push';
 import './standard/array/pop';
 import './standard/array/unshift';
