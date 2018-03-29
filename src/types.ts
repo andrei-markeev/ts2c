@@ -260,6 +260,22 @@ export class TypeHelper {
                     }
                     return null;
                 }
+            case ts.SyntaxKind.FunctionExpression:
+                // let tsType = this.typeChecker.getTypeAtLocation(node);
+                // let type = tsType && this.convertType(tsType);
+                // let call = <ts.CallExpression>node;
+                // let retType = StandardCallHelper.getReturnType(this, call);
+                // console.log(retType);
+                // const signatures = tsType.getCallSignatures();
+                // if (signatures.length == 0) return null;
+                // const returnType = this.typeChecker.getReturnTypeOfSignature(signatures[0]);
+
+                // let varInfo = this.variables[node.pos];
+                // console.log(varInfo && varInfo.type);
+
+                // console.log(returnType);
+                // return this.getCType(signatures[0].declaration);
+                return NumberVarType;
             case ts.SyntaxKind.RegularExpressionLiteral:
                 return RegexVarType;
             case ts.SyntaxKind.ArrayLiteralExpression:
