@@ -29,7 +29,7 @@
   "scripts": {
     "build": "tsc && browserify ts2c.js -x typescript -s ts2c -o ts2c.bundle.js",
     "clean": "cd tests && make clean",
-    "cover": "npm test && cd tests && make -B",
+    "cover": "cd tests && make -B cover",
     "prepublish": "tsc",
     "test": "npm run build && cd tests && make -B all"
   },
