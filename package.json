@@ -10,7 +10,8 @@
     "test": "tests"
   },
   "dependencies": {
-    "typescript": "2.1.6"
+    "typescript": "2.1.6",
+    "yargs": "^11.0.0"
   },
   "devDependencies": {
     "browserify": "^13.0.1",
