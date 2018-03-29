@@ -11,7 +11,7 @@ COVER = $(TS:%.ts=coverage/%)
 %.elf: %.c
 	gcc $< -ansi -pedantic -Wall -g -o $@
 %.res: %.elf
-	valgrind --error-exitcode=1 --leak-check=yes --quiet ./$< > $@
+	./$< > $@
 	diff $@.expect $@
 
 all: $(RES) $(ELF) $(C)
