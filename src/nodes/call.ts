@@ -1,9 +1,10 @@
-import { IScope } from '../program';
+import { IScope, CProgram } from '../program';
 import { StandardCallHelper } from '../resolver';
 import { ConsoleLogHelper } from '../standard/console/log';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import * as ts from 'typescript';
+import {CFunction, CFunctionPrototype} from './function';
 
 @CodeTemplate(`
 {#statements}
@@ -28,11 +29,14 @@ export class CCallExpression {
         this.funcName = call.expression.getText();
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
 
-        if (this.standardCall)
+        if (this.standardCall) {
             return;
+        }
 
         if (this.funcName != "console.log") {
-            this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
+            this.arguments = call.arguments.map(a => {
+                return CodeTemplateFactory.createForNode(scope, a);
+            });
         }
         if (call.expression.kind == ts.SyntaxKind.Identifier && this.funcName == "parseInt") {
             scope.root.headerFlags.int16_t = true;
@@ -48,5 +52,16 @@ export class CCallExpression {
                 scope.root.headerFlags.printf = true;
             }
         }
+    }
+}
+
+@CodeTemplate(`{name}`, ts.SyntaxKind.FunctionExpression)
+export class CFunctionExpression {
+    public name: string;
+
+    constructor(scope: IScope, expression: ts.FunctionExpression) {
+        const dynamicFunction = new CFunction(scope.root, expression);
+        scope.root.functions.push(dynamicFunction);
+        this.name = dynamicFunction.name;
     }
 }
