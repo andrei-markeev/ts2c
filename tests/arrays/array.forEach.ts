@@ -1,10 +1,8 @@
-const int_array = [10, 20, 30];
+const numbers = [30, 40, 50];
 let summ = 0;
 
-function printItem(item = 0) {
+numbers.forEach(function(item) {
 	summ = summ + item;
-};
-
-int_array.forEach(printItem);
+});
 
 console.log(summ);

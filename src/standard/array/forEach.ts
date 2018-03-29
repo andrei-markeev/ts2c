@@ -67,13 +67,9 @@ class CArrayForEach {
 
         let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
 
-        this.iteratorFnAccess = new CElementAccess(scope, call.arguments[0]);
+        this.iteratorFnAccess = args[0];
 
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-
-        if (!this.topExpressionOfStatement) {
-            scope.root.headerFlags.array = false;
-        }
     }
 
 }
