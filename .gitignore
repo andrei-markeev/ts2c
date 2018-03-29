@@ -1,11 +1,12 @@
-node_modules
-ts2c.bundle.js
-*.res
-*.elf
 *.c
+*.elf
 *.js
 *.js.map
+*.plist
+*.res
 .vscode/.browse.*
 .vscode/c_cpp_properties.json
+node_modules
 tests/coverage
 tests_esp
+ts2c.bundle.js

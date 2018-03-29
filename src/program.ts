@@ -6,11 +6,12 @@ import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
-import './nodes/statements';
-import './nodes/expressions';
 import './nodes/call';
+import './nodes/expressions';
 import './nodes/literals';
+import './nodes/statements';
 
+import './standard/array/forEach';
 import './standard/array/push';
 import './standard/array/pop';
 import './standard/array/unshift';
@@ -18,22 +19,22 @@ import './standard/array/shift';
 import './standard/array/splice';
 import './standard/array/slice';
 import './standard/array/concat';
-import './standard/array/join';
 import './standard/array/indexOf';
+import './standard/array/join';
 import './standard/array/lastIndexOf';
-import './standard/array/sort';
 import './standard/array/reverse';
+import './standard/array/sort';
 
-import './standard/string/search';
-import './standard/string/charCodeAt';
 import './standard/string/charAt';
+import './standard/string/charCodeAt';
 import './standard/string/concat';
-import './standard/string/substring';
-import './standard/string/slice';
-import './standard/string/toString';
 import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
 import './standard/string/match';
+import './standard/string/search';
+import './standard/string/slice';
+import './standard/string/substring';
+import './standard/string/toString';
 
 
 export interface IScope {
@@ -83,7 +84,7 @@ class HeaderFlags {
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring 
+{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring
     || headerFlags.str_slice}
     #include <stdlib.h>
 {/if}
@@ -108,7 +109,7 @@ class HeaderFlags {
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
      headerFlags.regex }
-    typedef int int16_t;
+    typedef short int16_t;
 {/if}
 {#if headerFlags.regex}
     struct regex_indices_struct_t {
@@ -372,11 +373,11 @@ class HeaderFlags {
 
 {#if headerFlags.array_int16_t_cmp}
     int array_int16_t_cmp(const void* a, const void* b) {
-        return ( *(int*)a - *(int*)b );
+        return ( *(int16_t*)a - *(int16_t*)b );
     }
 {/if}
 {#if headerFlags.array_str_cmp}
-    int array_str_cmp(const void* a, const void* b) { 
+    int array_str_cmp(const void* a, const void* b) {
         return strcmp(*(const char **)a, *(const char **)b);
     }
 {/if}

@@ -11,9 +11,11 @@ COVER = $(TS:%.ts=coverage/%)
 %.elf: %.c
 	gcc $< -ansi -pedantic -Wall -g -o $@
 %.res: %.elf
-	valgrind --error-exitcode=1 --leak-check=yes --quiet ./$< > $@
+	./$< > $@
 	diff $@.expect $@
 
+
+# all: $(RES) $(ELF) $(C)
 all: $(RES) $(ELF) $(C)
 
 coverage/%: %.ts
@@ -25,8 +27,9 @@ coverage/html/index.html: coverage/coverage-final.json
 
 cover: coverage/html/index.html
 
-clean: 
+clean:
 	rm -f **/*.elf
+	rm -rf **/*.elf*
 	rm -f **/*.res
 	rm -f **/*.c
 	rm -rf coverage
