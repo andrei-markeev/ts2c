@@ -11,6 +11,7 @@ import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
 
+import './standard/array/forEach';
 import './standard/array/push';
 import './standard/array/pop';
 import './standard/array/unshift';
@@ -108,7 +109,7 @@ class HeaderFlags {
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
      headerFlags.regex }
-    typedef int int16_t;
+    typedef short int16_t;
 {/if}
 {#if headerFlags.regex}
     struct regex_indices_struct_t {
@@ -372,7 +373,7 @@ class HeaderFlags {
 
 {#if headerFlags.array_int16_t_cmp}
     int array_int16_t_cmp(const void* a, const void* b) {
-        return ( *(int*)a - *(int*)b );
+        return ( *(int16_t*)a - *(int16_t*)b );
     }
 {/if}
 {#if headerFlags.array_str_cmp}
