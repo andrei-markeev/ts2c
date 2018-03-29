@@ -191,6 +191,20 @@ export class TypeHelper {
                 return StringVarType;
             case ts.SyntaxKind.Identifier:
                 {
+                    // is parameter of a function
+                    if (node.parent.kind == ts.SyntaxKind.Parameter) {
+                        let parentCall = this.findParentCallExpression(node);
+                        // the function is inside a call expression
+                        if (parentCall) {
+                            const propAccess = <ts.PropertyAccessExpression>parentCall.expression;
+                            let parentObjectType = this.getCType(propAccess.expression);
+                            // the call expression is on an Array
+                            if (parentObjectType instanceof ArrayType) {
+                                // return the type of the Array
+                                return this.getCType(propAccess.parent);
+                            }
+                        }
+                    }
                     let varInfo = this.getVariableInfo(<ts.Identifier>node);
                     return varInfo && varInfo.type || null;
                 }
@@ -401,6 +415,14 @@ export class TypeHelper {
             parentFunc = parentFunc.parent;
         }
         return <ts.FunctionDeclaration>parentFunc;
+    }
+
+    public findParentCallExpression(node: ts.Node): ts.CallExpression {
+        let parentCall = node;
+        while (parentCall && parentCall.kind != ts.SyntaxKind.CallExpression) {
+            parentCall = parentCall.parent;
+        }
+        return <ts.CallExpression>parentCall;
     }
 
     private findVariablesRecursively(node: ts.Node) {
