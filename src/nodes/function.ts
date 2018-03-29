@@ -1,8 +1,13 @@
 import * as ts from 'typescript';
+import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../types';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {IScope, CProgram} from '../program';
-import {ArrayType} from '../types';
 import {CVariable, CVariableDestructors} from './variable';
+import {IScope, CProgram} from '../program';
+import {StandardCallResolver, IResolver} from '../resolver';
+import { CExpression } from './expressions';
+import { StandardCallHelper } from '../resolver';
+
+let anonymousNameCounter = 0;
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype {
@@ -37,15 +42,24 @@ export class CFunction implements IScope {
     public statements: any[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
-    constructor(public root: CProgram, funcDecl: ts.FunctionDeclaration) {
-        this.parent = root;
-        this.returnType = root.typeHelper.getTypeString(funcDecl);
 
-        this.name = funcDecl.name.getText();
-        this.parameters = funcDecl.parameters.map(p => new CVariable(this, p.name.getText(), p.name, { removeStorageSpecifier: true }));
+    constructor(public root: CProgram, node: ts.FunctionDeclaration | ts.FunctionExpression) {
+        this.parent = root;
+        this.returnType = root.typeHelper.getTypeString(node);
+
+        if (node.name) {
+            this.name = node.name.getText();
+        }
+        else {
+            this.name = `anonymousFunction${anonymousNameCounter++}`;
+        }
+
+        this.parameters = node.parameters.map(p => {
+            return new CVariable(this, p.name.getText(), p.name, { removeStorageSpecifier: true });
+        });
         this.variables = [];
 
-        this.gcVarNames = root.memoryManager.getGCVariablesForScope(funcDecl);
+        this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
         for (let gcVarName of this.gcVarNames) {
             if (root.variables.filter(v => v.name == gcVarName).length)
                 continue;
@@ -53,11 +67,10 @@ export class CFunction implements IScope {
             root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 
-        funcDecl.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
+        node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
-        if (funcDecl.body.statements[funcDecl.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
-            this.destructors = new CVariableDestructors(this, funcDecl);
+        if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
+            this.destructors = new CVariableDestructors(this, node);
         }
-
     }
 }
