@@ -11,19 +11,19 @@ import './nodes/expressions';
 import './nodes/literals';
 import './nodes/statements';
 
-import './standard/array/concat';
 import './standard/array/forEach';
+import './standard/array/push';
+import './standard/array/pop';
+import './standard/array/unshift';
+import './standard/array/shift';
+import './standard/array/splice';
+import './standard/array/slice';
+import './standard/array/concat';
 import './standard/array/indexOf';
 import './standard/array/join';
 import './standard/array/lastIndexOf';
-import './standard/array/pop';
-import './standard/array/push';
 import './standard/array/reverse';
-import './standard/array/shift';
-import './standard/array/slice';
 import './standard/array/sort';
-import './standard/array/splice';
-import './standard/array/unshift';
 
 import './standard/string/charAt';
 import './standard/string/charCodeAt';
