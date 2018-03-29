@@ -13,9 +13,7 @@ const yargs = require('yargs')
   .describe('version', 'Prints current version')
   .help('h')
   .epilog('Copyright 2018')
-  .version(function() {
-    return require('../package').version;
-  });
+  .version(true, require('../package').version);
 
 if (yargs.argv._.length === 0) {
 	yargs.showHelp();
