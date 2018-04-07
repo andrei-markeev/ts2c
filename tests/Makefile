@@ -10,9 +10,20 @@ COVER = $(TS:%.ts=coverage/%)
 	node ../bin/ts2c $<
 %.elf: %.c
 	gcc $< -ansi -pedantic -Wall -g -o $@
+
+ifeq ($(VALGRIND),skip)
+
+%.res: %.elf
+	./$< > $@
+	diff --strip-trailing-cr $@.expect $@
+
+else
+
 %.res: %.elf
 	valgrind --error-exitcode=1 --leak-check=yes --quiet ./$< > $@
 	diff $@.expect $@
+
+endif
 
 all: $(RES) $(ELF) $(C)
 

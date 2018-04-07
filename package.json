@@ -26,10 +26,11 @@
     "typescript": "global:ts"
   },
   "scripts": {
-    "prepublish": "tsc",
-    "build": "browserify main.js -x typescript -s ts2c -o ts2c.bundle.js",
-    "cover": "cd tests && make -B cover",
-    "test": "cd tests && make -B"
+    "prepublishOnly": "tsc",
+    "build": "tsc && browserify main.js -x typescript -s ts2c -o ts2c.bundle.js",
+    "cover": "tsc && cd tests && make -B cover",
+    "test": "tsc && cd tests && make -B",
+    "test-no-valgrind": "tsc && cd tests && make -B VALGRIND=skip"
   },
   "repository": {
     "type": "git",
