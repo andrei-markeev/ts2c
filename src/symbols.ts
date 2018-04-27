@@ -27,29 +27,38 @@ export class SymbolsHelper {
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     
     public collectVariablesInfo(startNode: ts.Node) {
+        const findAssignedValue = (n: ts.Node) => {
+            if (is.PropertyAssignment(n.parent) && n.parent.name == n)
+                return n.parent.initializer;
+            if (is.VariableDeclaration(n.parent) && n.parent.name == n)
+                return n.parent.initializer;
+            if (is.BinaryExpression(n.parent) && n.parent.left == n && n.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken)
+                return n.parent.right;
+            return null;
+        };
         processAllNodes(startNode, node => {
-            if (is.Identifier(node)) {
-                let decl = getDeclaration(this.typeChecker, node);
-                if (decl) {
-                    let varInfo = this.variables[decl.pos];
-                    if (!varInfo) {
-                        varInfo = this.variables[decl.pos] = {
-                            name: decl.name.getText(),
-                            type: this.typeHelper.getCType(node),
-                            references: [],
-                            declaration: node,
-                            requiresAllocation: false
-                        };
-                        if (varInfo.type instanceof StructType)
-                            this.registerStructure(<StructType>varInfo.type, decl.name.getText());
-                    }
-
-                    varInfo.references.push(node);
-                    if (is.ObjectLiteralExpression(node) && varInfo.type instanceof StructType)
-                        varInfo.requiresAllocation = true;
-                    if (is.ArrayLiteralExpression(node) && varInfo.type instanceof ArrayType)
-                        varInfo.requiresAllocation = true;
+            let decl = getDeclaration(this.typeChecker, node);
+            if (decl) {
+                let varInfo = this.variables[decl.pos];
+                if (!varInfo) {
+                    varInfo = this.variables[decl.pos] = {
+                        name: decl.name && decl.name.getText() || "anonymous" + Object.keys(this.variables).length,
+                        type: this.typeHelper.getCType(node),
+                        references: [],
+                        declaration: node,
+                        requiresAllocation: false
+                    };
+                    if (varInfo.type instanceof StructType)
+                        this.registerStructure(<StructType>varInfo.type, decl.name.getText());
                 }
+
+                varInfo.references.push(node);
+                let assigned = findAssignedValue(node);
+                if (is.ObjectLiteralExpression(assigned) && varInfo.type instanceof StructType)
+                    varInfo.requiresAllocation = true;
+                if (is.ArrayLiteralExpression(assigned) && varInfo.type instanceof ArrayType)
+                    varInfo.requiresAllocation = true;
+
             }
         });
 
@@ -94,7 +103,7 @@ export class SymbolsHelper {
 
         if (!found) {
             this.userStructs[structName] = structType;
-            structType.structName = structName;
+            structType.structName = 'struct ' + structName + ' *';
         }
         return this.userStructs[structName];
     }
@@ -125,8 +134,9 @@ export class SymbolsHelper {
         let varPos = symbol ? symbol.valueDeclaration.pos : node.pos;
         let varInfo = this.variables[varPos];
         if (varInfo && propKey) {
-            let propPos = varInfo.varDeclPosByPropName[propKey];
-            varInfo = this.variables[propPos];
+            throw new Error("TODO");
+            //let propPos = varInfo.varDeclPosByPropName[propKey];
+            //varInfo = this.variables[propPos];
         }
         return varInfo;
     }

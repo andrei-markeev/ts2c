@@ -107,7 +107,7 @@ export function processAllNodes(startNode: ts.Node, callback: { (n: ts.Node): vo
 }
 export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
     let s = typechecker.getSymbolAtLocation(n);
-    return s && s.valueDeclaration
+    return s && <ts.NamedDeclaration>s.valueDeclaration
 }
 
 
@@ -182,29 +182,27 @@ export class TypeHelper {
             return StringVarType;
         if (tsType.flags == ts.TypeFlags.Number || tsType.flags == ts.TypeFlags.NumberLiteral)
             return NumberVarType;
-        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean+ts.TypeFlags.Union))
+        if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
             return BooleanVarType;
-
-        if (tsType.flags & ts.TypeFlags.Object) {
+        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0)
             return this.generateStructure(tsType);
-        }
-
         if (tsType.flags == ts.TypeFlags.Any)
             return PointerVarType;
 
-        console.log("Non-standard type: " + this.typeChecker.typeToString(tsType));
+        if (this.typeChecker.typeToString(tsType) != "{}")
+            console.log("WARNING: Non-standard type: " + this.typeChecker.typeToString(tsType));
         return PointerVarType;
     }
     
     private generateStructure(tsType: ts.Type): StructType {
         let userStructInfo: PropertiesDictionary = {};
         for (let prop of tsType.getProperties()) {
-            let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
-            let propType = this.convertType(propTsType, <ts.Identifier>prop.valueDeclaration.name);
-            if (propType == PointerVarType && is.PropertyAssignment(prop.valueDeclaration)) {
-                let propAssignment = <ts.PropertyAssignment>prop.valueDeclaration;
-                if (propAssignment.initializer && is.ArrayLiteralExpression(propAssignment.initializer))
-                    propType = this.determineArrayType(<ts.ArrayLiteralExpression>propAssignment.initializer);
+            let declaration = <ts.NamedDeclaration>prop.valueDeclaration;
+            let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, declaration);
+            let propType = this.convertType(propTsType, <ts.Identifier>declaration.name);
+            if (propType == PointerVarType && is.PropertyAssignment(declaration)) {
+                if (declaration.initializer && is.ArrayLiteralExpression(declaration.initializer))
+                    propType = this.determineArrayType(<ts.ArrayLiteralExpression>declaration.initializer);
             }
             userStructInfo[prop.name] = propType;
         }
@@ -262,7 +260,10 @@ export class TypeHelper {
 
         this.addTypeEquality(is.Identifier, n => n, n => getDeclaration(this.typeChecker, n));
         this.addTypeEquality(is.PropertyAccessExpression, n => n, this.transforms.propertyOf(n => n.expression, n => n.name.getText()));
-        this.addTypeEquality(is.ElementAccessExpression, n => n, this.transforms.propertyOf(n => n.expression, n => n.argumentExpression.getText().slice(1, -1)));
+        this.addTypeEquality(is.ElementAccessExpression, n => n, this.transforms.propertyOf(n => n.expression, n => {
+            let text = n.argumentExpression.getText();
+            return text.indexOf('"') == 0 ? text.slice(1, -1) : text
+        }));
         this.addTypeEquality(is.CallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
         
         this.addTypeEquality(is.VariableDeclaration, n => n, n => n.initializer);
@@ -301,6 +302,9 @@ export class TypeHelper {
             }
         });
 
+        for (let eq of equalities.filter(eq => eq.node1 && eq.node2))
+            console.log(eq.node1.getText()," == ",eq.node2.getText(), eq.node2Property ? "prop:" + eq.node2Property : "");
+
         let changed;
         do {
             changed = false;
@@ -310,18 +314,22 @@ export class TypeHelper {
                 
                 let type1 = this.getCType(equality.node1);
                 let type2 = equality.node2Transform(this.getCType(equality.node2), equality.node2Property);
-                let { type } = this.mergeTypes(type1, type2);
-                if (type && type1 != type2) {
+                let { type, replaced } = this.mergeTypes(type1, type2);
+                if (type && replaced) {
                     changed = true;
                     this.setTypeOfNode(equality.node1, type);
                     if (!equality.node2Property)
                         this.setTypeOfNode(equality.node2, type);
                     else {
                         let node2Type = this.getCType(equality.node2);
+                        if (!node2Type) {
+                            node2Type = new StructType("", {});
+                            this.setTypeOfNode(equality.node2, node2Type);
+                        }
                         if (node2Type instanceof StructType)
                             node2Type.properties[equality.node2Property] = type;
-                        else
-                            console.log("Internal error: accessing property " + equality.node2Property + " of non-structure.");
+                        else if (!(node2Type instanceof ArrayType) || isNaN(+equality.node2Property))
+                            console.log("Internal error: accessing property " + equality.node2Property + " of ", node2Type);
                     }
                 }
             }
@@ -344,79 +352,100 @@ export class TypeHelper {
         return type;
     }
 
-    private mergeTypes(currentType: CType, newType: CType) {
-        let newResult = { type: newType, replaced: true };
-        let currentResult = { type: currentType, replaced: false };
+    private mergeTypes(type1: CType, type2: CType) {
+        let type2_result = { type: type2, replaced: true };
+        let type1_result = { type: type1, replaced: true };
+        let noChanges = { type: type1, replaced: false };
 
-        if (!currentType && newType)
-            return newResult;
-        else if (!newType)
-            return currentResult;
+        if (!type1 && type2)
+            return type2_result;
+        else if (!type2)
+            return type1_result;
+
+        else if (typeof type1 == "string" && typeof type2 == "string" && type1 == type2)
+            return noChanges;
             
-        else if (newType == VoidType)
-            return currentResult;
-        else if (newType == PointerVarType)
-            return currentResult;
-        else if (newType == UniversalVarType)
-            return currentResult;
+        else if (type1 == VoidType)
+            return type2_result;
+        else if (type1 == PointerVarType)
+            return type2_result;
+        else if (type1 == UniversalVarType)
+            return type2_result;
 
-        else if (currentType == VoidType)
-            return newResult;
-        else if (currentType == PointerVarType)
-            return newResult;
-        else if (currentType == UniversalVarType)
-            return newResult;
+        else if (type2 == VoidType)
+            return type1_result;
+        else if (type2 == PointerVarType)
+            return type1_result;
+        else if (type2 == UniversalVarType)
+            return type1_result;
 
-        else if (currentType == StringVarType && newType == StringVarType)
-            return currentResult;
-        else if (currentType == NumberVarType && newType == NumberVarType)
-            return currentResult;
-        else if (currentType == BooleanVarType && newType == BooleanVarType)
-            return currentResult;
+        else if (type1 instanceof ArrayType && type2 instanceof ArrayType) {
+            let changed = false;
+            let cap = Math.max(type2.capacity, type1.capacity);
+            let isDynamicArray = type2.isDynamicArray || type1.isDynamicArray;
+            let elementTypeMergeResult = this.mergeTypes(type1.elementType, type2.elementType);
+            if (type1.capacity != cap || type2.capacity != cap
+                || type1.isDynamicArray != isDynamicArray || type2.isDynamicArray != isDynamicArray
+                || elementTypeMergeResult.replaced)
+                return { type: new ArrayType(elementTypeMergeResult.type, cap, isDynamicArray), changed: true };
 
-        else if (currentType instanceof ArrayType && newType instanceof ArrayType) {
-            let cap = Math.max(newType.capacity, currentType.capacity);
-            newType.capacity = cap;
-            currentType.capacity = cap;
-            let isDynamicArray = newType.isDynamicArray || currentType.isDynamicArray;
-            newType.isDynamicArray = isDynamicArray;
-            currentType.isDynamicArray = isDynamicArray;
-
-            let mergeResult = this.mergeTypes(currentType.elementType, newType.elementType);
-            newType.elementType = mergeResult.type;
-            currentType.elementType = mergeResult.type;
-            if (mergeResult.replaced)
-                return newResult;
-
-            return currentResult;
+            return noChanges;
         }
-        else if (currentType instanceof DictType && newType instanceof ArrayType) {
-            if (newType.elementType == currentType.elementType || currentType.elementType == PointerVarType)
-                return newResult;
+        else if (type1 instanceof DictType && type2 instanceof ArrayType) {
+            return type1_result;
         }
-        else if (currentType instanceof ArrayType && newType instanceof DictType) {
-            if (newType.elementType == currentType.elementType || newType.elementType == PointerVarType)
-                return currentResult;
+        else if (type1 instanceof ArrayType && type2 instanceof DictType) {
+            return type2_result;
         }
-        else if (currentType instanceof StructType && newType instanceof StructType) {
-            let props = Object.keys(currentType.properties).concat(Object.keys(newType.properties));
+        else if (type1 instanceof StructType && type2 instanceof StructType) {
+            let props = Object.keys(type1.properties).concat(Object.keys(type2.properties));
+            let changed = false;
             for (let p of props) {
-                newType.properties[p] = this.mergeTypes(currentType.properties[p], newType.properties[p]).type;
+                let result = this.mergeTypes(type1.properties[p], type2.properties[p]);
+                type2.properties[p] = result.type;
+                if (!type1.properties[p] || result.replaced)
+                    changed = true;
             }
-            return newResult;
+            return changed ? type2_result : noChanges;
         }
-        else if (currentType instanceof StructType && newType instanceof DictType) {
-            return newResult;
+        else if (type1 instanceof ArrayType && type2 instanceof StructType) {
+            return this.mergeArrayAndStruct(type1, type2);
         }
-        else if (currentType instanceof DictType && newType instanceof DictType) {
-            if (newType.elementType != PointerVarType && currentType.elementType == PointerVarType)
-                return newResult;
+        else if (type1 instanceof StructType && type2 instanceof ArrayType) {
+            return this.mergeArrayAndStruct(type2, type1);
+        }
+        else if (type1 instanceof StructType && type2 instanceof DictType) {
+            return type2_result;
+        }
+        else if (type1 instanceof DictType && type2 instanceof DictType) {
+            if (type2.elementType != PointerVarType && type1.elementType == PointerVarType)
+                return type2_result;
 
-            return currentResult;
+            return noChanges;
         }
 
-        console.log("WARNING: candidate for UniversalVarType! Current: " + this.getTypeString(currentType) + ", new: " + this.getTypeString(newType));
-        return currentResult;
+        console.log("WARNING: candidate for UniversalVarType! Current: " + this.getTypeString(type1) + ", new: " + this.getTypeString(type2));
+        return noChanges;
+    }
+
+    private mergeArrayAndStruct(arrayType: ArrayType, structType: StructType) {
+        let props = Object.keys(structType.properties);
+        let needPromoteToDictionary = false;
+        let needPromoteToTuple = false;
+        for (let p of props) {
+            if (isNaN(+p))
+                needPromoteToDictionary = true;
+            if (this.mergeTypes(arrayType.elementType, structType.properties[p]).replaced)
+                needPromoteToTuple = true;
+        }
+        if (needPromoteToDictionary && needPromoteToTuple)
+            return { type: new DictType(UniversalVarType), replaced: true };
+        else if (needPromoteToDictionary)
+            return { type: new DictType(arrayType.elementType), replaced: true };
+        else if (needPromoteToTuple)
+            return { type: new ArrayType(UniversalVarType, arrayType.capacity, arrayType.isDynamicArray), replaced: true };
+        else
+            return { type: arrayType, replaced: false };
     }
 
 }
