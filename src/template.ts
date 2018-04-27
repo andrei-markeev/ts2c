@@ -32,7 +32,7 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
                 for (let nk of nodeKind)
                     nodeKindTemplates[nk] = <any>newConstructor;
         }
-        return newConstructor;
+        return <any>newConstructor;
     };
 }
 

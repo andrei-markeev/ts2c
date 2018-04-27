@@ -33,7 +33,7 @@ export class CVariableDeclaration {
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
-        let varInfo = scope.root.typeHelper.getVariableInfo(<ts.Identifier>varDecl.name);
+        let varInfo = scope.root.symbolsHelper.getVariableInfo(<ts.Identifier>varDecl.name);
         scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
         if (varInfo.requiresAllocation)
             this.allocator = new CVariableAllocation(scope, varInfo.name, varInfo.type, varDecl.name);

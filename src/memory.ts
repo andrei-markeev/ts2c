@@ -1,7 +1,9 @@
 import * as ts from 'typescript';
+import * as is from './typeguards';
 import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
 import {StandardCallHelper} from './resolver';
 import {StringMatchResolver} from './standard/string/match';
+import { SymbolsHelper } from './symbols';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -20,12 +22,12 @@ export class MemoryManager {
     private reusedVariables: { [key: string]: string } = {};
     private originalNodes: { [key: string]: ts.Node } = {};
 
-    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
+    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
     public preprocessVariables() {
 
-        for (let k in this.typeHelper.variables) {
-            let v = this.typeHelper.variables[k];
+        for (let k in this.symbolsHelper.variables) {
+            let v = this.symbolsHelper.variables[k];
             if (v.requiresAllocation)
                 this.scheduleNodeDisposal(v.declaration, false);
         }
@@ -218,12 +220,12 @@ export class MemoryManager {
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
                 let varIdent = <ts.Identifier>node;
-                let nodeVarInfo = this.typeHelper.getVariableInfo(varIdent);
+                let nodeVarInfo = this.symbolsHelper.getVariableInfo(varIdent);
                 if (!nodeVarInfo) {
                     console.log("WARNING: Cannot find references for " + node.getText());
                     continue;
                 }
-                refs = this.typeHelper.getVariableInfo(varIdent).references;
+                refs = this.symbolsHelper.getVariableInfo(varIdent).references;
             }
             let returned = false;
             for (let ref of refs) {
@@ -277,7 +279,7 @@ export class MemoryManager {
                     } else {
                         let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
-                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call) || call.expression.getText() == "console.log";
+                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
                             
                             if (isStandardCall) {
                                 let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
@@ -322,14 +324,14 @@ export class MemoryManager {
 
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
-        if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
-        else if (heapNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
-        else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
-        else if (heapNode.kind == ts.SyntaxKind.CallExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
+        if (is.ArrayLiteralExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_array");
+        else if (is.ObjectLiteralExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_obj");
+        else if (is.BinaryExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+        else if (is.CallExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
             varName = heapNode.getText().replace(/\./g, "->");
 

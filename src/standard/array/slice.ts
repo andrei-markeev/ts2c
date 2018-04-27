@@ -80,14 +80,14 @@ class CArraySlice {
             let type = scope.root.typeHelper.getCType(propAccess.expression);
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, type));
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-            this.sizeVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_size");
+            this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_size");
             scope.variables.push(new CVariable(scope, this.sizeVarName, NumberVarType));
-            this.startVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_start");
+            this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_start");
             scope.variables.push(new CVariable(scope, this.startVarName, NumberVarType));
             if (args.length == 2) {
-                this.endVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "slice_end");
+                this.endVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_end");
                 scope.variables.push(new CVariable(scope, this.endVarName, NumberVarType));
             }
         }

@@ -60,9 +60,9 @@ class CArrayReverse {
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        this.iteratorVar1 = scope.root.typeHelper.addNewIteratorVariable(call);
-        this.iteratorVar2 = scope.root.typeHelper.addNewIteratorVariable(call);
-        this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(call, "temp");
+        this.iteratorVar1 = scope.root.symbolsHelper.addIterator(call);
+        this.iteratorVar2 = scope.root.symbolsHelper.addIterator(call);
+        this.tempVarName = scope.root.symbolsHelper.addTemp(call, "temp");
         scope.variables.push(new CVariable(scope, this.iteratorVar1, NumberVarType));
         scope.variables.push(new CVariable(scope, this.iteratorVar2, NumberVarType));
         scope.variables.push(new CVariable(scope, this.tempVarName, type.elementType))

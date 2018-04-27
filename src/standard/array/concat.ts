@@ -66,7 +66,7 @@ class CArrayConcat {
             let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(type.elementType, 0, true)));
-            this.indexVarName = scope.root.typeHelper.addNewIteratorVariable(call);
+            this.indexVarName = scope.root.symbolsHelper.addIterator(call);
             scope.variables.push(new CVariable(scope, this.indexVarName, NumberVarType));
             let args = call.arguments.map(a => ({ node: a, template: CodeTemplateFactory.createForNode(scope, a) }));
             let toConcatenate = [{node: <ts.Node>propAccess.expression, template: this.varAccess}].concat(args);
@@ -116,7 +116,7 @@ class CConcatValue {
         this.isArray = type instanceof ArrayType;
         this.staticArraySize = type instanceof ArrayType && !type.isDynamicArray && type.capacity;
         if (this.isArray) {
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(valueNode);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(valueNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         }
     }

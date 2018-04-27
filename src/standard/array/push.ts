@@ -57,7 +57,7 @@ class CArrayPush {
         this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, a));
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
+            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
         }
         scope.root.headerFlags.array = true;

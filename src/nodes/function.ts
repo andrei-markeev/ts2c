@@ -74,3 +74,14 @@ export class CFunction implements IScope {
         }
     }
 }
+
+@CodeTemplate(`{name}`, ts.SyntaxKind.FunctionExpression)
+export class CFunctionExpression {
+    public name: string;
+
+    constructor(scope: IScope, expression: ts.FunctionExpression) {
+        const dynamicFunction = new CFunction(scope.root, expression);
+        scope.root.functions.push(dynamicFunction);
+        this.name = dynamicFunction.name;
+    }
+}

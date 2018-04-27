@@ -1,14 +1,52 @@
 import * as ts from 'typescript';
+import * as is from '../../typeguards';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType, RegexVarType} from '../../types';
+import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType} from '../../types';
 import {IScope} from '../../program';
 import {CExpression} from '../../nodes/expressions';
 import {CCallExpression} from '../../nodes/call';
 import {CVariable} from '../../nodes/variable';
+import { StandardCallResolver, IResolver } from '../../resolver';
 
-export class ConsoleLogHelper {
-    public static create(scope: IScope, printNodes: ts.Expression[]) {
+@StandardCallResolver
+class ConsoleLogResolver implements IResolver {
+    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
+        if (!is.PropertyAccessExpression(call.expression))
+            return false;
+        return call.expression.getText() == "console.log";
+    }
+    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return VoidType;
+    }
+    public createTemplate(scope: IScope, node: ts.CallExpression) {
+        return new CConsoleLog(scope, node);
+    }
+    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return false;
+    }
+    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
+}
+
+
+@CodeTemplate(`
+{#statements}
+    {#if printfCalls.length}
+        {printfCalls => {this}\n}
+    {/if}
+{/statements}
+{printfCall}`)
+class CConsoleLog {
+    public printfCalls: any[] = [];
+    public printfCall: any = null;
+
+    constructor(scope: IScope, node: ts.CallExpression) {
         let printfs = [];
+        let printNodes = node.arguments;
         for (let i = 0; i < printNodes.length; i++) {
             let printNode = printNodes[i];
             let type = scope.root.typeHelper.getCType(printNode);
@@ -43,7 +81,9 @@ export class ConsoleLogHelper {
                 printfs.push(new CPrintf(scope, node, accessor, type, options));
             }
         }
-        return printfs;
+        this.printfCalls = printfs.slice(0, -1);
+        this.printfCall = printfs[printfs.length - 1];
+        scope.root.headerFlags.printf = true;
     }
 }
 
@@ -149,7 +189,7 @@ class CPrintf {
 
         if (varType instanceof ArrayType) {
             this.isArray = true;
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.arraySize = varType.isDynamicArray ? accessor + "->size" : varType.capacity + "";
             let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
@@ -160,7 +200,7 @@ class CPrintf {
         }
         else if (varType instanceof DictType) {
             this.isDict = true;
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             let opts = { quotedString: true, indent: this.INDENT + "    " };
             this.elementPrintfs = [

@@ -48,7 +48,7 @@ class CArrayShift {
     constructor(scope: IScope, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.expression);
-        this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "value");
+        this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "value");
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         scope.variables.push(new CVariable(scope, this.tempVarName, type.elementType));
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;

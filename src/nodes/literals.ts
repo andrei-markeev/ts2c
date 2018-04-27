@@ -16,7 +16,7 @@ class CArrayLiteralExpression {
             let varName: string;
             let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
             if (!type.isDynamicArray && canUseInitializerList) {
-                varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                varName = scope.root.symbolsHelper.addTemp(node, "tmp_array");
                 let s = "{ ";
                 for (let i = 0; i < arrSize; i++) {
                     if (i != 0)
@@ -42,7 +42,7 @@ class CArrayLiteralExpression {
                 }
                 else
                 {
-                    varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                    varName = scope.root.symbolsHelper.addTemp(node, "tmp_array");
                     scope.variables.push(new CVariable(scope, varName, type));
                 }
 
@@ -101,7 +101,7 @@ class CRegexLiteralExpression {
     constructor(scope: IScope, node: ts.RegularExpressionLiteral) {
         let template = node.text;
         if (!regexNames[template]) {
-            regexNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex");
+            regexNames[template] = scope.root.symbolsHelper.addTemp(null, "regex");
             scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearchFunction(scope, template, regexNames[template]));
         }
         this.expression = regexNames[template];

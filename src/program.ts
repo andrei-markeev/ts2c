@@ -1,6 +1,7 @@
 import * as ts from 'typescript'
-import {MemoryManager} from './memory';
 import {TypeHelper, ArrayType} from './types';
+import {SymbolsHelper} from './symbols';
+import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
 import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
@@ -36,6 +37,7 @@ import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
 import './standard/string/match';
 
+import './standard/console/log';
 
 export interface IScope {
     parent: IScope;
@@ -461,19 +463,22 @@ export class CProgram implements IScope {
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
     public typeHelper: TypeHelper;
+    public symbolsHelper: SymbolsHelper;
     public memoryManager: MemoryManager;
     public typeChecker: ts.TypeChecker;
     constructor(tsProgram: ts.Program) {
 
         this.typeChecker = tsProgram.getTypeChecker();
         this.typeHelper = new TypeHelper(this.typeChecker);
-        this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper);
+        this.symbolsHelper = new SymbolsHelper(this.typeChecker, this.typeHelper);
+        this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
 
-        this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
-
-        this.memoryManager.preprocessVariables();
-        for (let source of tsProgram.getSourceFiles())
+        for (let source of tsProgram.getSourceFiles()) {
+            this.typeHelper.inferTypes(source);
+            this.symbolsHelper.collectVariablesInfo(source);
+            this.memoryManager.preprocessVariables();
             this.memoryManager.preprocessTemporaryVariables(source);
+        }
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
@@ -492,14 +497,12 @@ export class CProgram implements IScope {
             }
         }
 
-        let [structs, functionPrototypes] = this.typeHelper.getStructsAndFunctionPrototypes();
+        let [structs, functionPrototypes] = this.symbolsHelper.getStructsAndFunctionPrototypes();
 
-        this.userStructs = structs.map(s => {
-            return {
-                name: s.name,
-                properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
-            };
-        });
+        this.userStructs = structs.map(s => ({
+            name: s.name,
+            properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
+        }));
         this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
 
         this.destructors = new CVariableDestructors(this, null);
