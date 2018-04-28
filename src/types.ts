@@ -110,23 +110,20 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
     return s && <ts.NamedDeclaration>s.valueDeclaration
 }
 
-
-type TypeTransform = { (t: CType, param?: string): CType };
-type NodeFunc<T> = { (n: T): ts.Node };
-type PropFunc<T> = { (n: T): string };
-type WrappedNodeFunc<T> = { nodeFunc: NodeFunc<T>, propFunc?: PropFunc<T>, typeTransform: TypeTransform };
-type TypeEquality = { typeGuard: {(n): n is any}, getNode: NodeFunc<any>, equalTo: WrappedNodeFunc<any> };
-const createWrappedNodeFunc = (tt: TypeTransform) => <T>(nf: NodeFunc<T>, pf?: PropFunc<T>): WrappedNodeFunc<T> => ({ nodeFunc: nf, propFunc: pf, typeTransform: tt });
+type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
+type NodeResolver<T extends ts.Node> = { getNode: NodeFunc<T>, getProp: { (n: T): string }, getType: { (t: CType, n: T, param?: string): CType }, setType: { (n, t, p): void } };
+type Equality<T extends ts.Node> = [ { (n): n is T }, NodeFunc<T>, NodeResolver<T> ];
 
 export class TypeHelper {
 
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
+    private typeOfNodeDict: {[id: string]: {node: ts.Node, type: CType}} = {};
 
     constructor(private typeChecker: ts.TypeChecker) { }
 
     public getCType(node: ts.Node): CType {
-        if (!node.kind)
+        if (!node || !node.kind)
             return null;
 
         let found = this.typeOfNodeDict[node.pos + "_" + node.end];
@@ -171,6 +168,126 @@ export class TypeHelper {
         
         return null;
     }
+    
+    /** Get textual representation of type of the parameter for inserting into the C code */
+    public getTypeString(source) {
+
+        if (source.flags != null && source.intrinsicName != null) // ts.Type
+            source = this.convertType(source)
+        else if (source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
+            source = this.convertType(source)
+        else if (source.kind != null && source.flags != null) // ts.Node
+            source = this.getCType(source);
+        //else if (source.name != null && source.flags != null && source.valueDeclaration != null && source.declarations != null) //ts.Symbol
+        //    source = this.variables[source.valueDeclaration.pos].type;
+
+        if (source instanceof ArrayType) {
+            return source.getText();
+        } else if (source instanceof StructType)
+            return source.getText();
+        else if (source instanceof DictType)
+            return source.getText();
+        else if (typeof source === 'string')
+            return source;
+        else
+            throw new Error("Unrecognized type source");
+    }
+
+    public inferTypes(startNode: ts.Node) {
+
+        const propertyOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>, propFunc: { (n: T): string }): NodeResolver<T> => ({
+            getNode: nodeFunc,
+            getProp: propFunc,
+            getType: (t, n, p) => t instanceof StructType && t.properties[p],
+            setType: (n, t, p) => this.setNodeType(n, this.mergeTypes(this.getCType(n), new StructType("", { [p]: t })).type)
+        });
+        const elementOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>): NodeResolver<T> => ({
+            getNode: nodeFunc,
+            getProp: n => null,
+            getType: (t, n, p) => t instanceof ArrayType && t.elementType,
+            setType: (n, t, p) => this.setNodeType(n, this.mergeTypes(this.getCType(n), new ArrayType(t, 0, false)).type)
+        });
+
+        let typeEqualities: Equality<any>[] = [];
+
+        const addEquality = <T extends ts.Node>(typeGuard: { (n): n is T }, node1: NodeFunc<T>, node2: string | NodeFunc<T> | NodeResolver<T>) => {
+            if (typeof node2 == "string")
+                typeEqualities.push([ typeGuard, node1, { getNode: node1, getProp: n => null, getType: t => node2, setType: (n, t, p) => null } ]);
+            else if (typeof node2 == "function")
+                typeEqualities.push([ typeGuard, node1, { getNode: node2, getProp: n => null, getType: t => t, setType: this.setNodeType.bind(this) }]);
+            else
+                typeEqualities.push([ typeGuard, node1, node2 ]);
+        };
+
+        // Define nodes that have equal types below
+
+        addEquality(is.Identifier, n => n, n => getDeclaration(this.typeChecker, n));
+        addEquality(is.PropertyAccessExpression, n => n, propertyOf(n => n.expression, n => n.name.getText()));
+        addEquality(is.ElementAccessExpression, n => n, propertyOf(n => n.expression, n => n.argumentExpression.getText().replace(/^"(.*)"$/g,"$1")));
+
+        addEquality(is.CallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(this.isStandardCall, n => n, {
+            getNode: n => n,
+            getProp: n => null,
+            getType: (t, n, p) => StandardCallHelper.getReturnType(this, n),
+            setType: this.setNodeType
+        });
+
+        addEquality(is.VariableDeclaration, n => n, n => n.initializer);
+        addEquality(is.PropertyAssignment, n => n, n => n.initializer);
+        addEquality(is.PropertyAssignment, n => n, propertyOf(n => n.parent, n => n.name.getText()));
+        addEquality(is.FunctionDeclaration, n => n, VoidType);
+        addEquality(is.ForOfStatement, n => n.initializer, elementOf(n => n.expression));
+        addEquality(is.ForInStatement, n => n.initializer, StringVarType);
+        addEquality(is.BinaryExpression, n => n.left, n => n.right);
+        addEquality(is.ReturnStatement, n => n.expression, n => findParentFunction(n));
+
+        this.resolveTypes(startNode, typeEqualities);
+    }
+
+    private resolveTypes(startNode: ts.Node, typeEqualities: Equality<any>[]) {
+        let equalities: [ ts.Node, Equality<any> ][] = [];
+        typeEqualities.forEach(teq =>
+            processAllNodes(startNode, node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
+        );
+
+        let changed;
+        do {
+            changed = false;
+            for (let equality of equalities) {
+                let [ node, [ _, node1_func, node2_resolver ] ] = equality;
+                let node1 = node1_func(node);
+                let node2 = node2_resolver.getNode(node);
+                if (!node1 || !node2)
+                    continue;
+
+                let node2Property = node2_resolver.getProp(node);
+                let type1 = this.getCType(node1);
+                let type2 = node2_resolver.getType(this.getCType(node2), node, node2Property);
+
+                let { type, replaced } = this.mergeTypes(type1, type2);
+                if (type && replaced) {
+                    changed = true;
+                    this.setNodeType(node1, type);
+                    node2_resolver.setType(node2, type, node2Property)
+                }
+            }
+        } while (changed);
+
+        for (let k in this.typeOfNodeDict) {
+            console.log(this.typeOfNodeDict[k].node.getText(), this.typeOfNodeDict[k].type);
+        }
+
+    }
+
+    private isStandardCall(n: ts.Node): n is ts.CallExpression {
+        return StandardCallHelper.isStandardCall(this, n);
+    }
+    private setNodeType(n, t) {
+        if (n)
+            this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
+    }
+
 
     /** Convert ts.Type to CType */
     /** Used mostly during type preprocessing stage */
@@ -209,138 +326,6 @@ export class TypeHelper {
         return new StructType("", userStructInfo);
     }
 
-    
-    /** Get textual representation of type of the parameter for inserting into the C code */
-    public getTypeString(source) {
-
-        if (source.flags != null && source.intrinsicName != null) // ts.Type
-            source = this.convertType(source)
-        else if (source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
-            source = this.convertType(source)
-        else if (source.kind != null && source.flags != null) // ts.Node
-            source = this.getCType(source);
-        //else if (source.name != null && source.flags != null && source.valueDeclaration != null && source.declarations != null) //ts.Symbol
-        //    source = this.variables[source.valueDeclaration.pos].type;
-
-        if (source instanceof ArrayType) {
-            return source.getText();
-        } else if (source instanceof StructType)
-            return source.getText();
-        else if (source instanceof DictType)
-            return source.getText();
-        else if (typeof source === 'string')
-            return source;
-        else
-            throw new Error("Unrecognized type source");
-    }
-
-    private transforms = {
-        elementOf: createWrappedNodeFunc(t => t instanceof ArrayType && t.elementType),
-        propertyOf: createWrappedNodeFunc((t, p) => t instanceof StructType && t.properties[p])
-    };
-
-    private typeEqualities: TypeEquality[] = [];
-    
-    private addTypeEquality<T>(typeGuard: {(n): n is T}, left: NodeFunc<T>, right: CType | NodeFunc<T> | WrappedNodeFunc<T>) {
-        const toWrapped = value => {
-            if (typeof value === 'function')
-                return { nodeFunc: value, typeTransform: t => t };
-            else if (typeof value === 'string')
-                return { nodeFunc: n => n, typeTransform: t => value };
-            else
-                return value;
-        };
-        this.typeEqualities.push({ typeGuard, getNode: left, equalTo: toWrapped(right) });
-    }
-
-    private typeOfNodeDict: {[id: string]: {node: ts.Node, type: CType}} = {};
-    private setTypeOfNode = (n: ts.Node, t: CType) => this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
-
-    public inferTypes(startNode: ts.Node) {
-
-        this.addTypeEquality(is.Identifier, n => n, n => getDeclaration(this.typeChecker, n));
-        this.addTypeEquality(is.PropertyAccessExpression, n => n, this.transforms.propertyOf(n => n.expression, n => n.name.getText()));
-        this.addTypeEquality(is.ElementAccessExpression, n => n, this.transforms.propertyOf(n => n.expression, n => {
-            let text = n.argumentExpression.getText();
-            return text.indexOf('"') == 0 ? text.slice(1, -1) : text
-        }));
-        this.addTypeEquality(is.CallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
-        
-        this.addTypeEquality(is.VariableDeclaration, n => n, n => n.initializer);
-        this.addTypeEquality(is.PropertyAssignment, n => n, n => n.initializer);
-        this.addTypeEquality(is.PropertyAssignment, n => n, this.transforms.propertyOf(n => n.parent, n => n.name.getText()));
-        this.addTypeEquality(is.FunctionDeclaration, n => n, VoidType);
-        this.addTypeEquality(is.ForOfStatement, n => n.initializer, this.transforms.elementOf(n => n.expression));
-        this.addTypeEquality(is.ForInStatement, n => n.initializer, StringVarType);
-        this.addTypeEquality(is.BinaryExpression, n => n.left, n => n.right);
-        this.addTypeEquality(is.ReturnStatement, n => n.expression, n => findParentFunction(n));
-
-        let equalities: {
-            node1: ts.Node,
-            node2: ts.Node,
-            node2Property: string,
-            node2Transform: (t: CType, param?: string) => CType
-        }[] = [];
-        processAllNodes(startNode, node => {
-            for (let eq of this.typeEqualities) {
-                if (eq.typeGuard(node))
-                    equalities.push({
-                        node1: eq.getNode(node),
-                        node2: eq.equalTo.nodeFunc(node),
-                        node2Property: eq.equalTo.propFunc && eq.equalTo.propFunc(node),
-                        node2Transform: eq.equalTo.typeTransform
-                    });
-
-                // standard calls
-                if (is.CallExpression(node) && StandardCallHelper.isStandardCall(this, node))
-                    equalities.push({
-                        node1: node,
-                        node2: getDeclaration(this.typeChecker, node),
-                        node2Property: null,
-                        node2Transform: t => StandardCallHelper.getReturnType(this, node)
-                    });
-            }
-        });
-
-        for (let eq of equalities.filter(eq => eq.node1 && eq.node2))
-            console.log(eq.node1.getText()," == ",eq.node2.getText(), eq.node2Property ? "prop:" + eq.node2Property : "");
-
-        let changed;
-        do {
-            changed = false;
-            for (let equality of equalities) {
-                if (equality.node1 == null || equality.node2 == null)
-                    continue;
-                
-                let type1 = this.getCType(equality.node1);
-                let type2 = equality.node2Transform(this.getCType(equality.node2), equality.node2Property);
-                let { type, replaced } = this.mergeTypes(type1, type2);
-                if (type && replaced) {
-                    changed = true;
-                    this.setTypeOfNode(equality.node1, type);
-                    if (!equality.node2Property)
-                        this.setTypeOfNode(equality.node2, type);
-                    else {
-                        let node2Type = this.getCType(equality.node2);
-                        if (!node2Type) {
-                            node2Type = new StructType("", {});
-                            this.setTypeOfNode(equality.node2, node2Type);
-                        }
-                        if (node2Type instanceof StructType)
-                            node2Type.properties[equality.node2Property] = type;
-                        else if (!(node2Type instanceof ArrayType) || isNaN(+equality.node2Property))
-                            console.log("Internal error: accessing property " + equality.node2Property + " of ", node2Type);
-                    }
-                }
-            }
-        } while (changed);
-
-        for (let k in this.typeOfNodeDict) {
-            console.log(this.typeOfNodeDict[k].node.getText(), this.typeOfNodeDict[k].type);
-        }
-    }
-   
-
     private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
         let elementType: CType = PointerVarType;
         let cap = arrLiteral.elements.length;
@@ -352,7 +337,7 @@ export class TypeHelper {
         return type;
     }
 
-    private mergeTypes(type1: CType, type2: CType) {
+    private mergeTypes(type1: CType, type2: CType): { type: CType, replaced: boolean } {
         let type2_result = { type: type2, replaced: true };
         let type1_result = { type: type1, replaced: true };
         let noChanges = { type: type1, replaced: false };
@@ -387,7 +372,7 @@ export class TypeHelper {
             if (type1.capacity != cap || type2.capacity != cap
                 || type1.isDynamicArray != isDynamicArray || type2.isDynamicArray != isDynamicArray
                 || elementTypeMergeResult.replaced)
-                return { type: new ArrayType(elementTypeMergeResult.type, cap, isDynamicArray), changed: true };
+                return { type: new ArrayType(elementTypeMergeResult.type, cap, isDynamicArray), replaced: true };
 
             return noChanges;
         }

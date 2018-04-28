@@ -18,7 +18,7 @@ export function StandardCallResolver(target: any)
     standardCallResolvers.push(new target());
 }
 export class StandardCallHelper {
-    public static isStandardCall(typeHelper: TypeHelper, node: ts.Node) : node is ts.CallExpression {
+    public static isStandardCall(typeHelper: TypeHelper, node: ts.Node) {
         if (!is.CallExpression(node))
             return false;
         for (var resolver of standardCallResolvers)
