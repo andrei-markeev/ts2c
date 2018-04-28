@@ -6,7 +6,7 @@ import {IScope} from '../../program';
 import {CExpression} from '../../nodes/expressions';
 import {CCallExpression} from '../../nodes/call';
 import {CVariable} from '../../nodes/variable';
-import { StandardCallResolver, IResolver } from '../../resolver';
+import { StandardCallResolver, IResolver } from '../../standard';
 
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {

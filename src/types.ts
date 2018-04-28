@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import {StandardCallHelper} from './resolver';
+import {StandardCallHelper} from './standard';
 import * as is from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType;

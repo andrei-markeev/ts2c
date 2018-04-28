@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../resolver';
+import {StandardCallResolver, IResolver} from '../../standard';
 import {ArrayType, NumberVarType, TypeHelper} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';

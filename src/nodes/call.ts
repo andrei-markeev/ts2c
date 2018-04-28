@@ -1,5 +1,5 @@
 import { IScope, CProgram } from '../program';
-import { StandardCallHelper } from '../resolver';
+import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import * as ts from 'typescript';

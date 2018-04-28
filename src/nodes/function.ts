@@ -3,9 +3,9 @@ import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../types';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {StandardCallResolver, IResolver} from '../resolver';
+import {StandardCallResolver, IResolver} from '../standard';
 import { CExpression } from './expressions';
-import { StandardCallHelper } from '../resolver';
+import { StandardCallHelper } from '../standard';
 
 let anonymousNameCounter = 0;
 

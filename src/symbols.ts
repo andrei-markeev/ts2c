@@ -41,6 +41,7 @@ export class SymbolsHelper {
             if (decl) {
                 let varInfo = this.variables[decl.pos];
                 if (!varInfo) {
+                    console.log(ts.SyntaxKind[decl.kind], decl.getText());
                     varInfo = this.variables[decl.pos] = {
                         name: decl.name && decl.name.getText() || "anonymous" + Object.keys(this.variables).length,
                         type: this.typeHelper.getCType(node),
@@ -49,7 +50,7 @@ export class SymbolsHelper {
                         requiresAllocation: false
                     };
                     if (varInfo.type instanceof StructType)
-                        this.registerStructure(<StructType>varInfo.type, decl.name.getText());
+                        this.registerStructure(varInfo.type, decl.name.getText());
                 }
 
                 varInfo.references.push(node);

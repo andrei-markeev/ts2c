@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import * as is from './typeguards';
 import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
-import {StandardCallHelper} from './resolver';
+import {StandardCallHelper} from './standard';
 import {StringMatchResolver} from './standard/string/match';
 import { SymbolsHelper } from './symbols';
 

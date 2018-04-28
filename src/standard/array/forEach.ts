@@ -5,7 +5,7 @@ import {CExpression} from '../../nodes/expressions';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {CVariable} from '../../nodes/variable';
 import {IScope} from '../../program';
-import {StandardCallResolver, IResolver} from '../../resolver';
+import {StandardCallResolver, IResolver} from '../../standard';
 
 @StandardCallResolver
 class ArrayForEachResolver implements IResolver {
