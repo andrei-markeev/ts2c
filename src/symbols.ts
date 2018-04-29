@@ -1,6 +1,6 @@
 import * as ts from 'typescript'
 import * as is from './typeguards'
-import { TypeHelper, CType, StructType, ArrayType, getDeclaration, processAllNodes, findParentFunction } from './types';
+import { TypeHelper, CType, StructType, ArrayType, getDeclaration, findParentFunction, DictType } from './types';
 
 /** Information about a variable */
 export class VariableInfo {
@@ -14,6 +14,8 @@ export class VariableInfo {
     declaration: ts.Node;
     /** Determines if the variable requires memory allocation */
     requiresAllocation: boolean;
+    /** References to variables that represent properties of this variable */
+    varDeclPosByPropName: { [key: string]: number };
 }
 
 export class SymbolsHelper {
@@ -26,7 +28,7 @@ export class SymbolsHelper {
     
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     
-    public collectVariablesInfo(startNode: ts.Node) {
+    public collectVariablesInfo(allNodes: ts.Node[]) {
         const findAssignedValue = (n: ts.Node) => {
             if (is.PropertyAssignment(n.parent) && n.parent.name == n)
                 return n.parent.initializer;
@@ -36,23 +38,59 @@ export class SymbolsHelper {
                 return n.parent.right;
             return null;
         };
-        processAllNodes(startNode, node => {
-            let decl = getDeclaration(this.typeChecker, node);
-            if (decl) {
-                let varInfo = this.variables[decl.pos];
-                if (!varInfo) {
-                    console.log(ts.SyntaxKind[decl.kind], decl.getText());
-                    varInfo = this.variables[decl.pos] = {
-                        name: decl.name && decl.name.getText() || "anonymous" + Object.keys(this.variables).length,
-                        type: this.typeHelper.getCType(node),
-                        references: [],
-                        declaration: node,
-                        requiresAllocation: false
-                    };
-                    if (varInfo.type instanceof StructType)
-                        this.registerStructure(varInfo.type, decl.name.getText());
-                }
-
+        allNodes.forEach(node => {
+            let propsChain: any[] = [];
+            let topNode = node;
+            while (topNode) {
+                if (is.PropertyAccessExpression(topNode)) {
+                    propsChain.push([topNode, topNode.name.getText()]);
+                    topNode = topNode.expression;
+                } else if (is.ElementAccessExpression(topNode)) {
+                    propsChain.push([topNode, topNode.argumentExpression.getText().replace(/^"(.*)"$/, "$1")]);
+                    topNode = topNode.expression;
+                } else
+                    break;
+            }
+            if (is.Identifier(topNode)) {
+                let tsSymbol = this.typeChecker.getSymbolAtLocation(topNode);
+                if (!tsSymbol)
+                    return;
+                let varNode: (ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression) = tsSymbol.valueDeclaration;
+                let varName = tsSymbol.name;
+                let varType = this.typeHelper.getCType(varNode);
+                let varInfo: VariableInfo, propName: string, prop: [ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression, string];
+                do {
+                    varInfo = this.variables[varNode.pos];
+                    if (!varInfo) {
+                        varInfo = this.variables[varNode.pos] = {
+                            name: varName,
+                            type: varType,
+                            references: [ varNode ],
+                            declaration: varNode,
+                            requiresAllocation: false,
+                            varDeclPosByPropName: {}
+                        };
+                        if (varInfo.type instanceof StructType) {
+                            this.registerStructure(varInfo.type);
+                            this.updateStructureName(varInfo.type, varName);
+                        }
+                    }
+                    prop = propsChain.pop();
+                    if (prop) {
+                        [varNode, propName] = prop;
+                        varName += "." + propName;
+                        varInfo.varDeclPosByPropName[propName] = varNode.pos;
+                        if (varInfo.type instanceof StructType)
+                            varType = varInfo.type.properties[propName];
+                        else if (varInfo.type instanceof DictType)
+                            varType = varInfo.type.elementType;
+                        else if (varInfo.type instanceof ArrayType)
+                            varType = varInfo.type.elementType;
+                        else
+                            throw new Error("Internal error: element access expression is not compatible with type of " + varInfo.name);
+                    }
+                } while (prop)
+            
                 varInfo.references.push(node);
                 let assigned = findAssignedValue(node);
                 if (is.ObjectLiteralExpression(assigned) && varInfo.type instanceof StructType)
@@ -62,6 +100,8 @@ export class SymbolsHelper {
 
             }
         });
+
+        Object.keys(this.variables).forEach(k => console.log("VAR", this.variables[k].name, this.variables[k].declaration.getText(), this.variables[k].type));
 
     }
 
@@ -78,35 +118,34 @@ export class SymbolsHelper {
         return [structs, functionPrototypes];
     }
 
-    private registerStructure(structType: StructType, varName?: string) {
-        let structName = "struct_" + Object.keys(this.userStructs).length + "_t";
-        if (varName) {
-            if (this.userStructs[varName + "_t"] == null)
-                structName = varName + "_t";
-            else {
-                let i = 2;
-                while (this.userStructs[varName + "_" + i + "_t"] != null)
-                    i++;
-                structName = varName + "_" + i + "_t";
-            }
+    private registerStructure(structType: StructType) {
+        let found = this.findStructByType(structType);
+        if (!found) {
+            structType.structName = "struct_" + Object.keys(this.userStructs).length + "_t";
+            this.userStructs[structType.structName] = structType;
         }
+    }
 
+    private updateStructureName(structType: StructType, varName: string) {
+        varName = varName.replace(/\./g, "_") + "_t";
+        if (this.userStructs[varName] == null) {
+            let found = this.findStructByType(structType);
+            this.userStructs[varName] = this.userStructs[found];
+            structType.structName = varName;
+            delete this.userStructs[found];
+        }
+    }
+
+    private findStructByType(structType: StructType) {
         let userStructCode = this.getStructureBodyString(structType.properties);
 
         var found = false;
         for (var s in this.userStructs) {
-            if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode) {
-                structName = s;
-                found = true;
-                break;
-            }
+            if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode)
+                return s;
         }
 
-        if (!found) {
-            this.userStructs[structName] = structType;
-            structType.structName = 'struct ' + structName + ' *';
-        }
-        return this.userStructs[structName];
+        return null;
     }
 
     private getStructureBodyString(properties) {
@@ -130,16 +169,12 @@ export class SymbolsHelper {
     }
     
     /** Get information of variable specified by ts.Node */
-    public getVariableInfo(node: ts.Node, propKey?: string): VariableInfo {
-        let symbol = this.typeChecker.getSymbolAtLocation(node);
-        let varPos = symbol ? symbol.valueDeclaration.pos : node.pos;
-        let varInfo = this.variables[varPos];
-        if (varInfo && propKey) {
-            throw new Error("TODO");
-            //let propPos = varInfo.varDeclPosByPropName[propKey];
-            //varInfo = this.variables[propPos];
-        }
-        return varInfo;
+    public getVariableInfo(node: ts.Node): VariableInfo {
+        for (let k in this.variables)
+            if (this.variables[k].references.some(r => r == node))
+                return this.variables[k];
+        
+        return null;
     }
 
     private temporaryVariables: { [scopeId: string]: string[] } = {};

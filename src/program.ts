@@ -474,8 +474,12 @@ export class CProgram implements IScope {
         this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
 
         for (let source of tsProgram.getSourceFiles()) {
-            this.typeHelper.inferTypes(source);
-            this.symbolsHelper.collectVariablesInfo(source);
+            let nodes = source.getChildren(), i = 0;
+            while (i < nodes.length)
+                nodes.push.apply(nodes, nodes[i++].getChildren());
+        
+            this.typeHelper.inferTypes(nodes);
+            this.symbolsHelper.collectVariablesInfo(nodes);
             this.memoryManager.preprocessVariables();
             this.memoryManager.preprocessTemporaryVariables(source);
         }
@@ -486,6 +490,7 @@ export class CProgram implements IScope {
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
+            this.headerFlags.array = true;
         }
 
         for (let source of tsProgram.getSourceFiles()) {
