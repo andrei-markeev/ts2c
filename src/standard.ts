@@ -4,12 +4,17 @@ import {CType, TypeHelper} from './types';
 import * as is from './typeguards';
 
 export interface IResolver {
-    matchesNode(s: TypeHelper, n: ts.CallExpression): boolean;
+    matchesNode(s: TypeHelper, n: ts.CallExpression, options?: IResolverMatchOptions): boolean;
     returnType(s: TypeHelper, n: ts.CallExpression): CType;
+    objectType?(s: TypeHelper, n: ts.CallExpression): CType;
     needsDisposal(s: TypeHelper, n: ts.CallExpression): boolean;
     getTempVarName(s: TypeHelper, n: ts.CallExpression): string;
     createTemplate(s: IScope, n: ts.CallExpression): any;
     getEscapeNode(s: TypeHelper, n: ts.CallExpression): ts.Node;
+}
+
+export interface IResolverMatchOptions {
+    determineObjectType: boolean;
 }
 
 var standardCallResolvers: IResolver[] = [];
@@ -31,6 +36,13 @@ export class StandardCallHelper {
         for (var resolver of standardCallResolvers)
             if (resolver.matchesNode(scope.root.typeHelper, node))
                 return resolver.createTemplate(scope, node);
+        
+        return null;
+    }
+    public static getObjectType(typeHelper: TypeHelper, node: ts.CallExpression) {
+        for (var resolver of standardCallResolvers)
+            if (resolver.matchesNode(typeHelper, node, { determineObjectType: true }))
+                return resolver.objectType ? resolver.objectType(typeHelper, node) : null;
         
         return null;
     }

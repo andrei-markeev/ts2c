@@ -25,7 +25,7 @@ export class MemoryManager {
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
     public preprocessVariables() {
-
+        
         for (let k in this.symbolsHelper.variables) {
             let v = this.symbolsHelper.variables[k];
             if (v.requiresAllocation)
@@ -38,16 +38,6 @@ export class MemoryManager {
         switch (node.kind) {
             case ts.SyntaxKind.ArrayLiteralExpression:
                 {
-                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        break;
-
-                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
-                    {
-                        let binExpr = <ts.BinaryExpression>node.parent;
-                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            break;
-                    }
-
                     let type = this.typeHelper.getCType(node);
                     if (type && type instanceof ArrayType && type.isDynamicArray)
                         this.scheduleNodeDisposal(node, true);
@@ -55,16 +45,6 @@ export class MemoryManager {
                 break;
             case ts.SyntaxKind.ObjectLiteralExpression:
                 {
-                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        break;
-
-                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
-                    {
-                        let binExpr = <ts.BinaryExpression>node.parent;
-                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            break;
-                    }
-
                     let type = this.typeHelper.getCType(node);
                     if (type && (type instanceof StructType || type instanceof DictType))
                         this.scheduleNodeDisposal(node, true);
@@ -127,7 +107,6 @@ export class MemoryManager {
     }
 
     public getGCVariableForNode(node: ts.Node) {
-        let parentDecl = this.findParentFunctionNode(node);
         let key = node.pos + "_" + node.end;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];

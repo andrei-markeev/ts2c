@@ -1,6 +1,6 @@
 import * as ts from 'typescript'
 import * as is from './typeguards'
-import { TypeHelper, CType, StructType, ArrayType, getDeclaration, findParentFunction, DictType } from './types';
+import { TypeHelper, CType, StructType, ArrayType, getDeclaration, findParentFunction, DictType, NumberVarType } from './types';
 
 /** Information about a variable */
 export class VariableInfo {
@@ -29,15 +29,6 @@ export class SymbolsHelper {
     public variables: { [varDeclPos: number]: VariableInfo } = {};
     
     public collectVariablesInfo(allNodes: ts.Node[]) {
-        const findAssignedValue = (n: ts.Node) => {
-            if (is.PropertyAssignment(n.parent) && n.parent.name == n)
-                return n.parent.initializer;
-            if (is.VariableDeclaration(n.parent) && n.parent.name == n)
-                return n.parent.initializer;
-            if (is.BinaryExpression(n.parent) && n.parent.left == n && n.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken)
-                return n.parent.right;
-            return null;
-        };
         allNodes.forEach(node => {
             let propsChain: any[] = [];
             let topNode = node;
@@ -58,7 +49,9 @@ export class SymbolsHelper {
                 let varNode: (ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression) = tsSymbol.valueDeclaration;
                 let varName = tsSymbol.name;
                 let varType = this.typeHelper.getCType(varNode);
-                let varInfo: VariableInfo, propName: string, prop: [ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression, string];
+                let varInfo: VariableInfo;
+                let propName: string;
+                let prop: [ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression, string];
                 do {
                     varInfo = this.variables[varNode.pos];
                     if (!varInfo) {
@@ -74,6 +67,8 @@ export class SymbolsHelper {
                             this.registerStructure(varInfo.type);
                             this.updateStructureName(varInfo.type, varName);
                         }
+                        if (varInfo.type instanceof ArrayType)
+                            this.ensureArrayStruct(varInfo.type.elementType)
                     }
                     prop = propsChain.pop();
                     if (prop) {
@@ -92,12 +87,6 @@ export class SymbolsHelper {
                 } while (prop)
             
                 varInfo.references.push(node);
-                let assigned = findAssignedValue(node);
-                if (is.ObjectLiteralExpression(assigned) && varInfo.type instanceof StructType)
-                    varInfo.requiresAllocation = true;
-                if (is.ArrayLiteralExpression(assigned) && varInfo.type instanceof ArrayType)
-                    varInfo.requiresAllocation = true;
-
             }
         });
 
@@ -126,6 +115,16 @@ export class SymbolsHelper {
         }
     }
 
+    private ensureArrayStruct(elementType: CType) {
+        let elementTypeText = this.typeHelper.getTypeString(elementType);
+        let structName = ArrayType.getArrayStructName(elementTypeText);
+        this.userStructs[structName] = new StructType(structName, {
+            size: NumberVarType,
+            capacity: NumberVarType,
+            data: elementTypeText + "*"
+        });
+    }
+
     private updateStructureName(structType: StructType, varName: string) {
         varName = varName.replace(/\./g, "_") + "_t";
         if (this.userStructs[varName] == null) {
@@ -139,7 +138,6 @@ export class SymbolsHelper {
     private findStructByType(structType: StructType) {
         let userStructCode = this.getStructureBodyString(structType.properties);
 
-        var found = false;
         for (var s in this.userStructs) {
             if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode)
                 return s;

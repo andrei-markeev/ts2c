@@ -116,6 +116,12 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode: NodeFunc<T>, getProp: { (n: T): string }, getType: { (t: CType, n: T, param?: string): CType }, setType: { (n, t, p): void } };
 type Equality<T extends ts.Node> = [ { (n): n is T }, NodeFunc<T>, NodeResolver<T> ];
+interface MethodCallExpression extends ts.LeftHandSideExpression, ts.Declaration {
+    kind: ts.SyntaxKind.CallExpression;
+    expression: ts.PropertyAccessExpression;
+    typeArguments?: ts.NodeArray<ts.TypeNode>;
+    arguments: ts.NodeArray<ts.Expression>;
+}
 
 export class TypeHelper {
 
@@ -126,6 +132,7 @@ export class TypeHelper {
 
     constructor(private typeChecker: ts.TypeChecker) { }
 
+    /** Get C type of TypeScript node */
     public getCType(node: ts.Node): CType {
         if (!node || !node.kind)
             return null;
@@ -176,25 +183,28 @@ export class TypeHelper {
     /** Get textual representation of type of the parameter for inserting into the C code */
     public getTypeString(source) {
 
+        let cType = source;
         if (source.flags != null && source.intrinsicName != null) // ts.Type
-            source = this.convertType(source)
+            cType = this.convertType(source)
         else if (source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
-            source = this.convertType(source)
+            cType = this.convertType(source)
         else if (source.kind != null && source.flags != null) // ts.Node
-            source = this.getCType(source);
+            cType = this.getCType(source);
 
-        if (source instanceof ArrayType) {
-            return source.getText();
-        } else if (source instanceof StructType)
-            return source.getText();
-        else if (source instanceof DictType)
-            return source.getText();
-        else if (typeof source === 'string')
-            return source;
+        if (cType instanceof ArrayType) {
+            return cType.getText();
+        } else if (cType instanceof StructType)
+            return cType.getText();
+        else if (cType instanceof DictType)
+            return cType.getText();
+        else if (typeof cType === 'string')
+            return cType;
         else
-            throw new Error("Unrecognized type source");
+            throw new Error("Cannot determine variable type from source " + source && source.getText ? source.getText() : JSON.stringify(source));
     }
 
+    /** Postprocess TypeScript AST for better type inference */
+    /** Creates typeOfNodeDict that is later used in getCType */
     public inferTypes(allNodes: ts.Node[]) {
 
         const propertyOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>, propFunc: { (n: T): string }): NodeResolver<T> => ({
@@ -219,7 +229,6 @@ export class TypeHelper {
                 : this.mergeTypes(this.getCType(n), new StructType("struct_" + (this.structsNumber++) + "_t", { [p]: t })).type)
             }
         });
-
         let typeEqualities: Equality<any>[] = [];
 
         const addEquality = <T extends ts.Node>(typeGuard: { (n): n is T }, node1: NodeFunc<T>, node2: string | NodeFunc<T> | NodeResolver<T>) => {
@@ -235,11 +244,17 @@ export class TypeHelper {
         addEquality(is.PropertyAccessExpression, n => n, propertyOf(n => n.expression, n => n.name.getText()));
         addEquality(this.isSimpleElementAccess, n => n, propertyOrElementOf(n => n.expression, n => n.argumentExpression.getText().replace(/^"(.*)"$/g,"$1")));
 
-        addEquality(is.CallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(is.CallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
         addEquality(this.isStandardCall, n => n, {
             getNode: n => n,
-            getProp: n => null,
-            getType: (t, n, p) => StandardCallHelper.getReturnType(this, n),
+            getProp: _ => null,
+            getType: (_, n) => StandardCallHelper.getReturnType(this, n),
+            setType: this.setNodeType.bind(this)
+        });
+        addEquality(this.isDynamicArrayMethodCall, n => n.expression.expression, {
+            getNode: n => n.expression.expression,
+            getProp: _ => null,
+            getType: (_, n) => StandardCallHelper.getObjectType(this, n),
             setType: this.setNodeType.bind(this)
         });
 
@@ -249,7 +264,7 @@ export class TypeHelper {
         addEquality(is.FunctionDeclaration, n => n, VoidType);
         addEquality(is.ForOfStatement, n => n.initializer, elementOf(n => n.expression));
         addEquality(is.ForInStatement, n => n.initializer, StringVarType);
-        addEquality(is.BinaryExpression, n => n.left, n => n.right);
+        addEquality(this.isEqualsExpression, n => n.left, n => n.right);
         addEquality(is.ReturnStatement, n => n.expression, n => findParentFunction(n));
 
         this.resolveTypes(allNodes, typeEqualities);
@@ -261,7 +276,6 @@ export class TypeHelper {
             allNodes.forEach(node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
         );
 
-        let typesDict = {};
         let changed;
         do {
             changed = false;
@@ -280,8 +294,12 @@ export class TypeHelper {
                 if (type) {
                     if (replaced)
                         changed = true;
+                    if (changed && type1 != type)
+                        console.log(`Type of node1 ${node1.getText()} => type ${type instanceof ArrayType ? type.getText() : type}`)
                     this.setNodeType(node1, type);
-                    node2_resolver.setType(node2, type, node2Property)
+                    if (changed && type2 != type)
+                        console.log(`Type of node2 ${node2.getText()} => type ${type instanceof ArrayType ? type.getText() : type}`)
+                    node2_resolver.setType(node2, type, node2Property);
                 }
             }
         } while (changed);
@@ -293,6 +311,15 @@ export class TypeHelper {
     }
     private isSimpleElementAccess(n: ts.Node): n is ts.ElementAccessExpression {
         return is.ElementAccessExpression(n) && (is.StringLiteral(n.argumentExpression) || is.NumericLiteral(n.argumentExpression))
+    }
+    private isEqualsExpression(n): n is ts.BinaryExpression {
+        return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
+    }
+    private isDynamicArrayMethodCall(n): n is MethodCallExpression {
+        if (!is.CallExpression(n) || n.arguments.length < 1)
+            return false;
+        let type = StandardCallHelper.getObjectType(this, n);
+        return type instanceof ArrayType && type.isDynamicArray;
     }
     private setNodeType(n, t) {
         if (n)
@@ -312,7 +339,6 @@ export class TypeHelper {
 
 
     /** Convert ts.Type to CType */
-    /** Used mostly during type preprocessing stage */
     private convertType(tsType: ts.Type, ident?: ts.Identifier): CType {
         if (!tsType || tsType.flags == ts.TypeFlags.Void)
             return VoidType;

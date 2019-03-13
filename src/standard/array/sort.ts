@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
+import {StandardCallResolver, IResolver, IResolverMatchOptions} from '../../standard';
+import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
@@ -9,12 +9,15 @@ import {CElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
 class ArraySortResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression, options: IResolverMatchOptions) {
         if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "sort" && objType instanceof ArrayType && objType.isDynamicArray;
+        return propAccess.name.getText() == "sort" && (objType && objType instanceof ArrayType && objType.isDynamicArray || options && options.determineObjectType);
+    }
+    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return new ArrayType(PointerVarType, 0, true);
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
