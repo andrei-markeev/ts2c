@@ -252,11 +252,11 @@ export class TypeHelper {
 
         addEquality(is.CallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
         addEquality(this.isMethodCall, n => n, {
-            getType: (_, n) => StandardCallHelper.getReturnType(this, n)
+            getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getReturnType(this, n)).type
         });
         addEquality(this.isMethodCall, n => n.expression.expression, {
             getNode: n => n.expression.expression,
-            getType: (_, n) => StandardCallHelper.getObjectType(this, n)
+            getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getObjectType(this, n) || t).type
         });
 
         addEquality(is.VariableDeclaration, n => n, n => n.initializer);
@@ -293,10 +293,11 @@ export class TypeHelper {
 
                 let { type, replaced } = this.mergeTypes(type2, type1);
                 if (type) {
-                    if (replaced)
+                    if (replaced) {
                         changed = true;
-                    this.setNodeType(node1, type);
-                    node2_resolver.setType ? node2_resolver.setType(node2, type, node2Property) : this.setNodeType(node2, type);
+                        this.setNodeType(node1, type);
+                        node2_resolver.setType ? node2_resolver.setType(node2, type, node2Property) : this.setNodeType(node2, type);
+                    }
                 }
             }
         } while (changed);
@@ -308,15 +309,6 @@ export class TypeHelper {
     }
     private isEqualsExpression(n): n is ts.BinaryExpression {
         return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
-    }
-    private _isStandardCall(n: ts.Node): n is ts.CallExpression {
-        return StandardCallHelper.isStandardCall(this, n);
-    }
-    private _isDynamicArrayMethodCall(n): n is MethodCallExpression {
-        if (!is.CallExpression(n) || n.arguments.length < 1)
-            return false;
-        const type = StandardCallHelper.getObjectType(this, n);
-        return type instanceof ArrayType && type.isDynamicArray;
     }
     private isMethodCall(n): n is MethodCallExpression {
         return is.CallExpression(n) && n.arguments.length >= 1 && is.PropertyAccessExpression(n.expression);
@@ -335,6 +327,8 @@ export class TypeHelper {
             return null;
         let typeBodyText = getTypeBodyText(t);
         let type = this.typesDict[typeBodyText];
+        if (type instanceof ArrayType)
+            type.capacity = Math.max(type.capacity, t.capacity);
         if (!type)
             type = this.typesDict[typeBodyText] = t;
         return type;
