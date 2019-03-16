@@ -1,6 +1,5 @@
 import * as ts from 'typescript'
-import * as is from './typeguards'
-import { TypeHelper, CType, StructType, ArrayType, getDeclaration, findParentFunction, DictType, NumberVarType } from './types';
+import { TypeHelper, CType, StructType, ArrayType, findParentFunction, DictType, NumberVarType } from './types';
 
 /** Information about a variable */
 export class VariableInfo {
@@ -33,16 +32,16 @@ export class SymbolsHelper {
             let propsChain: any[] = [];
             let topNode = node;
             while (topNode) {
-                if (is.PropertyAccessExpression(topNode)) {
+                if (ts.isPropertyAccessExpression(topNode)) {
                     propsChain.push([topNode, topNode.name.getText()]);
                     topNode = topNode.expression;
-                } else if (is.ElementAccessExpression(topNode)) {
+                } else if (ts.isElementAccessExpression(topNode)) {
                     propsChain.push([topNode, topNode.argumentExpression.getText().replace(/^"(.*)"$/, "$1")]);
                     topNode = topNode.expression;
                 } else
                     break;
             }
-            if (is.Identifier(topNode)) {
+            if (ts.isIdentifier(topNode)) {
                 let tsSymbol = this.typeChecker.getSymbolAtLocation(topNode);
                 if (!tsSymbol)
                     return;

@@ -1,6 +1,5 @@
 import * as ts from 'typescript';
 import {StandardCallHelper} from './standard';
-import * as is from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var *";
@@ -244,13 +243,13 @@ export class TypeHelper {
                 typeEqualities.push([ typeGuard, node1, node2 ]);
         };
 
-        addEquality(is.Identifier, n => n, n => getDeclaration(this.typeChecker, n));
-        addEquality(is.PropertyAccessExpression, n => n, propertyOf(n => n.expression, n => n.name.getText()));
+        addEquality(ts.isIdentifier, n => n, n => getDeclaration(this.typeChecker, n));
+        addEquality(ts.isPropertyAccessExpression, n => n, propertyOf(n => n.expression, n => n.name.getText()));
         addEquality(this.isLengthPropertyAccess, n => n, NumberVarType);
         addEquality(this.isLengthPropertyAccess, n => n.expression, array(n => n.expression));
         addEquality(this.isSimpleElementAccess, n => n, propertyOrElementOf(n => n.expression, n => n.argumentExpression.getText().replace(/^"(.*)"$/g,"$1")));
 
-        addEquality(is.CallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(ts.isCallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
         addEquality(this.isMethodCall, n => n, {
             getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getReturnType(this, n)).type
         });
@@ -259,14 +258,14 @@ export class TypeHelper {
             getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getObjectType(this, n) || t).type
         });
 
-        addEquality(is.VariableDeclaration, n => n, n => n.initializer);
-        addEquality(is.PropertyAssignment, n => n, n => n.initializer);
-        addEquality(is.PropertyAssignment, n => n, propertyOf(n => n.parent, n => n.name.getText()));
-        addEquality(is.FunctionDeclaration, n => n, VoidType);
-        addEquality(is.ForOfStatement, n => n.initializer, elementOf(n => n.expression));
-        addEquality(is.ForInStatement, n => n.initializer, StringVarType);
+        addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
+        addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
+        addEquality(ts.isPropertyAssignment, n => n, propertyOf(n => n.parent, n => n.name.getText()));
+        addEquality(ts.isFunctionDeclaration, n => n, VoidType);
+        addEquality(ts.isForOfStatement, n => n.initializer, elementOf(n => n.expression));
+        addEquality(ts.isForInStatement, n => n.initializer, StringVarType);
         addEquality(this.isEqualsExpression, n => n.left, n => n.right);
-        addEquality(is.ReturnStatement, n => n.expression, n => findParentFunction(n));
+        addEquality(ts.isReturnStatement, n => n.expression, n => findParentFunction(n));
 
         this.resolveTypes(allNodes, typeEqualities);
     }
@@ -305,16 +304,16 @@ export class TypeHelper {
     }
 
     private isSimpleElementAccess(n: ts.Node): n is ts.ElementAccessExpression {
-        return is.ElementAccessExpression(n) && (is.StringLiteral(n.argumentExpression) || is.NumericLiteral(n.argumentExpression))
+        return ts.isElementAccessExpression(n) && (ts.isStringLiteral(n.argumentExpression) || ts.isNumericLiteral(n.argumentExpression))
     }
     private isEqualsExpression(n): n is ts.BinaryExpression {
         return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
     }
     private isMethodCall(n): n is MethodCallExpression {
-        return is.CallExpression(n) && n.arguments.length >= 1 && is.PropertyAccessExpression(n.expression);
+        return ts.isCallExpression(n) && n.arguments.length >= 1 && ts.isPropertyAccessExpression(n.expression);
     }
     private isLengthPropertyAccess(n): n is ts.PropertyAccessExpression {
-        return is.PropertyAccessExpression(n) && n.name.getText() == "length";
+        return ts.isPropertyAccessExpression(n) && n.name.getText() == "length";
     }
     private setNodeType(n, t) {
         if (n)
@@ -362,8 +361,8 @@ export class TypeHelper {
             let declaration = <ts.NamedDeclaration>prop.valueDeclaration;
             let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, declaration);
             let propType = this.convertType(propTsType, <ts.Identifier>declaration.name);
-            if (propType == PointerVarType && is.PropertyAssignment(declaration)) {
-                if (declaration.initializer && is.ArrayLiteralExpression(declaration.initializer))
+            if (propType == PointerVarType && ts.isPropertyAssignment(declaration)) {
+                if (declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer))
                     propType = this.determineArrayType(<ts.ArrayLiteralExpression>declaration.initializer);
             }
             userStructInfo[prop.name] = propType;

@@ -1,5 +1,4 @@
 import * as ts from 'typescript';
-import * as is from '../../typeguards';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType} from '../../types';
 import {IScope} from '../../program';
@@ -11,7 +10,7 @@ import { StandardCallResolver, IResolver } from '../../standard';
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (!is.PropertyAccessExpression(call.expression))
+        if (!ts.isPropertyAccessExpression(call.expression))
             return false;
         return call.expression.getText() == "console.log";
     }

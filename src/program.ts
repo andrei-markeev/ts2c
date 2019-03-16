@@ -481,7 +481,7 @@ export class CProgram implements IScope {
             this.typeHelper.inferTypes(nodes);
             this.symbolsHelper.collectVariablesInfo(nodes);
             this.memoryManager.preprocessVariables();
-            this.memoryManager.preprocessTemporaryVariables(source);
+            this.memoryManager.preprocessTemporaryVariables(nodes);
         }
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);

@@ -1,7 +1,6 @@
 import * as ts from 'typescript';
 import {IScope} from './program';
 import {CType, TypeHelper} from './types';
-import * as is from './typeguards';
 
 export interface IResolver {
     matchesNode(s: TypeHelper, n: ts.CallExpression, options?: IResolverMatchOptions): boolean;
@@ -24,7 +23,7 @@ export function StandardCallResolver(target: any)
 }
 export class StandardCallHelper {
     public static isStandardCall(typeHelper: TypeHelper, node: ts.Node) {
-        if (!is.CallExpression(node))
+        if (!ts.isCallExpression(node))
             return false;
         for (var resolver of standardCallResolvers)
             if (resolver.matchesNode(typeHelper, node))
