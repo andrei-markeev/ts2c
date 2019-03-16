@@ -138,6 +138,12 @@ interface PrintfOptions {
     printf("{PREFIX}{ ");
     {INDENT}{elementPrintfs {    printf(", ");\n    }=> {this}}
     {INDENT}printf(" }{POSTFIX}");
+{#elseif isStaticArray && elementFormatString && +arraySize==1}
+    printf("{PREFIX}[ {elementFormatString} ]{POSTFIX}", {accessor}[0]);
+{#elseif isStaticArray && elementFormatString && +arraySize==2}
+    printf("{PREFIX}[ {elementFormatString}, {elementFormatString} ]{POSTFIX}", {accessor}[0], {accessor}[1]);
+{#elseif isStaticArray && elementFormatString && +arraySize==3}
+    printf("{PREFIX}[ {elementFormatString}, {elementFormatString}, {elementFormatString} ]{POSTFIX}", {accessor}[0], {accessor}[1], {accessor}[2]);
 {#elseif isArray}
     printf("{PREFIX}[ ");
     {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
@@ -160,10 +166,12 @@ class CPrintf {
     public isDict: boolean = false;
     public isStruct: boolean = false;
     public isArray: boolean = false;
+    public isStaticArray: boolean = false;
 
     public iteratorVarName: string;
     public arraySize: string;
     public elementPrintfs: CPrintf[] = [];
+    public elementFormatString: string = '';
     public propPrefix: string = '';
     public PREFIX: string;
     public POSTFIX: string;
@@ -188,14 +196,20 @@ class CPrintf {
 
         if (varType instanceof ArrayType) {
             this.isArray = true;
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            this.isStaticArray = !varType.isDynamicArray;
+            this.elementFormatString = varType.elementType == NumberVarType ? '%d'
+                : varType.elementType == StringVarType ? '\\"%s\\"' : '';
             this.arraySize = varType.isDynamicArray ? accessor + "->size" : varType.capacity + "";
-            let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
-            let opts = { quotedString: true, indent: this.INDENT + "    " };
-            this.elementPrintfs = [
-                new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
-            ];
+
+            if (!this.isStaticArray || !this.elementFormatString || varType.capacity > 3) {
+                this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
+                scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+                let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
+                let opts = { quotedString: true, indent: this.INDENT + "    " };
+                this.elementPrintfs = [
+                    new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
+                ];
+            }
         }
         else if (varType instanceof DictType) {
             this.isDict = true;

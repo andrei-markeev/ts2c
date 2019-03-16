@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {StandardCallResolver, IResolver} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
+import {ArrayType, StringVarType, NumberVarType, TypeHelper, CType} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
@@ -17,30 +17,15 @@ class ArraySliceResolver implements IResolver {
         return propAccess.name.getText() == "slice" && objType instanceof ArrayType;
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
-        let objType = <ArrayType>typeHelper.getCType((<ts.PropertyAccessExpression>call.expression).expression);
-        let simpleSlice = !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a));
-        let sliceSize: number;
-        if (simpleSlice) {
-            let arraySize = objType.capacity;
-            let startIndexArg = +call.arguments[0].getText();
-            if (call.arguments.length == 1) {
-                //start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
-                sliceSize = startIndexArg < 0 ? -startIndexArg : arraySize - startIndexArg;
-            } else {
-                let endIndexArg = +call.arguments[1].getText();
-                let start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
-                sliceSize = (endIndexArg < 0 ? arraySize + endIndexArg : endIndexArg) - start;
-            }
-        }
-        return new ArrayType(objType.elementType, simpleSlice ? sliceSize : 0, !simpleSlice);
+        let { size, dynamic, elementType } = getSliceParams(typeHelper, call);
+        return new ArrayType(elementType, size, dynamic);
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
         return new CArraySlice(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, call: ts.CallExpression) {
-        let objType = <ArrayType>typeHelper.getCType((<ts.PropertyAccessExpression>call.expression).expression);
-        let simpleSlice = !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a));
-        return call.parent.kind != ts.SyntaxKind.ExpressionStatement && !simpleSlice;
+        let { dynamic } = getSliceParams(typeHelper, call);
+        return call.parent.kind != ts.SyntaxKind.ExpressionStatement && dynamic;
     }
     public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
         return "tmp_slice";
@@ -52,16 +37,16 @@ class ArraySliceResolver implements IResolver {
 
 @CodeTemplate(`
 {#statements}
-    {#if !topExpressionOfStatement && simpleSlice}
+    {#if !topExpressionOfStatement && simpleSlice }
         for ({iteratorVarName} = 0; {iteratorVarName} < {simpleSliceSize}; {iteratorVarName}++)
             {tempVarName}[{iteratorVarName}] = {arrayDataAccess}[{iteratorVarName} + {simpleSliceStart}];
-    {#elseif !topExpressionOfStatement && !endIndexArg}
+    {#elseif !topExpressionOfStatement && !simpleSlice && !endIndexArg}
         {sizeVarName} = ({startIndexArg}) < 0 ? -({startIndexArg}) : {arraySize} - ({startIndexArg});
         {startVarName} = ({startIndexArg}) < 0 ? {arraySize} + ({startIndexArg}) : ({startIndexArg});
         ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});
         for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)
             {tempVarName}->data[{iteratorVarName}] = {arrayDataAccess}[{iteratorVarName} + {startVarName}];
-    {#elseif !topExpressionOfStatement && endIndexArg}
+    {#elseif !topExpressionOfStatement && !simpleSlice && endIndexArg}
         {startVarName} = ({startIndexArg}) < 0 ? {arraySize} + ({startIndexArg}) : ({startIndexArg});
         {endVarName} = ({endIndexArg}) < 0 ? {arraySize} + ({endIndexArg}) : ({endIndexArg});
         {sizeVarName} = {endVarName} - {startVarName};
@@ -103,22 +88,18 @@ class CArraySlice {
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
 
-        this.simpleSlice = !varType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a));
-        if (this.simpleSlice) {
-            let arraySize = varType.capacity;
-            let startIndexArg = +call.arguments[0].getText();
-            if (call.arguments.length == 1) {
-                this.simpleSliceStart = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
-                this.simpleSliceSize = startIndexArg < 0 ? -startIndexArg : arraySize - startIndexArg;
-            } else {
-                let endIndexArg = +call.arguments[1].getText();
-                this.simpleSliceStart = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
-                this.simpleSliceSize = (endIndexArg < 0 ? arraySize + endIndexArg : endIndexArg) - this.simpleSliceStart;
-            }
-            const assignmentToVariable = ts.isBinaryExpression(call.parent) && call.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken && call.parent.left
-                || ts.isVariableDeclaration(call.parent) && call.parent.name;
-            if (assignmentToVariable)
-                this.tempVarName = assignmentToVariable.getText();
+        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
+        this.startIndexArg = args[0];
+        this.endIndexArg = args.length == 2 ? args[1] : null;
+
+        let { start, size, dynamic } = getSliceParams(scope.root.typeHelper, call);
+        if (!dynamic) {
+            this.simpleSlice = true;
+            this.simpleSliceStart = start;
+            this.simpleSliceSize = size;
+            const reuseVariable = scope.root.memoryManager.tryReuseExistingVariable(call);
+            if (reuseVariable)
+                this.tempVarName = reuseVariable.getText();
             else {
                 this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "tmp_slice");
                 scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(varType.elementType, this.simpleSliceSize, false)));
@@ -126,23 +107,18 @@ class CArraySlice {
             return;
         }        
        
-        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
-        this.startIndexArg = args[0];
-        this.endIndexArg = args.length == 2 ? args[1] : null;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-            let arrayType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
-            let tempVarType = new ArrayType(arrayType.elementType, 0, true);
-            if (!scope.root.memoryManager.variableWasReused(call))
-                scope.variables.push(new CVariable(scope, this.tempVarName, tempVarType));
-            this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_size");
-            scope.variables.push(new CVariable(scope, this.sizeVarName, NumberVarType));
-            this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_start");
-            scope.variables.push(new CVariable(scope, this.startVarName, NumberVarType));
-            if (args.length == 2) {
-                this.endVarName = scope.root.symbolsHelper.addTemp(propAccess, "slice_end");
-                scope.variables.push(new CVariable(scope, this.endVarName, NumberVarType));
-            }
+        this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+        let arrayType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
+        let tempVarType = new ArrayType(arrayType.elementType, 0, true);
+        if (!scope.root.memoryManager.variableWasReused(call))
+            scope.variables.push(new CVariable(scope, this.tempVarName, tempVarType));
+        this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_size");
+        scope.variables.push(new CVariable(scope, this.sizeVarName, NumberVarType));
+        this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_start");
+        scope.variables.push(new CVariable(scope, this.startVarName, NumberVarType));
+        if (args.length == 2) {
+            this.endVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_end");
+            scope.variables.push(new CVariable(scope, this.endVarName, NumberVarType));
         }
         scope.root.headerFlags.array = true;
     }
@@ -157,4 +133,29 @@ class CArraySlice {
 {/if}`)
 class CArrayDataAccess {
     constructor(scope: IScope, public elementAccess: CElementAccess, public isDynamicArray: boolean) {}
+}
+
+function getSliceParams(typeHelper: TypeHelper, call: ts.CallExpression) {
+    let params = { start: 0, size: 0, dynamic: true, elementType: null };
+    if (!ts.isPropertyAccessExpression(call.expression))
+        return params;
+    let objType = typeHelper.getCType(call.expression.expression);
+    if (!(objType instanceof ArrayType))
+        return params;
+    params.elementType = objType.elementType;
+    let isSimpleSlice = !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a) || ts.isPrefixUnaryExpression(a) && a.operator == ts.SyntaxKind.MinusToken && ts.isNumericLiteral(a.operand));
+    if (isSimpleSlice) {
+        let arraySize = objType.capacity;
+        let startIndexArg = +call.arguments[0].getText();
+        if (call.arguments.length == 1) {
+            params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
+            params.size = startIndexArg < 0 ? -startIndexArg : arraySize - startIndexArg;
+        } else {
+            let endIndexArg = +call.arguments[1].getText();
+            params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
+            params.size = (endIndexArg < 0 ? arraySize + endIndexArg : endIndexArg) - params.start;
+        }
+        params.dynamic = params.size <= 0; // C standard doesn't allow creating static arrays with zero size, so we have to go with a dynamic array if size is 0
+    }
+    return params;
 }
