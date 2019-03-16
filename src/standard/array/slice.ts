@@ -97,7 +97,7 @@ class CArraySlice {
             this.simpleSlice = true;
             this.simpleSliceStart = start;
             this.simpleSliceSize = size;
-            const reuseVariable = scope.root.memoryManager.tryReuseExistingVariable(call);
+            const reuseVariable = tryReuseExistingVariable(call);
             if (reuseVariable)
                 this.tempVarName = reuseVariable.getText();
             else {
@@ -143,7 +143,10 @@ function getSliceParams(typeHelper: TypeHelper, call: ts.CallExpression) {
     if (!(objType instanceof ArrayType))
         return params;
     params.elementType = objType.elementType;
-    let isSimpleSlice = !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a) || ts.isPrefixUnaryExpression(a) && a.operator == ts.SyntaxKind.MinusToken && ts.isNumericLiteral(a.operand));
+    let reuseVar = tryReuseExistingVariable(call);
+    let reuseVarType = reuseVar && typeHelper.getCType(reuseVar);
+    let reuseVarIsDynamicArray = reuseVar && reuseVarType instanceof ArrayType && reuseVarType.isDynamicArray;
+    let isSimpleSlice = !reuseVarIsDynamicArray && !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a) || ts.isPrefixUnaryExpression(a) && a.operator == ts.SyntaxKind.MinusToken && ts.isNumericLiteral(a.operand));
     if (isSimpleSlice) {
         let arraySize = objType.capacity;
         let startIndexArg = +call.arguments[0].getText();
@@ -158,4 +161,18 @@ function getSliceParams(typeHelper: TypeHelper, call: ts.CallExpression) {
         params.dynamic = params.size <= 0; // C standard doesn't allow creating static arrays with zero size, so we have to go with a dynamic array if size is 0
     }
     return params;
+}
+
+function tryReuseExistingVariable(node: ts.Node) {
+    if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
+        let assignment = <ts.BinaryExpression>node.parent;
+        if (assignment.left.kind == ts.SyntaxKind.Identifier)
+            return assignment.left;
+    }
+    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
+        let assignment = <ts.VariableDeclaration>node.parent;
+        if (assignment.name.kind == ts.SyntaxKind.Identifier)
+            return assignment.name;
+    }
+    return null;
 }
