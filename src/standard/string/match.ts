@@ -64,8 +64,10 @@ class CStringMatch
                 this.regexVar = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
                 this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-                if (!scope.root.memoryManager.variableWasReused(call))
+                if (!scope.root.memoryManager.variableWasReused(call)) {
                     scope.variables.push(new CVariable(scope, this.matchArrayVarName, new ArrayType(StringVarType, 0, true)));
+                    scope.root.symbolsHelper.ensureArrayStruct(StringVarType);
+                }
                 scope.root.headerFlags.regex_match = true;
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.gc_iterator = true;

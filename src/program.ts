@@ -448,8 +448,8 @@ int main(void) {
 
     {destructors}
     return 0;
-}`
-)
+}
+`)
 export class CProgram implements IScope {
     public parent: IScope = null;
     public root = this;

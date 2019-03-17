@@ -113,13 +113,17 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
 }
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
-type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getProp?: { (n: T): string }, getType: { (t: CType, n: T, param?: string): CType }, setType?: { (n, t, p): void } };
+type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
 type Equality<T extends ts.Node> = [ { (n): n is T }, NodeFunc<T>, NodeResolver<T> ];
 interface MethodCallExpression extends ts.LeftHandSideExpression, ts.Declaration {
     kind: ts.SyntaxKind.CallExpression;
     expression: ts.PropertyAccessExpression;
     typeArguments?: ts.NodeArray<ts.TypeNode>;
     arguments: ts.NodeArray<ts.Expression>;
+}
+
+interface ForOfWithSimpleInitializer extends ts.ForOfStatement {
+    initializer: ts.VariableDeclarationList;
 }
 
 export class TypeHelper {
@@ -199,72 +203,70 @@ export class TypeHelper {
         else if (typeof cType === 'string')
             return cType;
         else
-            throw new Error("Cannot determine variable type from source " + source && source.getText ? source.getText() : JSON.stringify(source));
+            throw new Error("Cannot determine variable type from source " + (source && source.getText ? source.getText() : JSON.stringify(source)));
     }
 
     /** Postprocess TypeScript AST for better type inference */
     /** Creates typeOfNodeDict that is later used in getCType */
     public inferTypes(allNodes: ts.Node[]) {
 
-        const propertyOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>, propFunc: { (n: T): string }): NodeResolver<T> => ({
-            getNode: nodeFunc,
-            getProp: propFunc,
-            getType: (t, n, p) => t instanceof StructType && t.properties[p] || p == "length" && t instanceof ArrayType && NumberVarType,
-            setType: (n, t, p) => this.setNodeType(n, this.mergeTypes(this.getCType(n), new StructType("struct_" + (this.structsNumber++) + "_t", { [p]: t })).type)
-        });
-        const elementOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>): NodeResolver<T> => ({
-            getNode: nodeFunc,
-            getType: (t, n, p) => t instanceof ArrayType && t.elementType,
-            setType: (n, t, p) => this.setNodeType(n, this.mergeTypes(this.getCType(n), new ArrayType(t, 0, false)).type)
-        });
-        const propertyOrElementOf = <T extends ts.Node>(nodeFunc: NodeFunc<T>, propFunc: { (n: T): string }): NodeResolver<T> => ({
-            getNode: nodeFunc,
-            getProp: propFunc,
-            getType: (t, n, p) => t instanceof StructType && t.properties[p] || !isNaN(+p) && t instanceof ArrayType && t.elementType || p == "length" && t instanceof ArrayType && NumberVarType,
-            setType: (n, t, p) => {
-                this.setNodeType(n, this.getCType(n) instanceof ArrayType
-                ? this.mergeTypes(this.getCType(n), new ArrayType(t, +p, false)).type
-                : this.mergeTypes(this.getCType(n), new StructType("struct_" + (this.structsNumber++) + "_t", { [p]: t })).type)
-            }
-        });
-        const array = <T extends ts.Node>(nodeFunc: NodeFunc<T>): NodeResolver<T> => ({
-            getNode: nodeFunc,
-            getType: t => t,
-            setType: n => this.setNodeType(n, this.mergeTypes(this.getCType(n), new ArrayType(PointerVarType, 0, false)).type)
-        });
+        const type = <T extends ts.Node>(t: {(n:T): CType} | string): NodeResolver<T> => ({ getType: typeof(t) === "string" ? _ => t : t });
+        const struct = (prop: string): StructType => new StructType("struct_" + (this.structsNumber++) + "_t", { [prop]: PointerVarType });
+
         let typeEqualities: Equality<any>[] = [];
 
-        const addEquality = <T extends ts.Node>(typeGuard: { (n): n is T }, node1: NodeFunc<T>, node2: string | NodeFunc<T> | NodeResolver<T>) => {
-            if (typeof node2 == "string")
-                typeEqualities.push([ typeGuard, node1, { getNode: node1, getProp: n => null, getType: t => node2, setType: (n, t, p) => null } ]);
-            else if (typeof node2 == "function")
-                typeEqualities.push([ typeGuard, node1, { getNode: node2, getProp: n => null, getType: t => t, setType: this.setNodeType.bind(this) }]);
+        const addEquality = <T extends ts.Node>(typeGuard: { (n): n is T }, node1: NodeFunc<T>, node2: NodeFunc<T> | NodeResolver<T>) => {
+            if (typeof node2 == "function")
+                typeEqualities.push([ typeGuard, node1, { getNode: node2 }]);
             else
                 typeEqualities.push([ typeGuard, node1, node2 ]);
         };
 
         addEquality(ts.isIdentifier, n => n, n => getDeclaration(this.typeChecker, n));
-        addEquality(ts.isPropertyAccessExpression, n => n, propertyOf(n => n.expression, n => n.name.getText()));
-        addEquality(this.isLengthPropertyAccess, n => n, NumberVarType);
-        addEquality(this.isLengthPropertyAccess, n => n.expression, array(n => n.expression));
-        addEquality(this.isSimpleElementAccess, n => n, propertyOrElementOf(n => n.expression, n => n.argumentExpression.getText().replace(/^"(.*)"$/g,"$1")));
-
-        addEquality(ts.isCallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
-        addEquality(this.isMethodCall, n => n, {
-            getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getReturnType(this, n)).type
-        });
-        addEquality(this.isMethodCall, n => n.expression.expression, {
-            getNode: n => n.expression.expression,
-            getType: (t, n) => this.mergeTypes(t, StandardCallHelper.getObjectType(this, n) || t).type
-        });
-
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
-        addEquality(ts.isPropertyAssignment, n => n, propertyOf(n => n.parent, n => n.name.getText()));
-        addEquality(ts.isFunctionDeclaration, n => n, VoidType);
-        addEquality(ts.isForOfStatement, n => n.initializer, elementOf(n => n.expression));
-        addEquality(ts.isForInStatement, n => n.initializer, StringVarType);
+        addEquality(ts.isPropertyAssignment, n => n.parent, type(n => struct(n.name.getText())));
+        addEquality(ts.isPropertyAssignment, n => n, type(n => {
+            const type = this.getCType(n.parent);
+            return type instanceof StructType ? type.properties[n.name.getText()] : null;
+        }));
+
+        addEquality(this.isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText())));
+        addEquality(this.isFieldPropertyAccess, n => n, type(n => {
+            const type = this.getCType(n.expression);
+            return type instanceof StructType ? type.properties[n.name.getText()]
+                : type instanceof ArrayType && n.name.getText() == "length" ? NumberVarType
+                : null;
+        }));
+
+        addEquality(this.isFieldElementAccess, n => n.expression, type(n => {
+            const type = this.getCType(n.argumentExpression);
+            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText())
+                : ts.isNumericLiteral(n.argumentExpression) ? new ArrayType(PointerVarType, 0, false)
+                : type == NumberVarType ? new ArrayType(PointerVarType, 0, false)
+                : type == StringVarType ? new DictType(PointerVarType)
+                : null
+        }));
+        addEquality(this.isFieldElementAccess, n => n, type(n => {
+            const type = this.getCType(n.expression);
+            return ts.isStringLiteral(n.argumentExpression) && type instanceof StructType ? type.properties[n.argumentExpression.getText()]
+                : ts.isStringLiteral(n.argumentExpression) && type instanceof ArrayType && n.argumentExpression.getText() == "length" ? NumberVarType
+                : type instanceof ArrayType || type instanceof DictType ? type.elementType
+                : null
+        }));
+
+        addEquality(ts.isCallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(this.isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
+
         addEquality(this.isEqualsExpression, n => n.left, n => n.right);
+
+        addEquality(ts.isFunctionDeclaration, n => n, type(VoidType));
+        addEquality(this.isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(PointerVarType, 0, false)));
+        addEquality(this.isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
+            const type = this.getCType(n.expression);
+            return type instanceof ArrayType ? type.elementType : null
+        }));
+        addEquality(ts.isForInStatement, n => n.initializer, type(StringVarType));
         addEquality(ts.isReturnStatement, n => n.expression, n => findParentFunction(n));
 
         this.resolveTypes(allNodes, typeEqualities);
@@ -282,38 +284,41 @@ export class TypeHelper {
             for (let equality of equalities) {
                 let [ node, [ _, node1_func, node2_resolver ] ] = equality;
                 let node1 = node1_func(node);
-                let node2 = node2_resolver.getNode ? node2_resolver.getNode(node) : node;
-                if (!node1 || !node2)
+                if (!node1)
                     continue;
 
-                let node2Property = node2_resolver.getProp ? node2_resolver.getProp(node) : null;
                 let type1 = this.getCType(node1);
-                let type2 = node2_resolver.getType(this.getCType(node2), node, node2Property);
 
-                let { type, replaced } = this.mergeTypes(type2, type1);
-                if (type) {
-                    if (replaced) {
+                let node2 = node2_resolver.getNode ? node2_resolver.getNode(node) : null;
+                let type2 = node2_resolver.getType ? node2_resolver.getType(node) : this.getCType(node2);
+
+                let { type, replaced } = this.mergeTypes(type1, type2);
+                if (type && replaced) {
+                    if (this.ensureNoTypeDuplicates(type) != this.ensureNoTypeDuplicates(type1))
                         changed = true;
-                        this.setNodeType(node1, type);
-                        node2_resolver.setType ? node2_resolver.setType(node2, type, node2Property) : this.setNodeType(node2, type);
-                    }
+                    this.setNodeType(node1, type);
+                    if (node2)
+                        this.setNodeType(node2, type);
                 }
             }
         } while (changed);
 
     }
 
-    private isSimpleElementAccess(n: ts.Node): n is ts.ElementAccessExpression {
-        return ts.isElementAccessExpression(n) && (ts.isStringLiteral(n.argumentExpression) || ts.isNumericLiteral(n.argumentExpression))
-    }
     private isEqualsExpression(n): n is ts.BinaryExpression {
         return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
     }
     private isMethodCall(n): n is MethodCallExpression {
-        return ts.isCallExpression(n) && n.arguments.length >= 1 && ts.isPropertyAccessExpression(n.expression);
+        return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
     }
-    private isLengthPropertyAccess(n): n is ts.PropertyAccessExpression {
-        return ts.isPropertyAccessExpression(n) && n.name.getText() == "length";
+    private isFieldElementAccess(n): n is ts.ElementAccessExpression {
+        return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+    }
+    private isFieldPropertyAccess(n): n is ts.PropertyAccessExpression {
+        return ts.isPropertyAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+    }
+    private isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
+        return ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
     }
     private setNodeType(n, t) {
         if (n)
@@ -382,8 +387,8 @@ export class TypeHelper {
     }
 
     private mergeTypes(type1: CType, type2: CType): { type: CType, replaced: boolean } {
-        let type2_result = { type: this.ensureNoTypeDuplicates(type2), replaced: true };
         let type1_result = { type: this.ensureNoTypeDuplicates(type1), replaced: true };
+        let type2_result = { type: this.ensureNoTypeDuplicates(type2), replaced: true };
         let noChanges = { type: this.ensureNoTypeDuplicates(type1), replaced: false };
 
         if (!type1 && type2)
@@ -448,6 +453,9 @@ export class TypeHelper {
         else if (type1 instanceof StructType && type2 instanceof DictType) {
             return type2_result;
         }
+        else if (type1 instanceof DictType && type2 instanceof StructType) {
+            return type1_result;
+        }
         else if (type1 instanceof DictType && type2 instanceof DictType) {
             if (type1.elementType != PointerVarType && type2.elementType == PointerVarType)
                 return type1_result;
@@ -466,7 +474,9 @@ export class TypeHelper {
         let needPromoteToDictionary = false;
         let needPromoteToTuple = false;
         for (let p of props) {
-            if (isNaN(+p) && p != "length")
+            if (p == "length")
+                continue;
+            if (isNaN(+p))
                 needPromoteToDictionary = true;
             if (this.mergeTypes(arrayType.elementType, structType.properties[p]).replaced)
                 needPromoteToTuple = true;
@@ -478,7 +488,7 @@ export class TypeHelper {
         else if (needPromoteToTuple)
             return { type: new ArrayType(UniversalVarType, arrayType.capacity, arrayType.isDynamicArray), replaced: true };
         else
-            return { type: arrayType, replaced: false };
+            return { type: arrayType, replaced: true };
     }
 
 }
