@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { TypeHelper, CType, StructType, ArrayType, findParentFunction, DictType, NumberVarType } from './types';
+import { TypeHelper, CType, StructType, ArrayType, findParentFunction, DictType, NumberVarType, isFieldElementAccess, isFieldPropertyAccess } from './types';
 
 /** Information about a variable */
 export class VariableInfo {
@@ -32,10 +32,10 @@ export class SymbolsHelper {
             let propsChain: any[] = [];
             let topNode = node;
             while (topNode) {
-                if (ts.isPropertyAccessExpression(topNode)) {
+                if (isFieldPropertyAccess(topNode)) {
                     propsChain.push([topNode, topNode.name.getText()]);
                     topNode = topNode.expression;
-                } else if (ts.isElementAccessExpression(topNode)) {
+                } else if (isFieldElementAccess(topNode)) {
                     propsChain.push([topNode, topNode.argumentExpression.getText().replace(/^"(.*)"$/, "$1")]);
                     topNode = topNode.expression;
                 } else
@@ -89,7 +89,7 @@ export class SymbolsHelper {
             }
         });
 
-        Object.keys(this.variables).forEach(k => console.log("VAR", this.variables[k].name, this.variables[k].declaration.getText(), this.variables[k].type));
+        Object.keys(this.variables).forEach(k => console.log("VAR", this.variables[k].name, this.variables[k].declaration.getText(), JSON.stringify(this.variables[k].type)));
 
     }
 

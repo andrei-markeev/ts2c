@@ -112,6 +112,23 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
     return s && <ts.NamedDeclaration>s.valueDeclaration
 }
 
+export function isEqualsExpression(n): n is ts.BinaryExpression {
+    return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
+}
+export function isMethodCall(n): n is MethodCallExpression {
+    return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
+}
+export function isFieldElementAccess(n): n is ts.ElementAccessExpression {
+    return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+}
+export function isFieldPropertyAccess(n): n is ts.PropertyAccessExpression {
+    return ts.isPropertyAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+}
+export function isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
+    return ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
+}
+
+
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
 type Equality<T extends ts.Node> = [ { (n): n is T }, NodeFunc<T>, NodeResolver<T> ];
@@ -231,38 +248,38 @@ export class TypeHelper {
             return type instanceof StructType ? type.properties[n.name.getText()] : null;
         }));
 
-        addEquality(this.isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText())));
-        addEquality(this.isFieldPropertyAccess, n => n, type(n => {
+        addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText())));
+        addEquality(isFieldPropertyAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
             return type instanceof StructType ? type.properties[n.name.getText()]
                 : type instanceof ArrayType && n.name.getText() == "length" ? NumberVarType
                 : null;
         }));
 
-        addEquality(this.isFieldElementAccess, n => n.expression, type(n => {
+        addEquality(isFieldElementAccess, n => n.expression, type(n => {
             const type = this.getCType(n.argumentExpression);
-            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText())
+            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText().slice(1, -1))
                 : ts.isNumericLiteral(n.argumentExpression) ? new ArrayType(PointerVarType, 0, false)
                 : type == NumberVarType ? new ArrayType(PointerVarType, 0, false)
                 : type == StringVarType ? new DictType(PointerVarType)
                 : null
         }));
-        addEquality(this.isFieldElementAccess, n => n, type(n => {
+        addEquality(isFieldElementAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
-            return ts.isStringLiteral(n.argumentExpression) && type instanceof StructType ? type.properties[n.argumentExpression.getText()]
+            return ts.isStringLiteral(n.argumentExpression) && type instanceof StructType ? type.properties[n.argumentExpression.getText().slice(1, -1)]
                 : ts.isStringLiteral(n.argumentExpression) && type instanceof ArrayType && n.argumentExpression.getText() == "length" ? NumberVarType
                 : type instanceof ArrayType || type instanceof DictType ? type.elementType
                 : null
         }));
 
         addEquality(ts.isCallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
-        addEquality(this.isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
+        addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
 
-        addEquality(this.isEqualsExpression, n => n.left, n => n.right);
+        addEquality(isEqualsExpression, n => n.left, n => n.right);
 
         addEquality(ts.isFunctionDeclaration, n => n, type(VoidType));
-        addEquality(this.isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(PointerVarType, 0, false)));
-        addEquality(this.isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
+        addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(PointerVarType, 0, false)));
+        addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
             const type = this.getCType(n.expression);
             return type instanceof ArrayType ? type.elementType : null
         }));
@@ -273,6 +290,8 @@ export class TypeHelper {
     }
 
     private resolveTypes(allNodes: ts.Node[], typeEqualities: Equality<any>[]) {
+        allNodes.forEach(n => this.setNodeType(n, this.getCType(n)))
+
         let equalities: [ ts.Node, Equality<any> ][] = [];
         typeEqualities.forEach(teq =>
             allNodes.forEach(node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
@@ -304,24 +323,8 @@ export class TypeHelper {
         } while (changed);
 
     }
-
-    private isEqualsExpression(n): n is ts.BinaryExpression {
-        return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
-    }
-    private isMethodCall(n): n is MethodCallExpression {
-        return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
-    }
-    private isFieldElementAccess(n): n is ts.ElementAccessExpression {
-        return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
-    }
-    private isFieldPropertyAccess(n): n is ts.PropertyAccessExpression {
-        return ts.isPropertyAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
-    }
-    private isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
-        return ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
-    }
     private setNodeType(n, t) {
-        if (n)
+        if (n && t)
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
     }
 
