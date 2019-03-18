@@ -64,15 +64,8 @@ export class MemoryManager {
                     break;
                 case ts.SyntaxKind.CallExpression:
                     {
-                        if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node)) {
-                            let nodeToDispose = this.tryReuseExistingVariable(node) || node;
-                            let isTempVar = nodeToDispose == node;
-                            if (!isTempVar) {
-                                this.reusedVariables[node.pos + "_" + node.end] = nodeToDispose.pos + "_" + nodeToDispose.end;
-                                this.originalNodes[nodeToDispose.pos + "_" + nodeToDispose.end] = node;
-                            }
-                            this.scheduleNodeDisposal(nodeToDispose, isTempVar);
-                        }
+                        if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
+                            this.scheduleNodeDisposal(node, true);
                     }
                     break;
             }
@@ -172,6 +165,15 @@ export class MemoryManager {
 
     private scheduleNodeDisposal(heapNode: ts.Node, isTemp: boolean) {
 
+        let nodeToDispose = this.tryReuseExistingVariable(heapNode) || heapNode;
+        let isTempVar = nodeToDispose == heapNode;
+        if (!isTempVar) {
+            this.reusedVariables[heapNode.pos + "_" + heapNode.end] = nodeToDispose.pos + "_" + nodeToDispose.end;
+            this.originalNodes[nodeToDispose.pos + "_" + nodeToDispose.end] = heapNode;
+            heapNode = nodeToDispose;
+            isTemp = false;
+        }
+
         let varFuncNode = this.findParentFunctionNode(heapNode);
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
         var isSimple = true;
@@ -197,7 +199,7 @@ export class MemoryManager {
                     console.log("WARNING: Cannot find references for " + node.getText());
                     continue;
                 }
-                refs = this.symbolsHelper.getVariableInfo(varIdent).references;
+                refs = nodeVarInfo.references;
             }
             let returned = false;
             for (let ref of refs) {
