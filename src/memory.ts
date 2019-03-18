@@ -20,22 +20,22 @@ export class MemoryManager {
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
     private reusedVariables: { [key: string]: string } = {};
     private originalNodes: { [key: string]: ts.Node } = {};
+    private references: { [key: string]: ts.Node[] } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
-    public preprocessVariables() {
-
-        for (let k in this.symbolsHelper.variables) {
-            let v = this.symbolsHelper.variables[k];
-            if (v.requiresAllocation)
-                this.scheduleNodeDisposal(v.declaration, false);
-        }
-
-    }
-
-    public preprocessTemporaryVariables(nodes: ts.Node[]) {
+    public scheduleNodeDisposals(nodes: ts.Node[]) {
         for (let node of nodes) {
             switch (node.kind) {
+                case ts.SyntaxKind.Identifier:
+                    {
+                        const symbol = this.typeChecker.getSymbolAtLocation(node);
+                        if (symbol) {
+                            this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
+                            this.references[symbol.valueDeclaration.pos].push(node);
+                        }
+                    }
+                    break;
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
@@ -193,13 +193,9 @@ export class MemoryManager {
 
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
-                let varIdent = <ts.Identifier>node;
-                let nodeVarInfo = this.symbolsHelper.getVariableInfo(varIdent);
-                if (!nodeVarInfo) {
-                    console.log("WARNING: Cannot find references for " + node.getText());
-                    continue;
-                }
-                refs = nodeVarInfo.references;
+                const symbol = this.typeChecker.getSymbolAtLocation(node);
+                if (symbol)
+                    refs = this.references[symbol.valueDeclaration.pos] || refs;
             }
             let returned = false;
             for (let ref of refs) {

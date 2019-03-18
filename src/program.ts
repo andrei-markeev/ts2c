@@ -473,16 +473,17 @@ export class CProgram implements IScope {
         this.symbolsHelper = new SymbolsHelper(this.typeChecker, this.typeHelper);
         this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
 
+        let nodes;
         for (let source of tsProgram.getSourceFiles()) {
-            let nodes = source.getChildren(), i = 0;
+            nodes = source.getChildren();
+            let i = 0;
             while (i < nodes.length)
                 nodes.push.apply(nodes, nodes[i++].getChildren());
-        
-            this.typeHelper.inferTypes(nodes);
-            this.symbolsHelper.collectVariablesInfo(nodes);
-            this.memoryManager.preprocessVariables();
-            this.memoryManager.preprocessTemporaryVariables(nodes);
         }
+        
+        this.typeHelper.inferTypes(nodes);
+        this.symbolsHelper.collectVariablesInfo(nodes);
+        this.memoryManager.scheduleNodeDisposals(nodes);
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
