@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/mem/mem1.ts"],
+            "args": ["tests/numbers/numbers2.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

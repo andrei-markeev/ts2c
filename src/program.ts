@@ -12,6 +12,8 @@ import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
 
+import './standard/global/parseInt';
+
 import './standard/array/forEach';
 import './standard/array/push';
 import './standard/array/pop';
@@ -385,7 +387,7 @@ class HeaderFlags {
 {/if}
 
 {#if headerFlags.parseInt}
-    int16_t parseInt(const char * str) {
+    int16_t parse_int16_t(const char * str) {
         int r;
         sscanf(str, "%d", &r);
         return (int16_t) r;
