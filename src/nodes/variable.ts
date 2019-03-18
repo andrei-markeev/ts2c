@@ -25,18 +25,31 @@ export class CVariableDeclarationList {
 }
 
 
-@CodeTemplate(`
-{allocator}
-{initializer}`, ts.SyntaxKind.VariableDeclaration)
+@CodeTemplate(`{initializer}`, ts.SyntaxKind.VariableDeclaration)
 export class CVariableDeclaration {
     public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
-        let varInfo = scope.root.symbolsHelper.getVariableInfo(<ts.Identifier>varDecl.name);
-        scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
-        if (varInfo.requiresAllocation)
-            this.allocator = new CVariableAllocation(scope, varInfo.name, varInfo.type, varDecl.name);
+        const name = scope.root.typeChecker.getSymbolAtLocation(varDecl.name).name;
+        const type = scope.root.typeHelper.getCType(varDecl.name);
+        if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
+            const canUseInitializerList = varDecl.initializer.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
+            if (canUseInitializerList) {
+                let s = "{ ";
+                for (let i = 0; i < type.capacity; i++) {
+                    if (i != 0)
+                        s += ", ";
+                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elements[i]);
+                    s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
+                }
+                s += " }";
+                scope.variables.push(new CVariable(scope, name, type, { initializer: s }));
+                return;
+            }
+        }
+
+        scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
     }
@@ -183,12 +196,13 @@ interface CVariableOptions {
 
 export class CVariable {
     private varString: string;
-    constructor(scope: IScope, public name: string, private typeSource, options?: CVariableOptions) {
+    constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
         let typeString = scope.root.typeHelper.getTypeString(typeSource);
-        if (typeString == NumberVarType)
+        if (typeString.indexOf(NumberVarType) !== -1)
             scope.root.headerFlags.int16_t = true;
         else if (typeString == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+
         if (typeString.indexOf('{var}') > -1)
             this.varString = typeString.replace('{var}', name);
         else
