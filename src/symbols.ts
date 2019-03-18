@@ -11,10 +11,6 @@ export class VariableInfo {
     references: ts.Node[] = [];
     /** Where variable was declared */
     declaration: ts.Node;
-    /** Determines if the variable requires memory allocation */
-    requiresAllocation: boolean;
-    /** References to variables that represent properties of this variable */
-    varDeclPosByPropName: { [key: string]: number };
 }
 
 export class SymbolsHelper {
@@ -22,6 +18,7 @@ export class SymbolsHelper {
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
 
     private userStructs: { [name: string]: StructType } = {};
+    private arrayStructs: CType[] = [];
 
     private functionPrototypes: { [funcDeclPos: number]: ts.FunctionDeclaration } = {};
     
@@ -58,22 +55,19 @@ export class SymbolsHelper {
                             name: varName,
                             type: varType,
                             references: [ varNode ],
-                            declaration: varNode,
-                            requiresAllocation: false,
-                            varDeclPosByPropName: {}
+                            declaration: varNode
                         };
                         if (varInfo.type instanceof StructType) {
                             this.registerStructure(varInfo.type);
                             this.updateStructureName(varInfo.type, varName);
                         }
-                        if (varInfo.type instanceof ArrayType)
+                        if (varInfo.type instanceof ArrayType && varInfo.type.isDynamicArray)
                             this.ensureArrayStruct(varInfo.type.elementType)
                     }
                     prop = propsChain.pop();
                     if (prop) {
                         [varNode, propName] = prop;
                         varName += "." + propName;
-                        varInfo.varDeclPosByPropName[propName] = varNode.pos;
                         if (varInfo.type instanceof StructType)
                             varType = varInfo.type.properties[propName];
                         else if (varInfo.type instanceof DictType)
@@ -89,11 +83,20 @@ export class SymbolsHelper {
             }
         });
 
-        Object.keys(this.variables).forEach(k => console.log("VAR", this.variables[k].name, this.variables[k].declaration.getText(), JSON.stringify(this.variables[k].type)));
-
     }
 
     public getStructsAndFunctionPrototypes() {
+
+        for (let arrElemType of this.arrayStructs) {
+            let elementTypeText = this.typeHelper.getTypeString(arrElemType);
+            let structName = ArrayType.getArrayStructName(elementTypeText);
+            this.userStructs[structName] = new StructType(structName, {
+                size: NumberVarType,
+                capacity: NumberVarType,
+                data: elementTypeText + "*"
+            });
+        }
+
         let structs = Object.keys(this.userStructs).map(k => ({
             name: k,
             properties: Object.keys(this.userStructs[k].properties).map(pk => ({
@@ -101,7 +104,7 @@ export class SymbolsHelper {
                 type: this.userStructs[k].properties[pk]
             }))
         }));
-        let functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
+        const functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
 
         return [structs, functionPrototypes];
     }
@@ -114,17 +117,9 @@ export class SymbolsHelper {
         }
     }
 
-    public ensureArrayStruct(elementType: CType) {
-        let elementTypeText = this.typeHelper.getTypeString(elementType);
-        let structName = ArrayType.getArrayStructName(elementTypeText);
-        this.userStructs[structName] = new StructType(structName, {
-            size: NumberVarType,
-            capacity: NumberVarType,
-            data: elementTypeText + "*"
-        });
-    }
-
     private updateStructureName(structType: StructType, varName: string) {
+        if (varName.slice(-2) === ".0" && structType.structName.substr(0, 7) != "struct_")
+            return;
         varName = varName.replace(/\./g, "_") + "_t";
         if (this.userStructs[varName] == null) {
             let found = this.findStructByType(structType);
@@ -132,6 +127,11 @@ export class SymbolsHelper {
             structType.structName = varName;
             delete this.userStructs[found];
         }
+    }
+
+    public ensureArrayStruct(elementType: CType) {
+        if (this.arrayStructs.every(s => this.typeHelper.getTypeString(s) !== this.typeHelper.getTypeString(elementType)))
+            this.arrayStructs.push(elementType);
     }
 
     private findStructByType(structType: StructType) {

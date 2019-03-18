@@ -1,10 +1,9 @@
-import { AssignmentHelper, CAssignment } from './assignment';
+import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, StringVarType, RegexVarType, NumberVarType, BooleanVarType, UniversalVarType, PointerVarType} from '../types';
+import {CType, StringVarType, RegexVarType, NumberVarType} from '../types';
 import {CVariable} from './variable';
-import {CElementAccess} from './elementaccess';
 import {CRegexAsString} from './regexfunc';
 
 export interface CExpression { }

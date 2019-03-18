@@ -25,8 +25,10 @@ export class ArrayType {
             elementTypeText = elementTypeText.replace(PointerVarType, "pointer");
         while (elementTypeText.indexOf(BooleanVarType) > -1)
             elementTypeText = elementTypeText.replace(BooleanVarType, "bool");
+        
+        elementTypeText = elementTypeText.replace(/^struct ([a-z0-9_]+)_t \*$/, (all, g1) => g1);
 
-        elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, (all, g1) => "array_" + g1);
+        //elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, (all, g1) => "array_" + g1);
 
         return "array_" +
             elementTypeText
@@ -36,7 +38,6 @@ export class ArrayType {
                 .replace(/\*/g, 'p') + "_t";
     }
 
-    private structName: string;
     public getText() {
 
         let elementType = this.elementType;
@@ -46,10 +47,10 @@ export class ArrayType {
         else
             elementTypeText = elementType.getText();
 
-        this.structName = ArrayType.getArrayStructName(elementTypeText);
+        let structName = ArrayType.getArrayStructName(elementTypeText);
 
         if (this.isDynamicArray)
-            return "struct " + this.structName + " *";
+            return "struct " + structName + " *";
         else
             return "static " + elementTypeText + " {var}[" + this.capacity + "]";
     }
@@ -250,6 +251,8 @@ export class TypeHelper {
 
         addEquality(ts.isIdentifier, n => n, n => getDeclaration(this.typeChecker, n));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
+        addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
+        addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
 
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
@@ -284,7 +287,7 @@ export class TypeHelper {
                         : null
         }));
 
-        addEquality(ts.isCallExpression, n => n.expression, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(ts.isCallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], n => {
                 const func = <ts.FunctionDeclaration>getDeclaration(this.typeChecker, n.expression);
@@ -346,6 +349,10 @@ export class TypeHelper {
                 }
             }
         } while (changed);
+
+        allNodes
+            .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
+            .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
 
     }
     private setNodeType(n, t) {

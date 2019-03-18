@@ -3,7 +3,7 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType, DictType} from '../types';
 import {CVariable, CVariableAllocation} from './variable';
-import {AssignmentHelper, CAssignment} from './assignment';
+import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
