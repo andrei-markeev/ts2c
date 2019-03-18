@@ -25,17 +25,15 @@ export class MemoryManager {
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
     public scheduleNodeDisposals(nodes: ts.Node[]) {
+        nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
+            const symbol = this.typeChecker.getSymbolAtLocation(n);
+            if (symbol) {
+                this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
+                this.references[symbol.valueDeclaration.pos].push(n);
+            }
+        });
         for (let node of nodes) {
             switch (node.kind) {
-                case ts.SyntaxKind.Identifier:
-                    {
-                        const symbol = this.typeChecker.getSymbolAtLocation(node);
-                        if (symbol) {
-                            this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
-                            this.references[symbol.valueDeclaration.pos].push(node);
-                        }
-                    }
-                    break;
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
