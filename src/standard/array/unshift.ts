@@ -20,6 +20,11 @@ class ArrayUnshiftResolver implements IResolver {
         let elementType = call.arguments[0] && typeHelper.getCType(call.arguments[0]);
         return new ArrayType(elementType || PointerVarType, 0, true);
     }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        let propAccess = <ts.PropertyAccessExpression>call.expression;
+        let objType = typeHelper.getCType(propAccess.expression);
+        return call.arguments.map(a => objType instanceof ArrayType ? objType.elementType : null);
+    }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return NumberVarType;
     }

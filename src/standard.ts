@@ -4,8 +4,9 @@ import {CType, TypeHelper} from './types';
 
 export interface IResolver {
     matchesNode(s: TypeHelper, n: ts.CallExpression, options?: IResolverMatchOptions): boolean;
-    returnType(s: TypeHelper, n: ts.CallExpression): CType;
     objectType?(s: TypeHelper, n: ts.CallExpression): CType;
+    argumentTypes?(s: TypeHelper, n: ts.CallExpression): CType[];
+    returnType(s: TypeHelper, n: ts.CallExpression): CType;
     needsDisposal(s: TypeHelper, n: ts.CallExpression): boolean;
     getTempVarName(s: TypeHelper, n: ts.CallExpression): string;
     createTemplate(s: IScope, n: ts.CallExpression): any;
@@ -44,6 +45,14 @@ export class StandardCallHelper {
                 return resolver.objectType ? resolver.objectType(typeHelper, node) : null;
         
         return null;
+    }
+    public static getArgumentTypes(typeHelper: TypeHelper, node: ts.CallExpression) {
+        const notDefined = node.arguments.map(a => null);
+        for (var resolver of standardCallResolvers)
+            if (resolver.matchesNode(typeHelper, node, { determineObjectType: true }))
+                return resolver.argumentTypes ? resolver.argumentTypes(typeHelper, node) : notDefined;
+        
+        return notDefined;
     }
     public static getReturnType(typeHelper: TypeHelper, node: ts.CallExpression) {
         for (var resolver of standardCallResolvers)
