@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
-import {ArrayType, StructType, NumberVarType} from '../types';
+import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression} from './expressions';
 import {CString} from './literals';
@@ -110,12 +110,14 @@ export class CForStatement {
 {#if isDynamicArray}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)
     {
+        {variables {    }=> {this};\n}
         {init} = {cast}{arrayAccess}->data[{iteratorVarName}];
         {statements {    }=> {this}}
     }
 {#else}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)
     {
+        {variables {    }=> {this};\n}
         {init} = {cast}{arrayAccess}[{iteratorVarName}];
         {statements {    }=> {this}}
     }
@@ -165,6 +167,7 @@ export class CForOfStatement implements IScope {
 @CodeTemplate(`
 for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)
 {
+    {variables {    }=> {this};\n}
     {init} = {varAccess}->index->data[{iteratorVarName}];
     {statements {    }=> {this}}
 }
