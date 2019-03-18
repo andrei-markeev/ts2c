@@ -30,7 +30,8 @@ class CArrayLiteralExpression {
             else {
                 if (type.isDynamicArray) {
                     varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-                    scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+                    if (!scope.root.memoryManager.variableWasReused(node))
+                        scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
                     scope.statements.push("ARRAY_CREATE(" + varName + ", " + Math.max(arrSize, 2) + ", " + arrSize + ");\n");
                     let gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -79,7 +80,8 @@ class CObjectLiteralExpression {
         if (this.isStruct || this.isDict) {
             let varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             
-            scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+            if (!scope.root.memoryManager.variableWasReused(node))
+                scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
             
             this.allocator = new CVariableAllocation(scope, varName, type, node);
             this.initializers = node.properties
