@@ -17,6 +17,12 @@ export class StringMatchResolver implements IResolver {
         let objType = typeHelper.getCType(propAccess.expression);
         return propAccess.name.getText() == "match" && objType == StringVarType;
     }
+    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return StringVarType;
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return call.arguments.map((a, i) => i == 0 ? RegexVarType : null);
+    }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return new ArrayType(StringVarType, 1, true);
     }
