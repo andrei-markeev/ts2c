@@ -152,12 +152,12 @@ export class CSimpleBinaryExpression {
             if (callReplaceMap[operatorKind])
                 scope.root.headerFlags.strings = true;
 
-            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.FirstCompoundAssignment) {
+            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.PlusEqualsToken) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
-                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.FirstCompoundAssignment;
+                this.replacedWithVarAssignment = operatorKind === ts.SyntaxKind.PlusEqualsToken;
                 this.replacementVarName = tempVarName;
                 this.strPlusStr = true;
                 scope.root.headerFlags.strings = true;
@@ -187,7 +187,7 @@ export class CSimpleBinaryExpression {
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
-                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.PlusEqualsToken;
+                this.replacedWithVarAssignment = operatorKind === ts.SyntaxKind.PlusEqualsToken;
                 this.replacementVarName = tempVarName;
                 if (leftType == NumberVarType)
                     this.numberPlusStr = true;

@@ -18,11 +18,11 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **`continue`**
  - [x] **`break`** _(partial: labels not supported)_
  - [x] **`return`**
- - [ ] `switch`
- - [ ] `with`
- - [ ] Labelled statements
- - [ ] ~~`throw`~~  _(will not be implemented)_
- - [ ] ~~`try`~~  _(will not be implemented)_
+ - [x] **`switch`**
+ - [ ] ~~`with`~~  _(will not be implemented in v1)_
+ - [ ] ~~Labelled statements~~  _(will not be implemented in v1)_
+ - [ ] ~~`throw`~~  _(will not be implemented in v1)_
+ - [ ] ~~`try`~~  _(will not be implemented in v1)_
  - [x] **Function definition `function` ident `() {` ... `}`** _(only in global scope)_
 
 

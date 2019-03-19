@@ -321,6 +321,7 @@ export class TypeHelper {
         }));
         addEquality(ts.isForInStatement, n => n.initializer, type(StringVarType));
         addEquality(ts.isReturnStatement, n => n.expression, n => findParentFunction(n));
+        addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
 
         this.resolveTypes(allNodes, typeEqualities);
     }

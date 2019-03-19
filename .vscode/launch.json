@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/numbers/numbers4.ts"],
+            "args": ["tests/statements/switch.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

@@ -56,6 +56,80 @@ export class CIfStatement {
 }
 
 @CodeTemplate(`
+{#if nonIntegral}
+    {switch} = {values {\n        : }=> {this}}
+        : -1;
+{/if}
+switch ({switch}) {
+    {cases {    }=> {this}\n}
+}
+`, ts.SyntaxKind.SwitchStatement)
+export class CSwitchStatement {
+    public nonIntegral: boolean;
+    public expression: CExpression;
+    public switch: CExpression;
+    public cases: CSwitchCaseClause[];
+    public values: CExpression[];
+    constructor(scope: IScope, node: ts.SwitchStatement) {
+        const exprType = scope.root.typeHelper.getCType(node.expression);
+        this.nonIntegral = exprType != NumberVarType;
+
+        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.cases = node.caseBlock.clauses.map((clause, index) => new CSwitchCaseClause(scope, clause, this.nonIntegral ? index : null));
+
+        if (this.nonIntegral) {
+            const tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_switch");
+            scope.variables.push(new CVariable(scope, tempVarName, NumberVarType));
+            this.values = node.caseBlock.clauses.filter(c => ts.isCaseClause(c)).map((clause: ts.CaseClause, index) => new CSwitchCaseCompare(scope, this.expression, clause, index));
+            this.switch = tempVarName;
+        } else
+            this.switch = this.expression;
+    }
+}
+
+@CodeTemplate(`
+{#if !defaultClause}
+    case {value}:
+{#else}
+    default:
+{/if}
+        {statements {        }=> {this}}
+`)
+class CSwitchCaseClause implements IScope {
+    public variables: CVariable[] = [];
+    public statements: any[] = [];
+    public parent: IScope;
+    public func: IScope;
+    public root: CProgram;
+    public value: CExpression;
+    public defaultClause: boolean;
+    constructor(scope: IScope, clause: ts.CaseOrDefaultClause, index: number) {
+        this.parent = scope;
+        this.func = scope.func;
+        this.root = scope.root;
+        this.defaultClause = clause.kind === ts.SyntaxKind.DefaultClause;
+        if (index != null)
+            this.value = "" + index;
+        else if (ts.isCaseClause(clause))
+            this.value = CodeTemplateFactory.createForNode(scope, clause.expression);
+
+        for (let s of clause.statements) {
+            const statement = CodeTemplateFactory.createForNode(this, s);
+            this.statements.push(statement)
+        }
+    }
+}
+
+@CodeTemplate(`!strcmp({expression}, {value}) ? {index}`)
+class CSwitchCaseCompare {
+    public value: CExpression;
+    constructor(scope: IScope, public expression: CExpression, clause: ts.CaseClause, public index: number) {
+        this.value = CodeTemplateFactory.createForNode(scope, clause.expression);
+    }
+}
+
+
+@CodeTemplate(`
 while ({condition})
 {block}`, ts.SyntaxKind.WhileStatement)
 export class CWhileStatement {
@@ -210,15 +284,6 @@ export class CForInStatement implements IScope {
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
     }
-}
-
-class CProperty {
-    constructor(
-        public varAccess: CElementAccess,
-        public index: string,
-        public name: CString,
-        public init: CExpression
-    ) { }
 }
 
 @CodeTemplate(`{expression}{SemicolonCR}`, ts.SyntaxKind.ExpressionStatement)
