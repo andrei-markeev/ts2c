@@ -98,6 +98,7 @@ export class CSimpleBinaryExpression {
 
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
+
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
             operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
@@ -107,17 +108,40 @@ export class CSimpleBinaryExpression {
             operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
             operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
             operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
+
             operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
             operatorMap[ts.SyntaxKind.SlashToken] = '/';
             operatorMap[ts.SyntaxKind.PercentToken] = '%';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
-            operatorMap[ts.SyntaxKind.FirstCompoundAssignment] = '+=';
             operatorMap[ts.SyntaxKind.AmpersandToken] = '&';
             operatorMap[ts.SyntaxKind.BarToken] = '|';
             operatorMap[ts.SyntaxKind.CaretToken] = '^';
             operatorMap[ts.SyntaxKind.GreaterThanGreaterThanToken] = '>>';
+            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken] = '>>';
             operatorMap[ts.SyntaxKind.LessThanLessThanToken] = '<<';
+
+            operatorMap[ts.SyntaxKind.AsteriskEqualsToken] = '*=';
+            operatorMap[ts.SyntaxKind.SlashEqualsToken] = '/=';
+            operatorMap[ts.SyntaxKind.PercentEqualsToken] = '%=';
+            operatorMap[ts.SyntaxKind.PlusEqualsToken] = '+=';
+            operatorMap[ts.SyntaxKind.MinusEqualsToken] = '-=';
+            operatorMap[ts.SyntaxKind.AmpersandEqualsToken] = '&=';
+            operatorMap[ts.SyntaxKind.BarEqualsToken] = '|=';
+            operatorMap[ts.SyntaxKind.CaretEqualsToken] = '^=';
+            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanEqualsToken] = '>>=';
+            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken] = '>>';
+            operatorMap[ts.SyntaxKind.LessThanLessThanEqualsToken] = '<<=';
+
+            if (operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
+                || operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
+            {
+                const leftAsString = CodeTemplateFactory.templateToString(this.left as any);
+                this.left = "((uint16_t)" + leftAsString + ")";
+                if (operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
+                    this.left = leftAsString + " = " + this.left;
+                scope.root.headerFlags.uint16_t = true;
+            }
         }
         else if (leftType == StringVarType && rightType == StringVarType) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
@@ -158,12 +182,12 @@ export class CSimpleBinaryExpression {
                 }
             }
 
-            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.FirstCompoundAssignment) {
+            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.PlusEqualsToken) {
                 let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
                 scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
                 this.replacedWithVar = true;
-                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.FirstCompoundAssignment;
+                this.replacedWithVarAssignment = operatorKind == ts.SyntaxKind.PlusEqualsToken;
                 this.replacementVarName = tempVarName;
                 if (leftType == NumberVarType)
                     this.numberPlusStr = true;

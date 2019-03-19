@@ -59,17 +59,17 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Unary `-`** _(only numbers)_
     - [x] **Bitwise NOT `~`** _(only numbers)_
     - [x] **Logical NOT `!`**
- - [ ] Multiplicative operators
+ - [x] **Multiplicative operators**
     - [x] **`*`** _(only numbers)_
     - [x] **`/`** _(only numbers)_
     - [x] **`%`** _(only numbers)_
- - [ ] Additive operators
+ - [x] **Additive operators**
     - [x] **`+`** _(partial: number+number, string+number, string+string)_
     - [x] **`-`** _(only numbers)_
- - [ ] Bitwise shift operators
+ - [x] **Bitwise shift operators**
     - [x] **`<<`** _(only numbers)_
     - [x] **`>>`** _(only numbers)_
-    - [ ] `>>>`
+    - [x] **`>>>`** _(only numbers)_
  - [ ] Relational operators
     - [x] **`<`** _(only numbers)_
     - [x] **`>`** _(only numbers)_
@@ -77,33 +77,33 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`>=`** _(only numbers)_
     - [ ] `instanceof`
     - [ ] `in`
- - [x] Equality operators
+ - [x] **Equality operators**
     - [x] **`==`** _(partial: number+number, string+number, string+string)_
     - [x] **`!=`** _(partial: number+number, string+number, string+string)_
     - [x] **`===`** _(partial: number+number, string+string)_
     - [x] **`!==`** _(partial: number+number, string+string)_
- - [ ] Binary bitwise operators
+ - [x] **Binary bitwise operators**
     - [x] **`&`** _(only numbers)_
     - [x] **`|`** _(only numbers)_
     - [x] **`^`** _(only numbers)_
- - [x] Binary logical operators
+ - [x] **Binary logical operators**
     - [x] **`&&`**
     - [x] **`||`**
  - [x] **Conditional operator `?` `:`**
- - [ ] Assignment operators
+ - [x] **Assignment operators**
     - [x] **Simple assignment `=`**
-    - [ ] Compound assignments
+    - [x] **Compound assignments**
         - [x] **`+=`** _(partial: number+number, string+number, string+string)_
-        - [ ] `-=`
-        - [ ] `*=`
-        - [ ] `/=`
-        - [ ] `%=`
-        - [ ] `<<=`
-        - [ ] `>>=`
-        - [ ] `>>>=`
-        - [ ] `&=`
-        - [ ] `^=`
-        - [ ] `|=`
+        - [x] **`-=`** _(only numbers)_
+        - [x] **`*=`** _(only numbers)_
+        - [x] **`/=`** _(only numbers)_
+        - [x] **`%=`** _(only numbers)_
+        - [x] **`<<=`** _(only numbers)_
+        - [x] **`>>=`** _(only numbers)_
+        - [x] **`>>>=`** _(only numbers)_
+        - [x] **`&=`** _(only numbers)_
+        - [x] **`^=`** _(only numbers)_
+        - [x] **`|=`** _(only numbers)_
  - [x] **Comma operator**
 
 ### Built-in objects
@@ -113,7 +113,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] Infinity
      - [ ] undefined
      - [ ] ~~eval~~  _(will not be implemented)_
-     - [x] **parseInt**
+     - [x] **parseInt** _(partial: radix parameter not supported)_
      - [ ] parseFloat
      - [ ] isNaN
      - [ ] isFinite

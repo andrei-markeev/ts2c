@@ -9,6 +9,9 @@ export class CodeTemplateFactory {
         return nodeKindTemplates[node.kind] && new nodeKindTemplates[node.kind](scope, node)
             || "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
     }
+    public static templateToString(template: string | { resolve: () => string }) {
+        return typeof(template) === "string" ? template : template.resolve();
+    }
 }
 
 export function CodeTemplate(tempString: string, nodeKind?: number | number[]): ClassDecorator {

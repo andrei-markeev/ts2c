@@ -56,6 +56,7 @@ class HeaderFlags {
     bool: boolean = false;
     uint8_t: boolean = false;
     int16_t: boolean = false;
+    uint16_t: boolean = false;
     js_var: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
@@ -114,6 +115,9 @@ class HeaderFlags {
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
      headerFlags.regex }
     typedef short int16_t;
+{/if}
+{#if headerFlags.uint16_t}
+    typedef unsigned short uint16_t;
 {/if}
 {#if headerFlags.regex}
     struct regex_indices_struct_t {
