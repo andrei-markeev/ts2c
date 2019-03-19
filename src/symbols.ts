@@ -32,7 +32,10 @@ export class SymbolsHelper {
         return [structs];
     }
 
-    public ensureStruct(structType: StructType) {
+    public ensureStruct(structType: StructType, name: string) {
+        if (!structType.structName)
+            structType.structName = name + "_t";
+
         let found = this.findStructByType(structType);
         if (!found)
             this.userStructs[structType.structName] = structType;

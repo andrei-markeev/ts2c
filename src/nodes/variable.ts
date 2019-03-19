@@ -203,11 +203,8 @@ export class CVariable {
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
         const type = isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
 
-        if (type instanceof StructType) {
-            if (!type.structName)
-                type.structName = name + "_t";
-            scope.root.symbolsHelper.ensureStruct(type);
-        }
+        if (type instanceof StructType)
+            scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
 

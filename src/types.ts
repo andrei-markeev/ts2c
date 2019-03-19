@@ -114,7 +114,7 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
 }
 
 export function isNode(n): n is ts.Node {
-    return n && n.kind && n.flags && n.pos && n.end;
+    return n && n.kind !== undefined && n.flags !== undefined && n.pos !== undefined && n.end !== undefined;
 }
 export function isEqualsExpression(n): n is ts.BinaryExpression {
     return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;

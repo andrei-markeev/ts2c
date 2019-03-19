@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/arrays/array1.ts"],
+            "args": ["tests/realworld/gray.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }
