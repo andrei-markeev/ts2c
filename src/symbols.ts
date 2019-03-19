@@ -1,17 +1,5 @@
 import * as ts from 'typescript'
-import { TypeHelper, CType, StructType, ArrayType, findParentFunction, DictType, NumberVarType, isFieldElementAccess, isFieldPropertyAccess } from './types';
-
-/** Information about a variable */
-export class VariableInfo {
-    /** Name of the variable */
-    name: string;
-    /** The final determined C type for this variable */
-    type: CType;
-    /** Contains all references to this variable */
-    references: ts.Node[] = [];
-    /** Where variable was declared */
-    declaration: ts.Node;
-}
+import { TypeHelper, CType, StructType, ArrayType, findParentFunction, NumberVarType } from './types';
 
 export class SymbolsHelper {
 
@@ -20,81 +8,17 @@ export class SymbolsHelper {
     private userStructs: { [name: string]: StructType } = {};
     private arrayStructs: CType[] = [];
 
-    private functionPrototypes: { [funcDeclPos: number]: ts.FunctionDeclaration } = {};
-    
-    public variables: { [varDeclPos: number]: VariableInfo } = {};
-    
-    public collectVariablesInfo(allNodes: ts.Node[]) {
-        allNodes.forEach(node => {
-            let propsChain: any[] = [];
-            let topNode = node;
-            while (topNode) {
-                if (isFieldPropertyAccess(topNode)) {
-                    propsChain.push([topNode, topNode.name.getText()]);
-                    topNode = topNode.expression;
-                } else if (isFieldElementAccess(topNode)) {
-                    propsChain.push([topNode, topNode.argumentExpression.getText().replace(/^"(.*)"$/, "$1")]);
-                    topNode = topNode.expression;
-                } else
-                    break;
-            }
-            if (ts.isIdentifier(topNode)) {
-                let tsSymbol = this.typeChecker.getSymbolAtLocation(topNode);
-                if (!tsSymbol)
-                    return;
-                let varNode: (ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression) = tsSymbol.valueDeclaration;
-                let varName = tsSymbol.name;
-                let varType = this.typeHelper.getCType(varNode);
-                let varInfo: VariableInfo;
-                let propName: string;
-                let prop: [ts.NamedDeclaration | ts.PropertyAccessExpression | ts.ElementAccessExpression, string];
-                do {
-                    varInfo = this.variables[varNode.pos];
-                    if (!varInfo) {
-                        varInfo = this.variables[varNode.pos] = {
-                            name: varName,
-                            type: varType,
-                            references: [ varNode ],
-                            declaration: varNode
-                        };
-                        if (varInfo.type instanceof StructType) {
-                            this.registerStructure(varInfo.type);
-                            this.updateStructureName(varInfo.type, varName);
-                        }
-                        if (varInfo.type instanceof ArrayType && varInfo.type.isDynamicArray)
-                            this.ensureArrayStruct(varInfo.type.elementType)
-                    }
-                    prop = propsChain.pop();
-                    if (prop) {
-                        [varNode, propName] = prop;
-                        varName += "." + propName;
-                        if (varInfo.type instanceof StructType)
-                            varType = varInfo.type.properties[propName];
-                        else if (varInfo.type instanceof DictType)
-                            varType = varInfo.type.elementType;
-                        else if (varInfo.type instanceof ArrayType)
-                            varType = varInfo.type.elementType;
-                        else
-                            throw new Error("Internal error: element access expression is not compatible with type of " + varInfo.name);
-                    }
-                } while (prop)
-            
-                varInfo.references.push(node);
-            }
-        });
-
-    }
-
     public getStructsAndFunctionPrototypes() {
 
         for (let arrElemType of this.arrayStructs) {
             let elementTypeText = this.typeHelper.getTypeString(arrElemType);
             let structName = ArrayType.getArrayStructName(elementTypeText);
-            this.userStructs[structName] = new StructType(structName, {
+            this.userStructs[structName] = new StructType({
                 size: NumberVarType,
                 capacity: NumberVarType,
                 data: elementTypeText + "*"
             });
+            this.userStructs[structName].structName = structName;
         }
 
         let structs = Object.keys(this.userStructs).map(k => ({
@@ -104,29 +28,14 @@ export class SymbolsHelper {
                 type: this.userStructs[k].properties[pk]
             }))
         }));
-        const functionPrototypes = Object.keys(this.functionPrototypes).map(k => this.functionPrototypes[k]);
 
-        return [structs, functionPrototypes];
+        return [structs];
     }
 
-    private registerStructure(structType: StructType) {
+    public ensureStruct(structType: StructType) {
         let found = this.findStructByType(structType);
-        if (!found) {
-            structType.structName = "struct_" + Object.keys(this.userStructs).length + "_t";
+        if (!found)
             this.userStructs[structType.structName] = structType;
-        }
-    }
-
-    private updateStructureName(structType: StructType, varName: string) {
-        if (varName.slice(-2) === ".0" && structType.structName.substr(0, 7) != "struct_")
-            return;
-        varName = varName.replace(/\./g, "_") + "_t";
-        if (this.userStructs[varName] == null) {
-            let found = this.findStructByType(structType);
-            this.userStructs[varName] = this.userStructs[found];
-            structType.structName = varName;
-            delete this.userStructs[found];
-        }
     }
 
     public ensureArrayStruct(elementType: CType) {
@@ -165,15 +74,6 @@ export class SymbolsHelper {
         return userStructCode;
     }
     
-    /** Get information of variable specified by ts.Node */
-    public getVariableInfo(node: ts.Node): VariableInfo {
-        for (let k in this.variables)
-            if (this.variables[k].references.some(r => r == node))
-                return this.variables[k];
-        
-        return null;
-    }
-
     private temporaryVariables: { [scopeId: string]: string[] } = {};
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
     /** Generate name for a new iterator variable and register it in temporaryVariables table.

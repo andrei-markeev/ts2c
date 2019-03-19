@@ -9,8 +9,8 @@ Source code structure:
 
  - program.ts - main transpilation entry point
  - types.ts - extended type analysis on top of TypeScript's type checker
- - symbols.ts - extracting symbols for C like variables, functions and structs
  - memory.ts - memory management related stuff, escape analysis
+ - symbols.ts - helper methods for working with variables and structs
  - template.ts - code templating engine
  - nodes/*.ts - code template classes for different syntax nodes  
  - standard.ts - standard call resolvers

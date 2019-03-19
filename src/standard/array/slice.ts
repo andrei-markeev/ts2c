@@ -110,10 +110,8 @@ class CArraySlice {
         this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
         let arrayType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         let tempVarType = new ArrayType(arrayType.elementType, 0, true);
-        if (!scope.root.memoryManager.variableWasReused(call)) {
+        if (!scope.root.memoryManager.variableWasReused(call))
             scope.variables.push(new CVariable(scope, this.tempVarName, tempVarType));
-            scope.root.symbolsHelper.ensureArrayStruct(arrayType.elementType);
-        }
         this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_size");
         scope.variables.push(new CVariable(scope, this.sizeVarName, NumberVarType));
         this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_start");

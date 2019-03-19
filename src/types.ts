@@ -69,6 +69,7 @@ type PropertiesDictionary = { [propName: string]: CType };
 
 /** Type that represents JS object with static properties (implemented as C struct) */
 export class StructType {
+    public structName: string;
     public getText() {
         return 'struct ' + this.structName + ' *';
     }
@@ -76,7 +77,6 @@ export class StructType {
         return "{" + Object.keys(this.properties).map(k => k + ": " + getTypeBodyText(this.properties[k])).join("; ") + "}";
     }
     constructor(
-        public structName: string,
         public properties: PropertiesDictionary
     ) { }
 }
@@ -113,6 +113,9 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
     return s && <ts.NamedDeclaration>s.valueDeclaration
 }
 
+export function isNode(n): n is ts.Node {
+    return n && n.kind && n.flags && n.pos && n.end;
+}
 export function isEqualsExpression(n): n is ts.BinaryExpression {
     return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
 }
@@ -158,7 +161,6 @@ export class TypeHelper {
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
     private typeOfNodeDict: { [id: string]: { node: ts.Node, type: CType } } = {};
-    private structsNumber = 0;
 
     constructor(private typeChecker: ts.TypeChecker) { }
 
@@ -238,7 +240,7 @@ export class TypeHelper {
     public inferTypes(allNodes: ts.Node[]) {
 
         const type = <T extends ts.Node>(t: { (n: T): CType } | string): NodeResolver<T> => ({ getType: typeof (t) === "string" ? _ => t : t });
-        const struct = (prop: string, elemType: CType = PointerVarType): StructType => new StructType("struct_" + (this.structsNumber++) + "_t", { [prop]: elemType });
+        const struct = (prop: string, elemType: CType = PointerVarType): StructType => new StructType({ [prop]: elemType });
 
         let typeEqualities: Equality<any>[] = [];
 
@@ -341,7 +343,7 @@ export class TypeHelper {
 
                 let { type, replaced } = this.mergeTypes(type1, type2);
                 if (type && replaced) {
-                    if (this.ensureNoTypeDuplicates(type) != this.ensureNoTypeDuplicates(type1))
+                    if (type != type1)
                         changed = true;
                     this.setNodeType(node1, type);
                     if (node2)
@@ -407,7 +409,7 @@ export class TypeHelper {
             }
             userStructInfo[prop.name] = propType;
         }
-        return this.ensureNoTypeDuplicates(new StructType("struct_" + (this.structsNumber++) + "_t", userStructInfo));
+        return this.ensureNoTypeDuplicates(new StructType(userStructInfo));
     }
 
     private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
@@ -457,7 +459,7 @@ export class TypeHelper {
             if (type1.capacity != cap || type2.capacity != cap
                 || type1.isDynamicArray != isDynamicArray || type2.isDynamicArray != isDynamicArray
                 || elementTypeMergeResult.replaced)
-                return { type: new ArrayType(elementTypeMergeResult.type, cap, isDynamicArray), replaced: true };
+                return { type: this.ensureNoTypeDuplicates(new ArrayType(elementTypeMergeResult.type, cap, isDynamicArray)), replaced: true };
 
             return noChanges;
         }
@@ -470,7 +472,7 @@ export class TypeHelper {
         else if (type1 instanceof StructType && type2 instanceof StructType) {
             let props = Object.keys(type1.properties).concat(Object.keys(type2.properties));
             let changed = false;
-            let newStruct = new StructType("struct_" + (this.structsNumber++) + "_t", {});
+            let newStruct = new StructType({});
             for (let p of props) {
                 let result = this.mergeTypes(type1.properties[p], type2.properties[p]);
                 newStruct.properties[p] = result.type;
@@ -517,11 +519,11 @@ export class TypeHelper {
                 needPromoteToTuple = true;
         }
         if (needPromoteToDictionary && needPromoteToTuple)
-            return { type: new DictType(UniversalVarType), replaced: true };
+            return { type: this.ensureNoTypeDuplicates(new DictType(UniversalVarType)), replaced: true };
         else if (needPromoteToDictionary)
-            return { type: new DictType(arrayType.elementType), replaced: true };
+            return { type: this.ensureNoTypeDuplicates(new DictType(arrayType.elementType)), replaced: true };
         else if (needPromoteToTuple)
-            return { type: new ArrayType(UniversalVarType, arrayType.capacity, arrayType.isDynamicArray), replaced: true };
+            return { type: this.ensureNoTypeDuplicates(new ArrayType(UniversalVarType, arrayType.capacity, arrayType.isDynamicArray)), replaced: true };
         else
             return { type: arrayType, replaced: true };
     }

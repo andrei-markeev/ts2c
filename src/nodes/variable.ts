@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, CType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 
@@ -195,29 +195,57 @@ interface CVariableOptions {
 }
 
 export class CVariable {
-    private varString: string;
+    private static: boolean;
+    private initializer: string;
+    private type: CType;
+    private typeHelper: TypeHelper;
+
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
-        let typeString = scope.root.typeHelper.getTypeString(typeSource);
-        if (typeString.indexOf(NumberVarType) !== -1)
+        const type = isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
+
+        if (type instanceof StructType) {
+            if (!type.structName)
+                type.structName = name + "_t";
+            scope.root.symbolsHelper.ensureStruct(type);
+        }
+        else if (type instanceof ArrayType && type.isDynamicArray)
+            scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
+
+        if (type == NumberVarType
+                || type instanceof ArrayType && type.elementType == NumberVarType
+                || type instanceof ArrayType && type.isDynamicArray
+                || type instanceof StructType
+                || type instanceof DictType)
             scope.root.headerFlags.int16_t = true;
-        else if (typeString == BooleanVarType)
+        else if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
 
-        if (typeString.indexOf('{var}') > -1)
-            this.varString = typeString.replace('{var}', name);
-        else
-            this.varString = typeString + " " + name;
-
         // root scope, make variables file-scoped by default
-        if (scope.parent == null && this.varString.indexOf('static') != 0)
-            this.varString = 'static ' + this.varString;
-        
+        if (scope.parent == null)
+            this.static = true;
         if (options && options.removeStorageSpecifier)
-            this.varString = this.varString.replace(/^static /,'');
+            this.static = false;
         if (options && options.initializer)
-            this.varString += " = " + options.initializer;
+            this.initializer = options.initializer;
+        
+        this.type = type;
+        this.typeHelper = scope.root.typeHelper
     }
     resolve() {
-        return this.varString;
+        let varString = this.typeHelper.getTypeString(this.type);
+
+        if (varString.indexOf('{var}') > -1)
+            varString = varString.replace('{var}', this.name);
+        else
+            varString = varString + " " + this.name;
+
+        if (this.static && varString.indexOf('static') != 0)
+            varString = 'static ' + varString;
+        else if (!this.static)
+            varString = varString.replace(/^static /, '');
+    
+        if (this.initializer)
+            varString += " = " + this.initializer;
+        return varString;
     }
 }

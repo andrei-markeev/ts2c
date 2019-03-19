@@ -484,7 +484,6 @@ export class CProgram implements IScope {
         }
         
         this.typeHelper.inferTypes(nodes);
-        this.symbolsHelper.collectVariablesInfo(nodes);
         this.memoryManager.scheduleNodeDisposals(nodes);
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
@@ -505,13 +504,13 @@ export class CProgram implements IScope {
             }
         }
 
-        let [structs, functionPrototypes] = this.symbolsHelper.getStructsAndFunctionPrototypes();
+        let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
 
         this.userStructs = structs.map(s => ({
             name: s.name,
             properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
         }));
-        this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
+        this.functionPrototypes = [];//functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
 
         this.destructors = new CVariableDestructors(this, null);
     }
