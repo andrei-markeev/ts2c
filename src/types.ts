@@ -274,7 +274,8 @@ export class TypeHelper {
             const type = this.getCType(n.expression);
             return type instanceof StructType ? type.properties[n.name.getText()]
                 : type instanceof ArrayType && n.name.getText() == "length" ? NumberVarType
-                    : null;
+                : type == StringVarType && n.name.getText() == "length" ? NumberVarType
+                : null;
         }));
 
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
@@ -282,25 +283,27 @@ export class TypeHelper {
             const elementType = this.getCType(n) || PointerVarType;
             return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText().slice(1, -1), n.pos, elementType)
                 : ts.isNumericLiteral(n.argumentExpression) ? new ArrayType(elementType, 0, false)
-                    : type == NumberVarType ? new ArrayType(elementType, 0, false)
-                        : type == StringVarType ? new DictType(elementType)
-                            : null
+                : type == NumberVarType ? new ArrayType(elementType, 0, false)
+                : type == StringVarType ? new DictType(elementType)
+                : null
         }));
         addEquality(isFieldElementAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
             return ts.isStringLiteral(n.argumentExpression) && type instanceof StructType ? type.properties[n.argumentExpression.getText().slice(1, -1)]
-                : ts.isStringLiteral(n.argumentExpression) && type instanceof ArrayType && n.argumentExpression.getText() == "length" ? NumberVarType
-                    : type instanceof ArrayType || type instanceof DictType ? type.elementType
-                        : null
+                : ts.isStringLiteral(n.argumentExpression) && type instanceof ArrayType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
+                : ts.isStringLiteral(n.argumentExpression) && type == StringVarType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
+                : type instanceof ArrayType || type instanceof DictType ? type.elementType
+                : null
         }));
 
         addEquality(ts.isCallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], n => {
                 const func = <ts.FunctionDeclaration>getDeclaration(this.typeChecker, n.expression);
-                return func ? func.parameters.map(p => p.name)[i] : null
+                return func ? func.parameters[i] : null
             });
-        addEquality(ts.isParameter, n => n.name, n => n.initializer);
+        addEquality(ts.isParameter, n => n, n => n.name);
+        addEquality(ts.isParameter, n => n, n => n.initializer);
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
         for (let i = 0; i < 10; i++)
             addEquality(isMethodCall, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
@@ -350,6 +353,8 @@ export class TypeHelper {
                 if (type && replaced) {
                     if (type != type1)
                         changed = true;
+                    if (node2 && type != type2)
+                        changed = true;
                     this.setNodeType(node1, type);
                     if (node2)
                         this.setNodeType(node2, type);
@@ -357,9 +362,21 @@ export class TypeHelper {
             }
         } while (changed);
 
+        /*
         allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
+        
+        allNodes
+            .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
+            .forEach(n => console.log(
+                n.getText(),
+                "(" + n.parent.getText() + "/" + ts.SyntaxKind[n.parent.kind] + ")",
+                "decl.", getDeclaration(this.typeChecker, n).getText() + "/" + ts.SyntaxKind[getDeclaration(this.typeChecker, n).kind],
+                "|", ts.SyntaxKind[n.kind],
+                "|", JSON.stringify(this.getCType(n))
+            ));
+        */
 
     }
     private setNodeType(n, t) {
@@ -457,6 +474,14 @@ export class TypeHelper {
         else if (type2 == UniversalVarType)
             return type1_result;
 
+        else if (type1 == StringVarType && type2 instanceof StructType) {
+            if (Object.keys(type2.properties).length == 1 && (type2.properties["length"] == PointerVarType || type2.properties["length"] == NumberVarType))
+                return type1_result;
+        }
+        else if (type1 instanceof StructType && type2 == StringVarType) {
+            if (Object.keys(type1.properties).length == 1 && (type1.properties["length"] == PointerVarType || type1.properties["length"] == NumberVarType))
+                return type2_result;
+        }
         else if (type1 instanceof ArrayType && type2 instanceof ArrayType) {
             let cap = Math.max(type2.capacity, type1.capacity);
             let isDynamicArray = type2.isDynamicArray || type1.isDynamicArray;
