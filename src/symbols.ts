@@ -14,9 +14,9 @@ export class SymbolsHelper {
             let elementTypeText = this.typeHelper.getTypeString(arrElemType);
             let structName = ArrayType.getArrayStructName(elementTypeText);
             this.userStructs[structName] = new StructType({
-                size: NumberVarType,
-                capacity: NumberVarType,
-                data: elementTypeText + "*"
+                size: { type: NumberVarType, order: 1 },
+                capacity: { type: NumberVarType, order: 2 },
+                data: { type: elementTypeText + "*", order: 3 }
             });
             this.userStructs[structName].structName = structName;
         }

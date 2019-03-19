@@ -65,7 +65,7 @@ export class ArrayType {
     }
 }
 
-type PropertiesDictionary = { [propName: string]: CType };
+type PropertiesDictionary = { readonly[propName: string]: CType };
 
 /** Type that represents JS object with static properties (implemented as C struct) */
 export class StructType {
@@ -73,11 +73,16 @@ export class StructType {
     public getText() {
         return 'struct ' + this.structName + ' *';
     }
+    get properties(): PropertiesDictionary {
+        return Object.keys(this.propertyDefs)
+            .sort((a, b) => this.propertyDefs[a].order - this.propertyDefs[b].order)
+            .reduce((acc, k) => { acc[k] = this.propertyDefs[k].type; return acc; }, {});
+    }
     public getBodyText() {
-        return "{" + Object.keys(this.properties).map(k => k + ": " + getTypeBodyText(this.properties[k])).join("; ") + "}";
+        return "{" + Object.keys(this.propertyDefs).sort().map(k => k + ": " + getTypeBodyText(this.properties[k])).join("; ") + "}";
     }
     constructor(
-        public properties: PropertiesDictionary
+        public propertyDefs: { [propName: string]: { type: CType, order: number } }
     ) { }
 }
 
@@ -240,7 +245,7 @@ export class TypeHelper {
     public inferTypes(allNodes: ts.Node[]) {
 
         const type = <T extends ts.Node>(t: { (n: T): CType } | string): NodeResolver<T> => ({ getType: typeof (t) === "string" ? _ => t : t });
-        const struct = (prop: string, elemType: CType = PointerVarType): StructType => new StructType({ [prop]: elemType });
+        const struct = (prop: string, pos: number, elemType: CType = PointerVarType): StructType => new StructType({ [prop]: { type: elemType, order: pos } });
 
         let typeEqualities: Equality<any>[] = [];
 
@@ -258,13 +263,13 @@ export class TypeHelper {
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
 
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
-        addEquality(ts.isPropertyAssignment, n => n.parent, type(n => struct(n.name.getText(), this.getCType(n) || PointerVarType)));
+        addEquality(ts.isPropertyAssignment, n => n.parent, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(ts.isPropertyAssignment, n => n, type(n => {
             const type = this.getCType(n.parent);
             return type instanceof StructType ? type.properties[n.name.getText()] : null;
         }));
 
-        addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), this.getCType(n) || PointerVarType)));
+        addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
             return type instanceof StructType ? type.properties[n.name.getText()]
@@ -275,7 +280,7 @@ export class TypeHelper {
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
             const type = this.getCType(n.argumentExpression);
             const elementType = this.getCType(n) || PointerVarType;
-            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText().slice(1, -1), elementType)
+            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText().slice(1, -1), n.pos, elementType)
                 : ts.isNumericLiteral(n.argumentExpression) ? new ArrayType(elementType, 0, false)
                     : type == NumberVarType ? new ArrayType(elementType, 0, false)
                         : type == StringVarType ? new DictType(elementType)
@@ -398,7 +403,7 @@ export class TypeHelper {
     }
 
     private generateStructure(tsType: ts.Type): StructType {
-        let userStructInfo: PropertiesDictionary = {};
+        let userStructInfo = {};
         for (let prop of tsType.getProperties()) {
             let declaration = <ts.NamedDeclaration>prop.valueDeclaration;
             let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, declaration);
@@ -407,7 +412,7 @@ export class TypeHelper {
                 if (declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer))
                     propType = this.determineArrayType(<ts.ArrayLiteralExpression>declaration.initializer);
             }
-            userStructInfo[prop.name] = propType;
+            userStructInfo[prop.name] = { type: propType, order: declaration.pos };
         }
         return this.ensureNoTypeDuplicates(new StructType(userStructInfo));
     }
@@ -472,14 +477,15 @@ export class TypeHelper {
         else if (type1 instanceof StructType && type2 instanceof StructType) {
             let props = Object.keys(type1.properties).concat(Object.keys(type2.properties));
             let changed = false;
-            let newStruct = new StructType({});
+            let newProps = {};
             for (let p of props) {
                 let result = this.mergeTypes(type1.properties[p], type2.properties[p]);
-                newStruct.properties[p] = result.type;
+                let order = Math.max(type1.propertyDefs[p] ? type1.propertyDefs[p].order : 0, type2.propertyDefs[p] ? type2.propertyDefs[p].order : 0);
+                newProps[p] = { type: result.type, order: order };
                 if (result.replaced)
                     changed = true;
             }
-            return changed ? { type: this.ensureNoTypeDuplicates(newStruct), replaced: true } : noChanges;
+            return changed ? { type: this.ensureNoTypeDuplicates(new StructType(newProps)), replaced: true } : noChanges;
         }
         else if (type1 instanceof ArrayType && type2 instanceof StructType) {
             return this.mergeArrayAndStruct(type1, type2);

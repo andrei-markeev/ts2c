@@ -208,11 +208,7 @@ export class CVariable {
         else if (type instanceof ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
 
-        if (type == NumberVarType
-                || type instanceof ArrayType && type.elementType == NumberVarType
-                || type instanceof ArrayType && type.isDynamicArray
-                || type instanceof StructType
-                || type instanceof DictType)
+        if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
         else if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
@@ -227,6 +223,13 @@ export class CVariable {
         
         this.type = type;
         this.typeHelper = scope.root.typeHelper
+    }
+    typeHasNumber(type: CType) {
+        return type == NumberVarType
+            || type instanceof ArrayType && type.elementType == NumberVarType
+            || type instanceof ArrayType && type.isDynamicArray
+            || type instanceof StructType && Object.keys(type.properties).some(k => this.typeHasNumber(type.properties[k]))
+            || type instanceof DictType;
     }
     resolve() {
         let varString = this.typeHelper.getTypeString(this.type);
