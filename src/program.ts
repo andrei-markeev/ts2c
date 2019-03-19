@@ -1,6 +1,7 @@
 import * as ts from 'typescript'
-import {MemoryManager} from './memory';
 import {TypeHelper, ArrayType} from './types';
+import {SymbolsHelper} from './symbols';
+import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
 import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
@@ -10,6 +11,8 @@ import './nodes/statements';
 import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
+
+import './standard/global/parseInt';
 
 import './standard/array/forEach';
 import './standard/array/push';
@@ -36,6 +39,7 @@ import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
 import './standard/string/match';
 
+import './standard/console/log';
 
 export interface IScope {
     parent: IScope;
@@ -383,7 +387,7 @@ class HeaderFlags {
 {/if}
 
 {#if headerFlags.parseInt}
-    int16_t parseInt(const char * str) {
+    int16_t parse_int16_t(const char * str) {
         int r;
         sscanf(str, "%d", &r);
         return (int16_t) r;
@@ -446,8 +450,8 @@ int main(void) {
 
     {destructors}
     return 0;
-}`
-)
+}
+`)
 export class CProgram implements IScope {
     public parent: IScope = null;
     public root = this;
@@ -461,19 +465,26 @@ export class CProgram implements IScope {
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
     public typeHelper: TypeHelper;
+    public symbolsHelper: SymbolsHelper;
     public memoryManager: MemoryManager;
     public typeChecker: ts.TypeChecker;
     constructor(tsProgram: ts.Program) {
 
         this.typeChecker = tsProgram.getTypeChecker();
         this.typeHelper = new TypeHelper(this.typeChecker);
-        this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper);
+        this.symbolsHelper = new SymbolsHelper(this.typeChecker, this.typeHelper);
+        this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
 
-        this.typeHelper.figureOutVariablesAndTypes(tsProgram.getSourceFiles());
-
-        this.memoryManager.preprocessVariables();
-        for (let source of tsProgram.getSourceFiles())
-            this.memoryManager.preprocessTemporaryVariables(source);
+        let nodes;
+        for (let source of tsProgram.getSourceFiles()) {
+            nodes = source.getChildren();
+            let i = 0;
+            while (i < nodes.length)
+                nodes.push.apply(nodes, nodes[i++].getChildren());
+        }
+        
+        this.typeHelper.inferTypes(nodes);
+        this.memoryManager.scheduleNodeDisposals(nodes);
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
@@ -481,6 +492,7 @@ export class CProgram implements IScope {
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
+            this.headerFlags.array = true;
         }
 
         for (let source of tsProgram.getSourceFiles()) {
@@ -492,15 +504,13 @@ export class CProgram implements IScope {
             }
         }
 
-        let [structs, functionPrototypes] = this.typeHelper.getStructsAndFunctionPrototypes();
+        let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
 
-        this.userStructs = structs.map(s => {
-            return {
-                name: s.name,
-                properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
-            };
-        });
-        this.functionPrototypes = functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
+        this.userStructs = structs.map(s => ({
+            name: s.name,
+            properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
+        }));
+        this.functionPrototypes = [];//functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
 
         this.destructors = new CVariableDestructors(this, null);
     }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
-import { StandardCallResolver, IResolver } from '../../resolver';
+import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, NumberVarType, RegexMatchVarType, RegexVarType, StringVarType, TypeHelper } from '../../types';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
@@ -16,6 +16,12 @@ export class StringMatchResolver implements IResolver {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
         return propAccess.name.getText() == "match" && objType == StringVarType;
+    }
+    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return StringVarType;
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return call.arguments.map((a, i) => i == 0 ? RegexVarType : null);
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return new ArrayType(StringVarType, 1, true);

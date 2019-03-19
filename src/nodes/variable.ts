@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, CType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 
@@ -25,18 +25,31 @@ export class CVariableDeclarationList {
 }
 
 
-@CodeTemplate(`
-{allocator}
-{initializer}`, ts.SyntaxKind.VariableDeclaration)
+@CodeTemplate(`{initializer}`, ts.SyntaxKind.VariableDeclaration)
 export class CVariableDeclaration {
     public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
-        let varInfo = scope.root.typeHelper.getVariableInfo(<ts.Identifier>varDecl.name);
-        scope.variables.push(new CVariable(scope, varInfo.name, varInfo.type));
-        if (varInfo.requiresAllocation)
-            this.allocator = new CVariableAllocation(scope, varInfo.name, varInfo.type, varDecl.name);
+        const name = scope.root.typeChecker.getSymbolAtLocation(varDecl.name).name;
+        const type = scope.root.typeHelper.getCType(varDecl.name);
+        if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
+            const canUseInitializerList = varDecl.initializer.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
+            if (canUseInitializerList) {
+                let s = "{ ";
+                for (let i = 0; i < type.capacity; i++) {
+                    if (i != 0)
+                        s += ", ";
+                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elements[i]);
+                    s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
+                }
+                s += " }";
+                scope.variables.push(new CVariable(scope, name, type, { initializer: s }));
+                return;
+            }
+        }
+
+        scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
     }
@@ -182,28 +195,57 @@ interface CVariableOptions {
 }
 
 export class CVariable {
-    private varString: string;
-    constructor(scope: IScope, public name: string, private typeSource, options?: CVariableOptions) {
-        let typeString = scope.root.typeHelper.getTypeString(typeSource);
-        if (typeString == NumberVarType)
+    private static: boolean;
+    private initializer: string;
+    private type: CType;
+    private typeHelper: TypeHelper;
+
+    constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
+        const type = isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
+
+        if (type instanceof StructType)
+            scope.root.symbolsHelper.ensureStruct(type, name);
+        else if (type instanceof ArrayType && type.isDynamicArray)
+            scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
+
+        if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
-        else if (typeString == BooleanVarType)
+        else if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
-        if (typeString.indexOf('{var}') > -1)
-            this.varString = typeString.replace('{var}', name);
-        else
-            this.varString = typeString + " " + name;
 
         // root scope, make variables file-scoped by default
-        if (scope.parent == null && this.varString.indexOf('static') != 0)
-            this.varString = 'static ' + this.varString;
-        
+        if (scope.parent == null)
+            this.static = true;
         if (options && options.removeStorageSpecifier)
-            this.varString = this.varString.replace(/^static /,'');
+            this.static = false;
         if (options && options.initializer)
-            this.varString += " = " + options.initializer;
+            this.initializer = options.initializer;
+        
+        this.type = type;
+        this.typeHelper = scope.root.typeHelper
+    }
+    typeHasNumber(type: CType) {
+        return type == NumberVarType
+            || type instanceof ArrayType && type.elementType == NumberVarType
+            || type instanceof ArrayType && type.isDynamicArray
+            || type instanceof StructType && Object.keys(type.properties).some(k => this.typeHasNumber(type.properties[k]))
+            || type instanceof DictType;
     }
     resolve() {
-        return this.varString;
+        let varString = this.typeHelper.getTypeString(this.type);
+
+        if (varString.indexOf('{var}') > -1)
+            varString = varString.replace('{var}', this.name);
+        else
+            varString = varString + " " + this.name;
+
+        if (this.static && varString.indexOf('static') != 0)
+            varString = 'static ' + varString;
+        else if (!this.static)
+            varString = varString.replace(/^static /, '');
+    
+        if (this.initializer)
+            varString += " = " + this.initializer;
+        return varString;
     }
 }

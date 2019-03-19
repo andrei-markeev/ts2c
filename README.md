@@ -68,44 +68,14 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only about 50% of ES3 syntax is currently supported.
+__**Work in progress:**__ it works, but only about **50% of ES3** syntax is currently supported.
 
-Overview of currently supported language features (compared to ES3 Standard):
+Notable NOT supported features include, for example: float numbers (all numbers are `int16_t` currently), `this`, `new`, `function` inside expression, `typeof`, `Date`, `Math`, etc.
 
- - statements [76%]: `var`, `if`-`else`, `do`-`while`, `while`, `for`, `for`-`of`, `for`-`in`, `continue`, `break`, `return`, `function`, block, empty statement, expression statement
- - expressions [63%]:
-    - primary expressions [80%]: variables; number, string, regex and boolean literals; array and object initializers; grouping operator
-    - left-hand-side expressions [60%]: property accessors, function calls
-    - postfix expressions [100%]: `++`, `--`
-    - unary operators [44%]: `++`, `--`, `+`, `!`
-    - multiplicative operators [50%]: `*`, `/`, `%`
-    - additive operators [50%]: `+`, `-`
-    - bitwise shift operators [33%]: `<<`, `>>`
-    - relational operators [33%]: `<`, `>`, `<=`, `>=`
-    - equality operators [50%]: `==`, `!=`, `===`, `!==`
-    - binary bitwise operators [33%]: `&`, `|`
-    - binary logical operators [100%]: `&&`, `||`
-    - conditional operator [100%]: `?`-`:`
-    - assignment operators [52%]: `=`, `+=`
-    - comma operator [100%]
- - built-in objects [14%]:
-    - Global [0%]
-    - Object [0%]
-    - Function [0%]
-    - Array [78%]: `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `slice()`, `concat()`, `join()`, `toString()`, `sort()`, `reverse()`, `indexOf()`, `lastIndexOf()`, `length`
-    - String [61%]: `indexOf()`, `lastIndexOf()`, `search()`, `match()`, `charAt()`, `charCodeAt()`, `concat()`, `substring()`, `slice()`, `toString()`, `valueOf()`, `length`
-    - Boolean [0%]
-    - Number [0%]
-    - Math [0%]
-    - Date [0%]
-    - RegExp [0%]
-
-Note: some of these features supported only partially.
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
 
-Notable NOT supported features include, for example: float numbers, `this`, `new`, `function` inside expression, `typeof`, etc.
+Contributions are welcome! See [src/README.md](https://github.com/andrei-markeev/ts2c/blob/master/src/README.md)
 
-Memory management is done via [escape analysis](https://en.wikipedia.org/wiki/Escape_analysis).
 
 Live demo
 ---------
@@ -130,8 +100,7 @@ much of an overhead and usually lead to the increased battery drain and/or don't
 resources to your program.
 
 Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out,
-for example `eval` and `try`-`catch`. Still, current conclusion is, that it is possible to transpile most of the
-language.
+notably `eval`. Still, current conclusion is, that it is possible to transpile most of the language.
 
 These are some examples of planned target platforms for using with TS2C:
  - [ESP8266](https://en.wikipedia.org/wiki/ESP8266)

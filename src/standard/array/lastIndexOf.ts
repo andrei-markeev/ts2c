@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../resolver';
+import {StandardCallResolver, IResolver} from '../../standard';
 import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
@@ -71,8 +71,8 @@ class CArrayLastIndexOf {
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_pos");
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
             this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));

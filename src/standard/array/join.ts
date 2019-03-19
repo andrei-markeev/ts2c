@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../resolver';
+import {StandardCallResolver, IResolver} from '../../standard';
 import {ArrayType, StringVarType, NumberVarType, TypeHelper, CType} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
@@ -76,7 +76,7 @@ class CArrayJoin {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(call);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);
             if (call.arguments.length > 0 && propAccess.name.getText() == "join")
@@ -150,7 +150,7 @@ class CCalculateStringSize {
         this.arraySize = new CArraySize(scope, this.varAccess, type);
         this.arrayElement = new CArrayElement(scope, this.varAccess, type);
         if (this.arrayOfStrings) {
-            this.lengthVarName = scope.root.typeHelper.addNewTemporaryVariable(node, "len");
+            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
             scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
         }
     }

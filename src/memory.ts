@@ -1,7 +1,8 @@
 import * as ts from 'typescript';
-import {TypeHelper, ArrayType, StructType, DictType, StringVarType} from './types';
-import {StandardCallHelper} from './resolver';
-import {StringMatchResolver} from './standard/string/match';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType } from './types';
+import { StandardCallHelper } from './standard';
+import { StringMatchResolver } from './standard/string/match';
+import { SymbolsHelper } from './symbols';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -19,89 +20,54 @@ export class MemoryManager {
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
     private reusedVariables: { [key: string]: string } = {};
     private originalNodes: { [key: string]: ts.Node } = {};
+    private references: { [key: string]: ts.Node[] } = {};
 
-    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
+    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
-    public preprocessVariables() {
-
-        for (let k in this.typeHelper.variables) {
-            let v = this.typeHelper.variables[k];
-            if (v.requiresAllocation)
-                this.scheduleNodeDisposal(v.declaration, false);
-        }
-
-    }
-
-    public preprocessTemporaryVariables(node: ts.Node) {
-        switch (node.kind) {
-            case ts.SyntaxKind.ArrayLiteralExpression:
-                {
-                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        break;
-
-                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
+    public scheduleNodeDisposals(nodes: ts.Node[]) {
+        nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
+            const symbol = this.typeChecker.getSymbolAtLocation(n);
+            if (symbol) {
+                this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
+                this.references[symbol.valueDeclaration.pos].push(n);
+            }
+        });
+        for (let node of nodes) {
+            switch (node.kind) {
+                case ts.SyntaxKind.ArrayLiteralExpression:
                     {
-                        let binExpr = <ts.BinaryExpression>node.parent;
-                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            break;
+                        let type = this.typeHelper.getCType(node);
+                        if (type && type instanceof ArrayType && type.isDynamicArray)
+                            this.scheduleNodeDisposal(node);
                     }
-
-                    let type = this.typeHelper.getCType(node);
-                    if (type && type instanceof ArrayType && type.isDynamicArray)
-                        this.scheduleNodeDisposal(node, true);
-                }
-                break;
-            case ts.SyntaxKind.ObjectLiteralExpression:
-                {
-                    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration)
-                        break;
-
-                    if (node.parent.kind == ts.SyntaxKind.BinaryExpression && node.parent.parent.kind == ts.SyntaxKind.ExpressionStatement)
+                    break;
+                case ts.SyntaxKind.ObjectLiteralExpression:
                     {
-                        let binExpr = <ts.BinaryExpression>node.parent;
-                        if (binExpr.left.kind == ts.SyntaxKind.Identifier) 
-                            break;
+                        let type = this.typeHelper.getCType(node);
+                        if (type && (type instanceof StructType || type instanceof DictType))
+                            this.scheduleNodeDisposal(node);
                     }
-
-                    let type = this.typeHelper.getCType(node);
-                    if (type && (type instanceof StructType || type instanceof DictType))
-                        this.scheduleNodeDisposal(node, true);
-                }
-                break;
-            case ts.SyntaxKind.BinaryExpression:
-                {
-                    let binExpr = <ts.BinaryExpression>node;
-                    if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
-                        || binExpr.operatorToken.kind == ts.SyntaxKind.FirstCompoundAssignment) {
-                        let leftType = this.typeHelper.getCType(binExpr.left);
-                        let rightType = this.typeHelper.getCType(binExpr.right);
-                        if (leftType == StringVarType || rightType == StringVarType)
-                            this.scheduleNodeDisposal(binExpr, true);
-
-                        if (binExpr.left.kind == ts.SyntaxKind.BinaryExpression)
-                            this.preprocessTemporaryVariables(binExpr.left);
-                        if (binExpr.right.kind == ts.SyntaxKind.BinaryExpression)
-                            this.preprocessTemporaryVariables(binExpr.right);
-
-                        return;
-                    }
-                }
-                break;
-            case ts.SyntaxKind.CallExpression:
-                {
-                    if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node)) {
-                        let nodeToDispose = this.tryReuseExistingVariable(node) || node;
-                        let isTempVar = nodeToDispose == node;
-                        if (!isTempVar) {
-                            this.reusedVariables[node.pos + "_" + node.end] = nodeToDispose.pos + "_" + nodeToDispose.end;
-                            this.originalNodes[nodeToDispose.pos + "_" + nodeToDispose.end] = node;
+                    break;
+                case ts.SyntaxKind.BinaryExpression:
+                    {
+                        let binExpr = <ts.BinaryExpression>node;
+                        if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
+                            || binExpr.operatorToken.kind == ts.SyntaxKind.FirstCompoundAssignment) {
+                            let leftType = this.typeHelper.getCType(binExpr.left);
+                            let rightType = this.typeHelper.getCType(binExpr.right);
+                            if (leftType == StringVarType || rightType == StringVarType)
+                                this.scheduleNodeDisposal(binExpr, false);
                         }
-                        this.scheduleNodeDisposal(nodeToDispose, isTempVar);
                     }
-                }
-                break;
+                    break;
+                case ts.SyntaxKind.CallExpression:
+                    {
+                        if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
+                            this.scheduleNodeDisposal(node);
+                    }
+                    break;
+            }
         }
-        node.getChildren().forEach(c => this.preprocessTemporaryVariables(c));
     }
 
     public getGCVariablesForScope(node: ts.Node) {
@@ -125,7 +91,6 @@ export class MemoryManager {
     }
 
     public getGCVariableForNode(node: ts.Node) {
-        let parentDecl = this.findParentFunctionNode(node);
         let key = node.pos + "_" + node.end;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];
@@ -152,7 +117,7 @@ export class MemoryManager {
 
             // string match allocates array of strings, and each of those strings should be also disposed
             for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used))
-                destructors.push({ 
+                destructors.push({
                     varName: simpleVarScopeInfo.varName,
                     array: simpleVarScopeInfo.array,
                     dict: simpleVarScopeInfo.dict,
@@ -183,20 +148,25 @@ export class MemoryManager {
 
     /** Sometimes we can reuse existing variable instead of creating a temporary one. */
     public tryReuseExistingVariable(node: ts.Node) {
-        if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-            let assignment = <ts.BinaryExpression>node.parent;
-            if (assignment.left.kind == ts.SyntaxKind.Identifier)
-                return assignment.left;
-        }
-        if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-            let assignment = <ts.VariableDeclaration>node.parent;
-            if (assignment.name.kind == ts.SyntaxKind.Identifier)
-                return assignment.name;
-        }
+        if (ts.isBinaryExpression(node.parent) && ts.isIdentifier(node.parent.left) && node.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken)
+            return node.parent.left;
+        if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name))
+            return node.parent.name;
         return null;
     }
 
-    private scheduleNodeDisposal(heapNode: ts.Node, isTemp: boolean) {
+    private scheduleNodeDisposal(heapNode: ts.Node, canReuse: boolean = true) {
+
+        let isTemp = true;
+        if (canReuse) {
+            let existingVariable = this.tryReuseExistingVariable(heapNode);
+            isTemp = existingVariable == null;
+            if (!isTemp) {
+                this.reusedVariables[heapNode.pos + "_" + heapNode.end] = existingVariable.pos + "_" + existingVariable.end;
+                this.originalNodes[existingVariable.pos + "_" + existingVariable.end] = heapNode;
+                heapNode = existingVariable;
+            }
+        }
 
         let varFuncNode = this.findParentFunctionNode(heapNode);
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
@@ -209,7 +179,7 @@ export class MemoryManager {
 
         var queue = [heapNode];
         queue.push();
-        var visited = {}; 
+        var visited = {};
         while (queue.length > 0) {
             let node = queue.shift();
             if (visited[node.pos + "_" + node.end])
@@ -217,13 +187,9 @@ export class MemoryManager {
 
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
-                let varIdent = <ts.Identifier>node;
-                let nodeVarInfo = this.typeHelper.getVariableInfo(varIdent);
-                if (!nodeVarInfo) {
-                    console.log("WARNING: Cannot find references for " + node.getText());
-                    continue;
-                }
-                refs = this.typeHelper.getVariableInfo(varIdent).references;
+                const symbol = this.typeChecker.getSymbolAtLocation(node);
+                if (symbol)
+                    refs = this.references[symbol.valueDeclaration.pos] || refs;
             }
             let returned = false;
             for (let ref of refs) {
@@ -236,8 +202,7 @@ export class MemoryManager {
                     let elemAccess = <ts.PropertyAccessExpression>ref;
                     while (elemAccess.expression.kind == ts.SyntaxKind.PropertyAccessExpression)
                         elemAccess = <ts.PropertyAccessExpression>elemAccess.expression;
-                    if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                    {
+                    if (elemAccess.expression.kind == ts.SyntaxKind.Identifier) {
                         console.log(heapNode.getText() + " -> Tracking parent variable: " + elemAccess.expression.getText() + ".");
                         queue.push(elemAccess.expression);
                     }
@@ -277,8 +242,8 @@ export class MemoryManager {
                     } else {
                         let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
                         if (!symbol) {
-                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call) || call.expression.getText() == "console.log";
-                            
+                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
+
                             if (isStandardCall) {
                                 let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
                                 if (standardCallEscapeNode) {
@@ -322,14 +287,14 @@ export class MemoryManager {
 
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
-        if (heapNode.kind == ts.SyntaxKind.ArrayLiteralExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_array");
-        else if (heapNode.kind == ts.SyntaxKind.ObjectLiteralExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_obj");
-        else if (heapNode.kind == ts.SyntaxKind.BinaryExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, "tmp_string");
-        else if (heapNode.kind == ts.SyntaxKind.CallExpression)
-            varName = this.typeHelper.addNewTemporaryVariable(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
+        if (ts.isArrayLiteralExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_array");
+        else if (ts.isObjectLiteralExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_obj");
+        else if (ts.isBinaryExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+        else if (ts.isCallExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
             varName = heapNode.getText().replace(/\./g, "->");
 
@@ -393,18 +358,14 @@ export class MemoryManager {
     private isInsideLoop(node: ts.Node) {
         var parent = node;
         while (parent
-                && parent.kind != ts.SyntaxKind.ForInStatement
-                && parent.kind != ts.SyntaxKind.ForOfStatement
-                && parent.kind != ts.SyntaxKind.ForStatement
-                && parent.kind != ts.SyntaxKind.WhileStatement
-                && parent.kind != ts.SyntaxKind.DoStatement) {
+            && parent.kind != ts.SyntaxKind.ForInStatement
+            && parent.kind != ts.SyntaxKind.ForOfStatement
+            && parent.kind != ts.SyntaxKind.ForStatement
+            && parent.kind != ts.SyntaxKind.WhileStatement
+            && parent.kind != ts.SyntaxKind.DoStatement) {
             parent = parent.parent;
         }
         return !!parent;
-    }
-
-    private getSymbolId(node: ts.Node) {
-        return this.typeChecker.getSymbolAtLocation(node)["id"];
     }
 
 }

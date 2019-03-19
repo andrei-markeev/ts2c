@@ -3,7 +3,7 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType, DictType} from '../types';
 import {CVariable, CVariableAllocation} from './variable';
-import {AssignmentHelper, CAssignment} from './assignment';
+import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
@@ -16,7 +16,7 @@ class CArrayLiteralExpression {
             let varName: string;
             let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
             if (!type.isDynamicArray && canUseInitializerList) {
-                varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                varName = scope.root.symbolsHelper.addTemp(node, "tmp_array");
                 let s = "{ ";
                 for (let i = 0; i < arrSize; i++) {
                     if (i != 0)
@@ -30,7 +30,8 @@ class CArrayLiteralExpression {
             else {
                 if (type.isDynamicArray) {
                     varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-                    scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+                    if (!scope.root.memoryManager.variableWasReused(node))
+                        scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
                     scope.root.headerFlags.array = true;
                     scope.statements.push("ARRAY_CREATE(" + varName + ", " + Math.max(arrSize, 2) + ", " + arrSize + ");\n");
                     let gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
@@ -42,7 +43,7 @@ class CArrayLiteralExpression {
                 }
                 else
                 {
-                    varName = scope.root.typeHelper.addNewTemporaryVariable(node, "tmp_array");
+                    varName = scope.root.symbolsHelper.addTemp(node, "tmp_array");
                     scope.variables.push(new CVariable(scope, varName, type));
                 }
 
@@ -79,7 +80,8 @@ class CObjectLiteralExpression {
         if (this.isStruct || this.isDict) {
             let varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             
-            scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+            if (!scope.root.memoryManager.variableWasReused(node))
+                scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
             
             this.allocator = new CVariableAllocation(scope, varName, type, node);
             this.initializers = node.properties
@@ -101,7 +103,7 @@ class CRegexLiteralExpression {
     constructor(scope: IScope, node: ts.RegularExpressionLiteral) {
         let template = node.text;
         if (!regexNames[template]) {
-            regexNames[template] = scope.root.typeHelper.addNewTemporaryVariable(null, "regex");
+            regexNames[template] = scope.root.symbolsHelper.addTemp(null, "regex");
             scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearchFunction(scope, template, regexNames[template]));
         }
         this.expression = regexNames[template];

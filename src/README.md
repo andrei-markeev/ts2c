@@ -8,12 +8,13 @@ TypeScript AST to C89 code.
 Source code structure: 
 
  - program.ts - main transpilation entry point
- - nodes/*.ts - code template classes for different syntax nodes  
- - standard/**.ts - code templates and resolvers for standard objects like Array, String, etc.
  - types.ts - extended type analysis on top of TypeScript's type checker
- - memory.ts - memory management related stuff 
+ - memory.ts - memory management related stuff, escape analysis
+ - symbols.ts - helper methods for working with variables and structs
  - template.ts - code templating engine
- - resolver.ts - standard call resolvers
+ - nodes/*.ts - code template classes for different syntax nodes  
+ - standard.ts - standard call resolvers
+ - standard/**.ts - code templates and resolvers for standard objects like Array, String, etc.
  - regex.ts - regular expression engine
 
 Contributions

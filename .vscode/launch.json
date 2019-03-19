@@ -7,36 +7,9 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/strings/string9.ts"],
+            "args": ["tests/realworld/gray.ts"],
             "cwd": "${workspaceRoot}",
-            "preLaunchTask": null,
-            "runtimeExecutable": null,
-            "runtimeArgs": [
-                "--nolazy"
-            ],
-            "env": {
-                "NODE_ENV": "development"
-            },
             "sourceMaps": true
-        },
-        {
-            "name": "Attach",
-            "type": "node",
-            "request": "attach",
-            "port": 5858,
-            "address": "localhost",
-            "restart": false,
-            "sourceMaps": false,
-            "localRoot": "${workspaceRoot}",
-            "remoteRoot": null
-        },
-        {
-            "name": "Attach to Process",
-            "type": "node",
-            "request": "attach",
-            "processId": "${command:PickProcess}",
-            "port": 5858,
-            "sourceMaps": false
         }
     ]
 }

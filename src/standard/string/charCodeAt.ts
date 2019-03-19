@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
-import { StandardCallResolver, IResolver } from '../../resolver';
+import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, StringVarType, NumberVarType, TypeHelper } from '../../types';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
@@ -16,6 +16,12 @@ class StringCharCodeAtResolver implements IResolver {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
         return propAccess.name.getText() == "charCodeAt" && objType == StringVarType;
+    }
+    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return StringVarType;
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return call.arguments.map((a, i) => i == 0 ? NumberVarType : null);
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return NumberVarType;

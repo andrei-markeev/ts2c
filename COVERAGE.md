@@ -113,7 +113,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] Infinity
      - [ ] undefined
      - [ ] ~~eval~~  _(will not be implemented)_
-     - [ ] parseInt
+     - [x] **parseInt**
      - [ ] parseFloat
      - [ ] isNaN
      - [ ] isFinite

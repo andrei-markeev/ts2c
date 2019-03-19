@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
-import {ArrayType, StructType, NumberVarType} from '../types';
+import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression} from './expressions';
 import {CString} from './literals';
@@ -110,12 +110,14 @@ export class CForStatement {
 {#if isDynamicArray}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)
     {
+        {variables {    }=> {this};\n}
         {init} = {cast}{arrayAccess}->data[{iteratorVarName}];
         {statements {    }=> {this}}
     }
 {#else}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)
     {
+        {variables {    }=> {this};\n}
         {init} = {cast}{arrayAccess}[{iteratorVarName}];
         {statements {    }=> {this}}
     }
@@ -137,7 +139,7 @@ export class CForOfStatement implements IScope {
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
-        this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
+        this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         this.arrayAccess = new CElementAccess(scope, node.expression);
         let arrayVarType = scope.root.typeHelper.getCType(node.expression);
@@ -165,6 +167,7 @@ export class CForOfStatement implements IScope {
 @CodeTemplate(`
 for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)
 {
+    {variables {    }=> {this};\n}
     {init} = {varAccess}->index->data[{iteratorVarName}];
     {statements {    }=> {this}}
 }
@@ -182,7 +185,7 @@ export class CForInStatement implements IScope {
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
-        this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(node);
+        this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         this.varAccess = new CElementAccess(scope, node.expression);
         let dictVarType = scope.root.typeHelper.getCType(node.expression);

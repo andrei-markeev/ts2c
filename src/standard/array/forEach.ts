@@ -5,7 +5,7 @@ import {CExpression} from '../../nodes/expressions';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {CVariable} from '../../nodes/variable';
 import {IScope} from '../../program';
-import {StandardCallResolver, IResolver} from '../../resolver';
+import {StandardCallResolver, IResolver} from '../../standard';
 
 @StandardCallResolver
 class ArrayForEachResolver implements IResolver {
@@ -60,7 +60,7 @@ class CArrayForEach {
 
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
 
-        this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(propAccess);
+        this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
         this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
 
         if (call.arguments.length === 0) throw Error('Array.forEach needs an argument.');

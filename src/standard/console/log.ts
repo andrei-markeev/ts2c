@@ -1,14 +1,51 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CType, ArrayType, StructType, DictType, VariableInfo, StringVarType, NumberVarType, BooleanVarType, RegexVarType} from '../../types';
+import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType} from '../../types';
 import {IScope} from '../../program';
 import {CExpression} from '../../nodes/expressions';
 import {CCallExpression} from '../../nodes/call';
 import {CVariable} from '../../nodes/variable';
+import { StandardCallResolver, IResolver } from '../../standard';
 
-export class ConsoleLogHelper {
-    public static create(scope: IScope, printNodes: ts.Expression[]) {
+@StandardCallResolver
+class ConsoleLogResolver implements IResolver {
+    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
+        if (!ts.isPropertyAccessExpression(call.expression))
+            return false;
+        return call.expression.getText() == "console.log";
+    }
+    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return VoidType;
+    }
+    public createTemplate(scope: IScope, node: ts.CallExpression) {
+        return new CConsoleLog(scope, node);
+    }
+    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return false;
+    }
+    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
+    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+        return null;
+    }
+}
+
+
+@CodeTemplate(`
+{#statements}
+    {#if printfCalls.length}
+        {printfCalls => {this}\n}
+    {/if}
+{/statements}
+{printfCall}`)
+class CConsoleLog {
+    public printfCalls: any[] = [];
+    public printfCall: any = null;
+
+    constructor(scope: IScope, node: ts.CallExpression) {
         let printfs = [];
+        let printNodes = node.arguments;
         for (let i = 0; i < printNodes.length; i++) {
             let printNode = printNodes[i];
             let type = scope.root.typeHelper.getCType(printNode);
@@ -43,7 +80,9 @@ export class ConsoleLogHelper {
                 printfs.push(new CPrintf(scope, node, accessor, type, options));
             }
         }
-        return printfs;
+        this.printfCalls = printfs.slice(0, -1);
+        this.printfCall = printfs[printfs.length - 1];
+        scope.root.headerFlags.printf = true;
     }
 }
 
@@ -99,6 +138,12 @@ interface PrintfOptions {
     printf("{PREFIX}{ ");
     {INDENT}{elementPrintfs {    printf(", ");\n    }=> {this}}
     {INDENT}printf(" }{POSTFIX}");
+{#elseif isStaticArray && elementFormatString && +arraySize==1}
+    printf("{PREFIX}[ {elementFormatString} ]{POSTFIX}", {accessor}[0]);
+{#elseif isStaticArray && elementFormatString && +arraySize==2}
+    printf("{PREFIX}[ {elementFormatString}, {elementFormatString} ]{POSTFIX}", {accessor}[0], {accessor}[1]);
+{#elseif isStaticArray && elementFormatString && +arraySize==3}
+    printf("{PREFIX}[ {elementFormatString}, {elementFormatString}, {elementFormatString} ]{POSTFIX}", {accessor}[0], {accessor}[1], {accessor}[2]);
 {#elseif isArray}
     printf("{PREFIX}[ ");
     {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
@@ -121,10 +166,12 @@ class CPrintf {
     public isDict: boolean = false;
     public isStruct: boolean = false;
     public isArray: boolean = false;
+    public isStaticArray: boolean = false;
 
     public iteratorVarName: string;
     public arraySize: string;
     public elementPrintfs: CPrintf[] = [];
+    public elementFormatString: string = '';
     public propPrefix: string = '';
     public PREFIX: string;
     public POSTFIX: string;
@@ -149,18 +196,24 @@ class CPrintf {
 
         if (varType instanceof ArrayType) {
             this.isArray = true;
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            this.isStaticArray = !varType.isDynamicArray;
+            this.elementFormatString = varType.elementType == NumberVarType ? '%d'
+                : varType.elementType == StringVarType ? '\\"%s\\"' : '';
             this.arraySize = varType.isDynamicArray ? accessor + "->size" : varType.capacity + "";
-            let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
-            let opts = { quotedString: true, indent: this.INDENT + "    " };
-            this.elementPrintfs = [
-                new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
-            ];
+
+            if (!this.isStaticArray || !this.elementFormatString || varType.capacity > 3) {
+                this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
+                scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+                let elementAccessor = accessor + (varType.isDynamicArray ? "->data" : "") + "[" + this.iteratorVarName + "]";
+                let opts = { quotedString: true, indent: this.INDENT + "    " };
+                this.elementPrintfs = [
+                    new CPrintf(scope, printNode, elementAccessor, varType.elementType, opts)
+                ];
+            }
         }
         else if (varType instanceof DictType) {
             this.isDict = true;
-            this.iteratorVarName = scope.root.typeHelper.addNewIteratorVariable(printNode);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(printNode);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             let opts = { quotedString: true, indent: this.INDENT + "    " };
             this.elementPrintfs = [

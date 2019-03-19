@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../resolver';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
+import {StandardCallResolver, IResolver, IResolverMatchOptions} from '../../standard';
+import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
@@ -9,12 +9,21 @@ import {CElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
 class ArrayUnshiftResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression, options: IResolverMatchOptions) {
         if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
             return false;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "unshift" && objType instanceof ArrayType && objType.isDynamicArray;
+        return propAccess.name.getText() == "unshift" && (objType && objType instanceof ArrayType && objType.isDynamicArray || options && options.determineObjectType);
+    }
+    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+        let elementType = call.arguments[0] && typeHelper.getCType(call.arguments[0]);
+        return new ArrayType(elementType || PointerVarType, 0, true);
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        let propAccess = <ts.PropertyAccessExpression>call.expression;
+        let objType = typeHelper.getCType(propAccess.expression);
+        return call.arguments.map(a => objType instanceof ArrayType ? objType.elementType : null);
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return NumberVarType;
@@ -57,7 +66,7 @@ class CArrayUnshift {
         this.unshiftValues = args.map(a => new CUnshiftValue(scope, this.varAccess, a));
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.typeHelper.addNewTemporaryVariable(propAccess, "arr_size");
+            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
         }
         scope.root.headerFlags.array = true;

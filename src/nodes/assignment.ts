@@ -112,7 +112,7 @@ export class CAssignment {
         if (this.argumentExpression == null) {
             let expr = typeof this.expression == "string" ? this.expression : this.expression && this.expression["resolve"] && this.expression["resolve"]();
             let acc = typeof this.accessor == "string" ? this.accessor : this.accessor && this.accessor["resolve"] && this.accessor["resolve"]();
-            if (expr == '' || acc == expr)
+            if (expr == '' || acc == expr || "((void *)" + acc + ")" == expr)
                 this.assignmentRemoved = true;
         }
     }
