@@ -38,14 +38,14 @@ export class MemoryManager {
                     {
                         let type = this.typeHelper.getCType(node);
                         if (type && type instanceof ArrayType && type.isDynamicArray)
-                            this.scheduleNodeDisposal(node, true);
+                            this.scheduleNodeDisposal(node);
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
                         if (type && (type instanceof StructType || type instanceof DictType))
-                            this.scheduleNodeDisposal(node, true);
+                            this.scheduleNodeDisposal(node);
                     }
                     break;
                 case ts.SyntaxKind.BinaryExpression:
@@ -56,14 +56,14 @@ export class MemoryManager {
                             let leftType = this.typeHelper.getCType(binExpr.left);
                             let rightType = this.typeHelper.getCType(binExpr.right);
                             if (leftType == StringVarType || rightType == StringVarType)
-                                this.scheduleNodeDisposal(binExpr, true);
+                                this.scheduleNodeDisposal(binExpr, false);
                         }
                     }
                     break;
                 case ts.SyntaxKind.CallExpression:
                     {
                         if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
-                            this.scheduleNodeDisposal(node, true);
+                            this.scheduleNodeDisposal(node);
                     }
                     break;
             }
@@ -148,28 +148,24 @@ export class MemoryManager {
 
     /** Sometimes we can reuse existing variable instead of creating a temporary one. */
     public tryReuseExistingVariable(node: ts.Node) {
-        if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-            let assignment = <ts.BinaryExpression>node.parent;
-            if (assignment.left.kind == ts.SyntaxKind.Identifier)
-                return assignment.left;
-        }
-        if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-            let assignment = <ts.VariableDeclaration>node.parent;
-            if (assignment.name.kind == ts.SyntaxKind.Identifier)
-                return assignment.name;
-        }
+        if (ts.isBinaryExpression(node.parent) && ts.isIdentifier(node.parent.left) && node.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken)
+            return node.parent.left;
+        if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name))
+            return node.parent.name;
         return null;
     }
 
-    private scheduleNodeDisposal(heapNode: ts.Node, isTemp: boolean) {
+    private scheduleNodeDisposal(heapNode: ts.Node, canReuse: boolean = true) {
 
-        let nodeToDispose = this.tryReuseExistingVariable(heapNode) || heapNode;
-        let isTempVar = nodeToDispose == heapNode;
-        if (!isTempVar) {
-            this.reusedVariables[heapNode.pos + "_" + heapNode.end] = nodeToDispose.pos + "_" + nodeToDispose.end;
-            this.originalNodes[nodeToDispose.pos + "_" + nodeToDispose.end] = heapNode;
-            heapNode = nodeToDispose;
-            isTemp = false;
+        let isTemp = true;
+        if (canReuse) {
+            let existingVariable = this.tryReuseExistingVariable(heapNode);
+            isTemp = existingVariable == null;
+            if (!isTemp) {
+                this.reusedVariables[heapNode.pos + "_" + heapNode.end] = existingVariable.pos + "_" + existingVariable.end;
+                this.originalNodes[existingVariable.pos + "_" + existingVariable.end] = heapNode;
+                heapNode = existingVariable;
+            }
         }
 
         let varFuncNode = this.findParentFunctionNode(heapNode);
