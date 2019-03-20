@@ -250,7 +250,7 @@ export class TypeHelper {
             throw new Error("Cannot determine variable type from source " + (source && source.getText ? source.getText() : JSON.stringify(source)));
     }
 
-    /** Postprocess TypeScript AST for better type inference */
+    /** Postprocess TypeScript AST for better type inference and map TS types to C types */
     /** Creates typeOfNodeDict that is later used in getCType */
     public inferTypes(allNodes: ts.Node[]) {
 
@@ -271,8 +271,7 @@ export class TypeHelper {
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
-        addEquality(isConvertToNumberExpression, n => n, type(n => 
-            this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
+        addEquality(isConvertToNumberExpression, n => n, type(n => this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
