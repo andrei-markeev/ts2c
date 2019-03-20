@@ -130,7 +130,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] propertyIsEnumerable
  - [ ] Function
      - [ ] ~~new~~  _(will not be implemented)_
-     - [ ] toString
+     - [ ] ~~toString~~  _(will not be implemented)_
      - [ ] apply
      - [ ] call
  - [ ] Array
@@ -269,4 +269,4 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] ignoreCase
      - [ ] multiline
      - [ ] lastIndex
- - [ ] ~~Error objects~~ _(will not be implemented)_
+ - [ ] ~~Error objects~~ _(will not be implemented in v1)_

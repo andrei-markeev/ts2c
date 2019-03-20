@@ -245,9 +245,9 @@ class CUnaryExpression {
             operatorMap[ts.SyntaxKind.TildeToken] = '~';
         }
         if (type == StringVarType) {
-            callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
-            if (callReplaceMap[node.operator])
-                scope.root.headerFlags.atoi = true;
+            callReplaceMap[ts.SyntaxKind.PlusToken] = ["str_to_int16_t", ""];
+            if (node.operator === ts.SyntaxKind.PlusToken)
+                scope.root.headerFlags.str_to_int16_t = true;
         }
         this.operator = operatorMap[node.operator];
         if (callReplaceMap[node.operator]) {

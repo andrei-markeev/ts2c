@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper, UniversalVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 
@@ -212,6 +212,8 @@ export class CVariable {
             scope.root.headerFlags.int16_t = true;
         else if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+        else if (type == UniversalVarType)
+            scope.root.headerFlags.js_var = true;
 
         // root scope, make variables file-scoped by default
         if (scope.parent == null)

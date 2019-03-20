@@ -32,7 +32,7 @@ class CParseInt {
     public arguments: CExpression[];
     constructor(scope: IScope, call: ts.CallExpression) {
         this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
-        scope.root.headerFlags.parseInt = true;
+        scope.root.headerFlags.parse_int16_t = true;
     }
 
 }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType} from '../../types';
+import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType, UniversalVarType} from '../../types';
 import {IScope} from '../../program';
 import {CExpression} from '../../nodes/expressions';
 import {CCallExpression} from '../../nodes/call';
@@ -152,6 +152,8 @@ interface PrintfOptions {
     {INDENT}    {elementPrintfs}
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
+{#elseif isUniversalVar}
+    printf_js_var("{PREFIX}",{accessor},"{POSTFIX}");
 {#else}
     printf(/* Unsupported printf expression */);
 {/if}`)
@@ -167,6 +169,7 @@ class CPrintf {
     public isStruct: boolean = false;
     public isArray: boolean = false;
     public isStaticArray: boolean = false;
+    public isUniversalVar: boolean = false;
 
     public iteratorVarName: string;
     public arraySize: string;
@@ -184,6 +187,10 @@ class CPrintf {
         this.isRegex = varType == RegexVarType;
         this.isInteger = varType == NumberVarType;
         this.isBoolean = varType == BooleanVarType;
+        this.isUniversalVar = varType == UniversalVarType;
+
+        if (this.isUniversalVar)
+            scope.root.headerFlags.printf_js_var = true;
 
         this.PREFIX = options.prefix || '';
         this.POSTFIX = options.postfix || '';

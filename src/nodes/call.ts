@@ -28,7 +28,7 @@ export class CCallExpression {
         });
         if (call.expression.kind == ts.SyntaxKind.Identifier && this.funcName == "parseInt") {
             scope.root.headerFlags.int16_t = true;
-            scope.root.headerFlags.parseInt = true;
+            scope.root.headerFlags.parse_int16_t = true;
         }
     }
 }

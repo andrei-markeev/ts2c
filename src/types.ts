@@ -142,7 +142,17 @@ export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionIni
 export function isLiteral(n): n is ts.LiteralExpression {
     return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
 }
-
+export function isConvertToNumberExpression(n): n is ts.PrefixUnaryExpression {
+    return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
+}
+export const arithmeticOperators = [
+    ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.LessThanLessThanToken
+];
+export function isArithmeticBinaryExpression(n): n is ts.BinaryExpression {
+    return ts.isBinaryExpression(n) && arithmeticOperators.indexOf(n.operatorToken.kind) > -1;
+}
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
@@ -256,19 +266,21 @@ export class TypeHelper {
                 typeEqualities.push([typeGuard, node1, node2]);
         };
 
+        // expressions
         addEquality(ts.isIdentifier, n => n, n => getDeclaration(this.typeChecker, n));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
-        addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
-
+        addEquality(isConvertToNumberExpression, n => n, type(n => 
+            this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
+    
+        // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
         addEquality(ts.isPropertyAssignment, n => n.parent, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(ts.isPropertyAssignment, n => n, type(n => {
             const type = this.getCType(n.parent);
             return type instanceof StructType ? type.properties[n.name.getText()] : null;
         }));
-
         addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
@@ -277,7 +289,6 @@ export class TypeHelper {
                 : type == StringVarType && n.name.getText() == "length" ? NumberVarType
                 : null;
         }));
-
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
             const type = this.getCType(n.argumentExpression);
             const elementType = this.getCType(n) || PointerVarType;
@@ -296,6 +307,7 @@ export class TypeHelper {
                 : null
         }));
 
+        // calls
         addEquality(ts.isCallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], n => {
@@ -308,6 +320,8 @@ export class TypeHelper {
         for (let i = 0; i < 10; i++)
             addEquality(isMethodCall, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
 
+        // statements
+        addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
         addEquality(ts.isFunctionDeclaration, n => n, type(VoidType));
         addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.getCType(n.initializer.declarations[0]) || PointerVarType, 0, false)));
         addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
@@ -363,10 +377,10 @@ export class TypeHelper {
             }
         } while (changed);
 
-        /*
         allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
+        /*
         
         allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
@@ -465,15 +479,16 @@ export class TypeHelper {
             return type2_result;
         else if (type1 == PointerVarType)
             return type2_result;
-        else if (type1 == UniversalVarType)
-            return type2_result;
 
         else if (type2 == VoidType)
             return type1_result;
         else if (type2 == PointerVarType)
             return type1_result;
-        else if (type2 == UniversalVarType)
+
+        else if (type1 == UniversalVarType)
             return type1_result;
+        else if (type2 == UniversalVarType)
+            return type2_result;
 
         else if (type1 == StringVarType && type2 instanceof StructType) {
             if (Object.keys(type2.properties).length == 1 && (type2.properties["length"] == PointerVarType || type2.properties["length"] == NumberVarType))
@@ -533,9 +548,8 @@ export class TypeHelper {
 
             return noChanges;
         }
-
-        throw new Error("Error: Not supported yet. This code requires universal variable types, that aren't yet implemented. " +
-            "Variable is assigned incompatible values: " + this.getTypeString(type1) + " and " + this.getTypeString(type2));
+        else
+            return { type: UniversalVarType, replaced: true };
     }
 
     private mergeArrayAndStruct(arrayType: ArrayType, structType: StructType) {

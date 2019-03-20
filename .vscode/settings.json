@@ -7,6 +7,9 @@
 		"**/*.elf": {"when": "$(basename).c"},
 		"**/*.res": {"when": "$(basename).c"},
 		"**/*.js.map": true
-	}
+    },
+    "files.associations": {
+        "stdio.h": "c"
+    }
 	
 }

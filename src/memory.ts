@@ -52,9 +52,9 @@ export class MemoryManager {
                     {
                         let binExpr = <ts.BinaryExpression>node;
                         if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
-                            || binExpr.operatorToken.kind == ts.SyntaxKind.FirstCompoundAssignment) {
-                            let leftType = this.typeHelper.getCType(binExpr.left);
-                            let rightType = this.typeHelper.getCType(binExpr.right);
+                            || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken) {
+                            const leftType = this.typeHelper.getCType(binExpr.left);
+                            const rightType = this.typeHelper.getCType(binExpr.right);
                             if (leftType == StringVarType || rightType == StringVarType)
                                 this.scheduleNodeDisposal(binExpr, false);
                         }

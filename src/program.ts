@@ -52,6 +52,7 @@ export interface IScope {
 class HeaderFlags {
     strings: boolean = false;
     printf: boolean = false;
+    printf_js_var: boolean = false;
     malloc: boolean = false;
     bool: boolean = false;
     uint8_t: boolean = false;
@@ -75,8 +76,8 @@ class HeaderFlags {
     str_char_code_at: boolean = false;
     str_substring: boolean = false;
     str_slice: boolean = false;
-    atoi: boolean = false;
-    parseInt: boolean = false;
+    str_to_int16_t: boolean = false;
+    parse_int16_t: boolean = false;
     regex: boolean = false;
     regex_match: boolean = false;
 }
@@ -89,31 +90,33 @@ class HeaderFlags {
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring 
-    || headerFlags.str_slice}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice || headerFlags.str_to_int16_t}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice || headerFlags.str_to_int16_t}
     #include <assert.h>
 {/if}
-{#if headerFlags.printf || headerFlags.parseInt}
+{#if headerFlags.printf || headerFlags.parse_int16_t}
     #include <stdio.h>
 {/if}
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
     #include <limits.h>
+{/if}
+{#if headerFlags.str_to_int16_t}
+    #include <ctype.h>
 {/if}
 
 {#if headerFlags.bool}
     #define TRUE 1
     #define FALSE 0
 {/if}
-{#if headerFlags.bool || headerFlags.js_var}
+{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t}
     typedef unsigned char uint8_t;
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
-     headerFlags.regex }
+     headerFlags.regex || headerFlags.str_to_int16_t }
     typedef short int16_t;
 {/if}
 {#if headerFlags.uint16_t}
@@ -137,14 +140,12 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var}
-    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};
+{#if headerFlags.js_var || headerFlags.str_to_int16_t}
+    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING};
 	struct js_var {
 	    enum js_var_type type;
-	    uint8_t bool;
 	    int16_t number;
-	    const char *string;
-	    void *obj;
+	    void *data;
 	};
 {/if}
 
@@ -390,11 +391,62 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.parseInt}
+{#if headerFlags.parse_int16_t}
     int16_t parse_int16_t(const char * str) {
         int r;
         sscanf(str, "%d", &r);
         return (int16_t) r;
+    }
+{/if}
+
+{#if headerFlags.str_to_int16_t}
+    struct js_var *str_to_int16_t(const char * str) {
+        struct js_var *v = malloc(sizeof(*v));
+        const char *p = str;
+        int r;
+
+        assert(v != NULL);
+
+        while (*p && isspace(*p))
+            p++;
+
+        if (*p == 0)
+            str = "0";
+
+        if (*p == '-' && *(p+1))
+            p++;
+
+        while (*p) {
+            if (!isdigit(*p)) {
+                v->type = JS_VAR_NAN;
+                return v;
+            }
+            p++;
+        }
+
+        sscanf(str, "%d", &r);
+        v->type = JS_VAR_INT16;
+        v->number = (int16_t)r;
+        return v;
+    }
+{/if}
+
+{#if headerFlags.printf_js_var}
+    void printf_js_var(const char * prefix, struct js_var *v, const char * postfix) {
+        printf("%s", prefix);
+        if (v->type == JS_VAR_INT16)
+            printf("%d", v->number);
+        else if (v->type == JS_VAR_BOOL)
+            printf("%s", v->number ? "true" : "false");
+        else if (v->type == JS_VAR_STRING)
+            printf("%s", (const char *)v->data);
+        else if (v->type == JS_VAR_NAN)
+            printf("NaN");
+        else if (v->type == JS_VAR_NULL)
+            printf("null");
+        else if (v->type == JS_VAR_UNDEFINED)
+            printf("undefined");
+        printf("%s", postfix);
     }
 {/if}
 
