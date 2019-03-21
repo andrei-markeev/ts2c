@@ -28,6 +28,7 @@
   "scripts": {
     "prepublishOnly": "tsc",
     "build": "tsc && browserify ts2c.js -x typescript -s ts2c -o ts2c.bundle.js",
+    "publish-gh-pages": "npm run build && mv ts2c.bundle.js 222 && git checkout gh-pages && rm ts2c.bundle.js && mv 222 ts2c.bundle.js && git add ts2c.bundle.js && git commit -m \"updated bundle\" && git push && git checkout master",
     "cover": "tsc && cd tests && make -B cover",
     "test": "tsc && cd tests && make -B",
     "test-no-valgrind": "tsc && cd tests && make -B VALGRIND=skip"
