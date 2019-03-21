@@ -2,8 +2,8 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, StringVarType, RegexVarType, NumberVarType} from '../types';
-import {CVariable} from './variable';
+import {CType, StringVarType, RegexVarType, NumberVarType, UniversalVarType} from '../types';
+import {CVariable, CTempVarReplacement} from './variable';
 import {CRegexAsString} from './regexfunc';
 
 export interface CExpression { }
@@ -67,6 +67,8 @@ class CBinaryExpression {
     ({left} = {replacementVarName})
 {#elseif replacedWithVar}
     {replacementVarName}
+{#elseif inlineReplacement}
+    {inlineReplacement}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`)
@@ -78,11 +80,12 @@ export class CSimpleBinaryExpression {
     public callCondition: string;
     public replacedWithVar: boolean = false;
     public replacedWithVarAssignment: boolean = false;
-    public replacementVarName: string;
+    public replacementVarName: string = null;
     public gcVarName: string = null;
     public strPlusStr: boolean = false;
     public strPlusNumber: boolean = false;
     public numberPlusStr: boolean = false;
+    public inlineReplacement: CTempVarReplacement = null;
     constructor(scope: IScope, public left: CExpression, leftType: CType, public right: CExpression, rightType: CType, operatorKind: ts.SyntaxKind, node: ts.Node) {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
@@ -199,6 +202,22 @@ export class CSimpleBinaryExpression {
             }
 
         }
+        else if (leftType == UniversalVarType && rightType == UniversalVarType) {
+            const map = {
+                [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
+                [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
+                [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
+                [ts.SyntaxKind.PlusToken]: "JS_VAR_PLUS",
+                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
+            };
+            if (map[operatorKind]) {
+                const leftAsString = CodeTemplateFactory.templateToString(<any>left);
+                const rightAsString = CodeTemplateFactory.templateToString(<any>right);
+                const call = `js_var_compute(${leftAsString}, ${map[operatorKind]}, ${rightAsString})`;
+                this.inlineReplacement = new CTempVarReplacement(scope, node, call)
+                scope.root.headerFlags.js_var_compute = true;
+            }
+        }
         this.operator = operatorMap[operatorKind];
         if (callReplaceMap[operatorKind]) {
             this.replacedWithCall = true;
@@ -220,7 +239,9 @@ export class CSimpleBinaryExpression {
 {#elseif !isPostfix && operator}
     {operator}{operand}
 {#elseif replacedWithCall}
-    {call}({operand}){callCondition}
+    {call}({operand})
+{#elseif replacedWithVar}
+    ({tempVarName} = {call}({operand}))
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`, [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
@@ -229,12 +250,13 @@ class CUnaryExpression {
     public operator: string;
     public operand: CExpression;
     public isPostfix: boolean;
+    public replacedWithVar: boolean = false;
     public replacedWithCall: boolean = false;
+    public tempVarName: string;
     public call: string;
     public callCondition: string;
     constructor(scope: IScope, node: ts.PostfixUnaryExpression | ts.PrefixUnaryExpression) {
         let operatorMap: { [token: number]: string } = {};
-        let callReplaceMap: { [token: number]: [string, string] } = {};
         let type = scope.root.typeHelper.getCType(node.operand);
         operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
         if (type == NumberVarType) {
@@ -244,16 +266,17 @@ class CUnaryExpression {
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.TildeToken] = '~';
         }
-        if (type == StringVarType) {
-            callReplaceMap[ts.SyntaxKind.PlusToken] = ["str_to_int16_t", ""];
-            if (node.operator === ts.SyntaxKind.PlusToken)
-                scope.root.headerFlags.str_to_int16_t = true;
+        if (type == StringVarType && node.operator === ts.SyntaxKind.PlusToken) {
+            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (!scope.root.memoryManager.variableWasReused(node)) {
+                scope.variables.push(new CVariable(scope, this.tempVarName, UniversalVarType));
+                this.replacedWithVar = true;
+            } else
+                this.replacedWithCall = true;
+            this.call = "str_to_int16_t";
+            scope.root.headerFlags.str_to_int16_t = true;
         }
         this.operator = operatorMap[node.operator];
-        if (callReplaceMap[node.operator]) {
-            this.replacedWithCall = true;
-            [this.call, this.callCondition] = callReplaceMap[node.operator];
-        }
         this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();

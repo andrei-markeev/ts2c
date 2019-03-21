@@ -52,13 +52,16 @@ export interface IScope {
 class HeaderFlags {
     strings: boolean = false;
     printf: boolean = false;
-    printf_js_var: boolean = false;
     malloc: boolean = false;
     bool: boolean = false;
     uint8_t: boolean = false;
     int16_t: boolean = false;
     uint16_t: boolean = false;
     js_var: boolean = false;
+    js_var_from_str: boolean = false;
+    js_var_from_int16_t: boolean = false;
+    js_var_to_str: boolean = false;
+    js_var_compute: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;
@@ -87,22 +90,25 @@ class HeaderFlags {
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.str_substring
-    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}
+    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict
+    || headerFlags.js_var_compute || headerFlags.js_var_from_str}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice || headerFlags.str_to_int16_t}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
+    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice || headerFlags.str_to_int16_t}
+{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
+    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf || headerFlags.parse_int16_t}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}
     #include <limits.h>
 {/if}
-{#if headerFlags.str_to_int16_t}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}
     #include <ctype.h>
 {/if}
 
@@ -140,16 +146,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var || headerFlags.str_to_int16_t}
-    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING};
-	struct js_var {
-	    enum js_var_type type;
-	    int16_t number;
-	    void *data;
-	};
-{/if}
-
-{#if headerFlags.gc_iterator || headerFlags.dict}
+{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -241,7 +238,7 @@ class HeaderFlags {
 
 {/if}
 
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}
@@ -399,7 +396,39 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t}
+{#if headerFlags.js_var || headerFlags.str_to_int16_t}
+    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING};
+    struct js_var {
+        enum js_var_type type;
+        int16_t number;
+        void *data;
+    };
+{/if}
+
+{#if headerFlags.js_var_from_int16_t}
+    struct js_var *js_var_from_int16_t(int16_t n) {
+        struct js_var *v = malloc(sizeof(*v));
+        v->type = JS_VAR_INT16;
+        v->number = n;
+        v->data = NULL;
+        return v;
+    }
+{/if}
+
+{#if headerFlags.js_var_from_str}
+    struct js_var *js_var_from_str(const char *s) {
+        struct js_var *v = malloc(sizeof(*v));
+        int s_size = strlen(s) + 1;
+        char *p = malloc(s_size);
+        assert(p != NULL);
+        memcpy(p, s, s_size);
+        v->type = JS_VAR_STRING;
+        v->data = p;
+        return v;
+    }
+{/if}
+
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}
     struct js_var *str_to_int16_t(const char * str) {
         struct js_var *v = malloc(sizeof(*v));
         const char *p = str;
@@ -431,23 +460,118 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.printf_js_var}
-    void printf_js_var(const char * prefix, struct js_var *v, const char * postfix) {
-        printf("%s", prefix);
-        if (v->type == JS_VAR_INT16)
-            printf("%d", v->number);
-        else if (v->type == JS_VAR_BOOL)
-            printf("%s", v->number ? "true" : "false");
+{#if headerFlags.js_var_compute || headerFlags.js_var_to_str}
+    const char * js_var_to_str(struct js_var *v, uint8_t *need_dispose)
+    {
+        char *buf;
+        *need_dispose = 0;
+        if (v->type == JS_VAR_INT16) {
+            buf = malloc(STR_INT16_T_BUFLEN);
+            assert(buf != NULL);
+            *need_dispose = 1;
+            sprintf(buf, "%d", v->number);
+            return buf;
+        } else if (v->type == JS_VAR_BOOL)
+            return v->number ? "true" : "false";
         else if (v->type == JS_VAR_STRING)
-            printf("%s", (const char *)v->data);
+            return (const char *)v->data;
         else if (v->type == JS_VAR_NAN)
-            printf("NaN");
+            return "NaN";
         else if (v->type == JS_VAR_NULL)
-            printf("null");
+            return "null";
         else if (v->type == JS_VAR_UNDEFINED)
-            printf("undefined");
-        printf("%s", postfix);
+            return "undefined";
+
+        return NULL;
     }
+{/if}
+
+{#if headerFlags.js_var_compute}
+
+    struct js_var js_var_to_number(struct js_var *v)
+    {
+        struct js_var result;
+        struct js_var *tmp;
+        result.type = JS_VAR_INT16;
+        result.number = 0;
+
+        if (v->type == JS_VAR_INT16)
+            result.number = v->number;
+        else if (v->type == JS_VAR_BOOL)
+            result.number = v->number;
+        else if (v->type == JS_VAR_STRING) {
+            tmp = str_to_int16_t((const char *)v->data);
+            result.type = tmp->type;
+            if (result.type == JS_VAR_INT16)
+                result.number = tmp->number;
+            free(tmp);
+        }
+        else if (v->type == JS_VAR_NAN)
+            result.type = JS_VAR_NAN;
+        else if (v->type == JS_VAR_UNDEFINED)
+            result.type = JS_VAR_NAN;
+
+        return result;
+    }
+
+    enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
+    struct js_var *js_var_compute(struct js_var *left, enum js_var_op op, struct js_var *right)
+    {
+        struct js_var *result = malloc(sizeof(*result));
+        struct js_var left_to_number, right_to_number;
+        const char *left_as_string, *right_as_string;
+        uint8_t need_dispose_left, need_dispose_right;
+        assert(result != NULL);
+        result->data = NULL;
+
+        if (op == JS_VAR_PLUS && (left->type == JS_VAR_STRING || right->type == JS_VAR_STRING))
+        {
+            left_as_string = js_var_to_str(left, &need_dispose_left);
+            right_as_string = js_var_to_str(right, &need_dispose_right);
+            
+            result->type = JS_VAR_STRING;
+            result->data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
+            assert(result->data != NULL);
+
+            strcpy(result->data, left_as_string);
+            strcat(result->data, right_as_string);
+
+            if (need_dispose_left)
+                free((void *)left_as_string);
+            if (need_dispose_right)
+                free((void *)right_as_string);
+            return result;
+        }
+
+        left_to_number = js_var_to_number(left);
+        right_to_number = js_var_to_number(right);
+
+        if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {
+            result->type = JS_VAR_NAN;
+            return result;
+        }
+        
+        result->type = JS_VAR_INT16;
+        switch (op) {
+            case JS_VAR_PLUS:
+                result->number = left_to_number.number + right_to_number.number;
+                break;
+            case JS_VAR_MINUS:
+                result->number = left_to_number.number - right_to_number.number;
+                break;
+            case JS_VAR_ASTERISK:
+                result->number = left_to_number.number * right_to_number.number;
+                break;
+            case JS_VAR_SLASH:
+                result->number = left_to_number.number / right_to_number.number;
+                break;
+            case JS_VAR_PERCENT:
+                result->number = left_to_number.number % right_to_number.number;
+                break;
+        }
+        return result;
+    }
+
 {/if}
 
 {userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
@@ -547,6 +671,7 @@ export class CProgram implements IScope {
             let gcType = "ARRAY(void *)";
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
+            if (gcVarName.indexOf("_js_vars") > -1) gcType = "ARRAY(ARRAY(void *))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
             this.headerFlags.array = true;
         }

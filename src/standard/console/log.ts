@@ -153,7 +153,9 @@ interface PrintfOptions {
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
 {#elseif isUniversalVar}
-    printf_js_var("{PREFIX}",{accessor},"{POSTFIX}");
+    printf("{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
+    {INDENT}if ({needDisposeVarName})
+    {INDENT}    free((void *){tempVarName});
 {#else}
     printf(/* Unsupported printf expression */);
 {/if}`)
@@ -172,6 +174,8 @@ class CPrintf {
     public isUniversalVar: boolean = false;
 
     public iteratorVarName: string;
+    public tempVarName: string;
+    public needDisposeVarName: string;
     public arraySize: string;
     public elementPrintfs: CPrintf[] = [];
     public elementFormatString: string = '';
@@ -189,8 +193,15 @@ class CPrintf {
         this.isBoolean = varType == BooleanVarType;
         this.isUniversalVar = varType == UniversalVarType;
 
-        if (this.isUniversalVar)
-            scope.root.headerFlags.printf_js_var = true;
+        if (this.isUniversalVar) {
+            this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false)
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_need_dispose", false)
+            if (!scope.variables.some(v => v.name == this.tempVarName))
+                scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
+            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
+                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
+            scope.root.headerFlags.js_var_to_str = true;
+        }
 
         this.PREFIX = options.prefix || '';
         this.POSTFIX = options.postfix || '';

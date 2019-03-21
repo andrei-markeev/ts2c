@@ -109,7 +109,7 @@ export class SymbolsHelper {
     /** Generate name for a new temporary variable and register it in temporaryVariables table.
      * Generated name is guarantied not to conflict with any existing names in specified scope.
      */
-    public addTemp(scopeNode: ts.Node, proposedName: string): string {
+    public addTemp(scopeNode: ts.Node, proposedName: string, reserve: boolean = true): string {
         let parentFunc = findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
         let existingSymbolNames = scopeNode == null ? [] : this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
@@ -123,7 +123,8 @@ export class SymbolsHelper {
             proposedName = proposedName + "_" + i;
         }
 
-        this.temporaryVariables[scopeId].push(proposedName);
+        if (reserve)
+            this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
     }
     

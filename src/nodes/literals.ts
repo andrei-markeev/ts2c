@@ -1,8 +1,8 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType} from '../types';
-import {CVariable, CVariableAllocation} from './variable';
+import {ArrayType, StructType, DictType, UniversalVarType} from '../types';
+import {CVariable, CVariableAllocation, CTempVarReplacement} from './variable';
 import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 
@@ -111,9 +111,15 @@ class CRegexLiteralExpression {
     }
 }
 
-@CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
+@CodeTemplate(`
+{#if universalWrapper}
+    {universalWrapper}
+{#else}
+    {value}
+{/if}`, ts.SyntaxKind.StringLiteral)
 export class CString {
     public value: string;
+    public universalWrapper: CTempVarReplacement = null;
     constructor(scope: IScope, value: ts.StringLiteral | string) {
         let s = typeof value === 'string' ? '"' + value + '"' : value.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
@@ -121,14 +127,31 @@ export class CString {
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
             this.value = s;
+
+        if (typeof(value) !== "string" && scope.root.typeHelper.getCType(value) == UniversalVarType) {
+            const call = `js_var_from_str(${this.value})`;
+            this.universalWrapper = new CTempVarReplacement(scope, value, call)
+            scope.root.headerFlags.js_var_from_str = true;
+        }
     }
 }
 
-@CodeTemplate(`{value}`, ts.SyntaxKind.NumericLiteral)
+@CodeTemplate(`
+{#if universalWrapper}
+    {universalWrapper}
+{#else}
+    {value}
+{/if}`, ts.SyntaxKind.NumericLiteral)
 export class CNumber {
     public value: string;
+    public universalWrapper: CTempVarReplacement = null;
     constructor(scope: IScope, value: ts.Node) {
         this.value = value.getText();
+        if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
+            const call = `js_var_from_int16_t(${this.value})`;
+            this.universalWrapper = new CTempVarReplacement(scope, value, call)
+            scope.root.headerFlags.js_var_from_int16_t = true;
+        }
     }
 }
 

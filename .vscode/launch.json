@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/strings/string5.ts"],
+            "args": ["tests/js_var/binexpr.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

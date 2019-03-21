@@ -145,14 +145,6 @@ export function isLiteral(n): n is ts.LiteralExpression {
 export function isConvertToNumberExpression(n): n is ts.PrefixUnaryExpression {
     return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
 }
-export const arithmeticOperators = [
-    ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken,
-    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
-    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.LessThanLessThanToken
-];
-export function isArithmeticBinaryExpression(n): n is ts.BinaryExpression {
-    return ts.isBinaryExpression(n) && arithmeticOperators.indexOf(n.operatorToken.kind) > -1;
-}
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
@@ -272,6 +264,11 @@ export class TypeHelper {
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
         addEquality(isConvertToNumberExpression, n => n, type(n => this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
+        addEquality(ts.isBinaryExpression, n => n, type(n => {
+            const leftType = this.getCType(n.left);
+            const rightType = this.getCType(n.right);
+            return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType : null;
+        }))
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);

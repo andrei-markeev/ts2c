@@ -103,6 +103,40 @@ export class CVariableAllocation {
 
 @CodeTemplate(`
 {#statements}
+    {#if gcVarName}
+        {varName} = {inlineCall};
+        ARRAY_PUSH({gcVarName}, (void *){varName});
+    {/if}
+{/statements}
+{#if gcVarName}
+    {varName}
+{#elseif reused}
+    {inlineCall}
+{#else}
+    ({varName} = {inlineCall})
+{/if}`)
+export class CTempVarReplacement {
+    public varName: string;
+    public reused: boolean;
+    public gcVarName: string;
+    constructor(scope: IScope, node: ts.Node, public inlineCall: any)
+    {
+        this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+        this.reused = scope.root.memoryManager.variableWasReused(node);
+        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+
+        if (!this.reused)
+            scope.variables.push(new CVariable(scope, this.varName, scope.root.typeHelper.getCType(node)));
+
+        if (this.gcVarName) {
+            scope.root.headerFlags.array = true;
+            scope.root.headerFlags.gc_iterator = true;
+        }
+    }
+}
+
+@CodeTemplate(`
+{#statements}
     {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}
     {destructors => free({this});\n}
     {#if gcArraysCVarName}
@@ -134,6 +168,14 @@ export class CVariableAllocation {
         free({gcDictsVarName}->data);
         free({gcDictsVarName});
     {/if}
+    {#if gcUniversalVarName}
+        for (gc_i = 0; gc_i < {gcUniversalVarName}->size; gc_i++) {
+            free({gcUniversalVarName}->data[gc_i]->data);
+            free({gcUniversalVarName}->data[gc_i]);
+        }
+        free({gcUniversalVarName}->data);
+        free({gcUniversalVarName});
+    {/if}
     {#if gcVarName}
         for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
             free({gcVarName}->data[gc_i]);
@@ -147,6 +189,7 @@ export class CVariableDestructors {
     public gcArraysVarName: string = null;
     public gcArraysCVarName: string = null;
     public gcDictsVarName: string = null;
+    public gcUniversalVarName: string = null;
     public destructors: string[];
     public arrayDestructors: string[] = [];
     constructor(scope: IScope, node: ts.Node) {
@@ -159,6 +202,8 @@ export class CVariableDestructors {
                 this.gcDictsVarName = gc;
             else if (gc.indexOf("_arrays") > -1)
                 this.gcArraysVarName = gc;
+            else if (gc.indexOf("_js_vars") > -1)
+                this.gcUniversalVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -179,6 +224,9 @@ export class CVariableDestructors {
                     this.destructors.push(r.varName + "->index");
                     this.destructors.push(r.varName + "->values->data");
                     this.destructors.push(r.varName + "->values");
+                    this.destructors.push(r.varName);
+                } else if (r.js_var) {
+                    this.destructors.push(r.varName + "->data");
                     this.destructors.push(r.varName);
                 } else if (r.string) {
                     this.destructors.push("(char *)" + r.varName);

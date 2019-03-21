@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -10,6 +10,7 @@ type VariableScopeInfo = {
     array: boolean;
     arrayWithContents: boolean;
     dict: boolean;
+    js_var: boolean;
     varName: string;
     scopeId: string;
     used: boolean;
@@ -34,6 +35,20 @@ export class MemoryManager {
         });
         for (let node of nodes) {
             switch (node.kind) {
+                case ts.SyntaxKind.StringLiteral:
+                    {
+                        let type = this.typeHelper.getCType(node);
+                        if (type && type == UniversalVarType)
+                            this.scheduleNodeDisposal(node);
+                    }
+                    break;
+                case ts.SyntaxKind.NumericLiteral:
+                    {
+                        let type = this.typeHelper.getCType(node);
+                        if (type && type == UniversalVarType)
+                            this.scheduleNodeDisposal(node);
+                    }
+                    break;
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
@@ -51,12 +66,23 @@ export class MemoryManager {
                 case ts.SyntaxKind.BinaryExpression:
                     {
                         let binExpr = <ts.BinaryExpression>node;
-                        if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
-                            || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken) {
-                            const leftType = this.typeHelper.getCType(binExpr.left);
-                            const rightType = this.typeHelper.getCType(binExpr.right);
-                            if (leftType == StringVarType || rightType == StringVarType)
-                                this.scheduleNodeDisposal(binExpr, false);
+                        const leftType = this.typeHelper.getCType(binExpr.left);
+                        const rightType = this.typeHelper.getCType(binExpr.right);
+
+                        const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
+                        if (plusOperator && (leftType == StringVarType || rightType == StringVarType))
+                            this.scheduleNodeDisposal(binExpr, false);
+                        else if (leftType == UniversalVarType || rightType == UniversalVarType)
+                            this.scheduleNodeDisposal(binExpr);
+                    }
+                    break;
+                case ts.SyntaxKind.PrefixUnaryExpression:
+                    {
+                        const expr = <ts.PrefixUnaryExpression>node;
+                        if (expr.operator == ts.SyntaxKind.PlusToken) {
+                            const type = this.typeHelper.getCType(expr.operand);
+                            if (type != NumberVarType)
+                                this.scheduleNodeDisposal(expr);
                         }
                     }
                     break;
@@ -75,7 +101,7 @@ export class MemoryManager {
         var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents && !v.js_var).length) {
             gcVars.push("gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
@@ -86,6 +112,9 @@ export class MemoryManager {
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.dict).length) {
             gcVars.push("gc_" + realScopeId + "_dicts");
+        }
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.js_var).length) {
+            gcVars.push("gc_" + realScopeId + "_js_vars");
         }
         return gcVars;
     }
@@ -102,6 +131,8 @@ export class MemoryManager {
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays_c";
             else if (this.scopesOfVariables[key].dict)
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_dicts";
+            else if (this.scopesOfVariables[key].js_var)
+                return "gc_" + this.scopesOfVariables[key].scopeId + "_js_vars";
             else
                 return "gc_" + this.scopesOfVariables[key].scopeId;
         }
@@ -112,18 +143,21 @@ export class MemoryManager {
     public getDestructorsForScope(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean }[] = [];
+        let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean, js_var: boolean }[] = [];
         if (this.scopes[scopeId]) {
 
             // string match allocates array of strings, and each of those strings should be also disposed
-            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used))
+            for (let simpleVarScopeInfo of this.scopes[scopeId].filter(v => v.simple && v.used)) {
+                const type = this.typeHelper.getCType(simpleVarScopeInfo.node);
                 destructors.push({
                     varName: simpleVarScopeInfo.varName,
                     array: simpleVarScopeInfo.array,
                     dict: simpleVarScopeInfo.dict,
-                    string: this.typeHelper.getCType(simpleVarScopeInfo.node) == StringVarType,
+                    string: type == StringVarType,
+                    js_var: type == UniversalVarType,
                     arrayWithContents: simpleVarScopeInfo.arrayWithContents
                 });
+            }
         }
         return destructors;
     }
@@ -287,12 +321,18 @@ export class MemoryManager {
 
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
-        if (ts.isArrayLiteralExpression(heapNode))
+        if (ts.isStringLiteral(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+        else if (ts.isNumericLiteral(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
+        else if (ts.isArrayLiteralExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_array");
         else if (ts.isObjectLiteralExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_obj");
         else if (ts.isBinaryExpression(heapNode))
-            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_result");
+        else if (ts.isPrefixUnaryExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
         else if (ts.isCallExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
@@ -313,6 +353,7 @@ export class MemoryManager {
             arrayWithContents: arrayWithContents,
             array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray,
             dict: type && type instanceof DictType,
+            js_var: type === UniversalVarType,
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp
