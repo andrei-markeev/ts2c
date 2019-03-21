@@ -65,8 +65,13 @@ var MemoryManager = /** @class */ (function () {
                         var plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
                         if (plusOperator && (leftType == types_1.StringVarType || rightType == types_1.StringVarType))
                             this.scheduleNodeDisposal(binExpr, false);
-                        else if (leftType == types_1.UniversalVarType || rightType == types_1.UniversalVarType)
+                        else if (leftType == types_1.UniversalVarType || rightType == types_1.UniversalVarType) {
+                            if (leftType != types_1.UniversalVarType)
+                                this.scheduleNodeDisposal(binExpr.left);
+                            if (rightType != types_1.UniversalVarType)
+                                this.scheduleNodeDisposal(binExpr.right);
                             this.scheduleNodeDisposal(binExpr);
+                        }
                     }
                     break;
                 case ts.SyntaxKind.PrefixUnaryExpression:
@@ -300,7 +305,9 @@ var MemoryManager = /** @class */ (function () {
         }
         var type = this.typeHelper.getCType(heapNode);
         var varName;
-        if (ts.isStringLiteral(heapNode))
+        if (!isTemp)
+            varName = heapNode.getText().replace(/\./g, '->');
+        else if (ts.isStringLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
         else if (ts.isNumericLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
@@ -314,8 +321,10 @@ var MemoryManager = /** @class */ (function () {
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
         else if (ts.isCallExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, standard_1.StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
+        else if (ts.isIdentifier(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
         else
-            varName = heapNode.getText().replace(/\./g, "->");
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp");
         var vnode = heapNode;
         var key = vnode.pos + "_" + vnode.end;
         var arrayWithContents = false;
@@ -551,9 +560,9 @@ var CElementAccess = /** @class */ (function () {
         var type = null;
         var elementAccess = null;
         var argumentExpression = null;
-        if (node.kind == ts.SyntaxKind.Identifier) {
+        if (ts.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
-            elementAccess = node.getText();
+            elementAccess = node.text;
             var isLogicalContext = (node.parent.kind == ts.SyntaxKind.IfStatement
                 || node.parent.kind == ts.SyntaxKind.WhileStatement
                 || node.parent.kind == ts.SyntaxKind.DoStatement) && node.parent["expression"] == node;
@@ -577,17 +586,17 @@ var CElementAccess = /** @class */ (function () {
         else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             var propAccess = node;
             type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
-                elementAccess = propAccess.expression.getText();
+            if (ts.isIdentifier(propAccess.expression))
+                elementAccess = propAccess.expression.text;
             else
                 elementAccess = new CElementAccess_1(scope, propAccess.expression);
-            argumentExpression = propAccess.name.getText();
+            argumentExpression = propAccess.name.text;
         }
         else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             var elemAccess = node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                elementAccess = elemAccess.expression.getText();
+            if (ts.isIdentifier(elemAccess.expression))
+                elementAccess = elemAccess.expression.text;
             else
                 elementAccess = new CElementAccess_1(scope, elemAccess.expression);
             if (type instanceof types_1.StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
@@ -659,7 +668,17 @@ var variable_1 = require("./variable");
 var regexfunc_1 = require("./regexfunc");
 var CBinaryExpression = /** @class */ (function () {
     function CBinaryExpression(scope, node) {
-        if (node.operatorToken.kind == ts.SyntaxKind.FirstAssignment) {
+        this.replacedWithCall = false;
+        this.replacedWithVar = false;
+        this.replacedWithVarAssignment = false;
+        this.replacementVarName = null;
+        this.gcVarName = null;
+        this.strPlusStr = false;
+        this.strPlusNumber = false;
+        this.numberPlusStr = false;
+        this.inlineReplacement = null;
+        this.expression = null;
+        if (node.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
             this.expression = assignment_1.AssignmentHelper.create(scope, node.left, node.right, true);
             return;
         }
@@ -672,38 +691,19 @@ var CBinaryExpression = /** @class */ (function () {
             return;
         }
         var leftType = scope.root.typeHelper.getCType(node.left);
-        var left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+        this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
-        var right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
-        this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
-    }
-    CBinaryExpression = __decorate([
-        template_1.CodeTemplate("{expression}", ts.SyntaxKind.BinaryExpression)
-    ], CBinaryExpression);
-    return CBinaryExpression;
-}());
-var CSimpleBinaryExpression = /** @class */ (function () {
-    function CSimpleBinaryExpression(scope, left, leftType, right, rightType, operatorKind, node) {
-        this.left = left;
-        this.right = right;
-        this.replacedWithCall = false;
-        this.replacedWithVar = false;
-        this.replacedWithVarAssignment = false;
-        this.replacementVarName = null;
-        this.gcVarName = null;
-        this.strPlusStr = false;
-        this.strPlusNumber = false;
-        this.numberPlusStr = false;
-        this.inlineReplacement = null;
+        this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        var operatorKind = node.operatorToken.kind;
         var operatorMap = {};
         var callReplaceMap = {};
         if (leftType == types_1.RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
             leftType = types_1.StringVarType;
-            this.left = new regexfunc_1.CRegexAsString(left);
+            this.left = new regexfunc_1.CRegexAsString(this.left);
         }
         if (rightType == types_1.RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
             rightType = types_1.StringVarType;
-            this.right = new regexfunc_1.CRegexAsString(right);
+            this.right = new regexfunc_1.CRegexAsString(this.right);
         }
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
@@ -797,7 +797,7 @@ var CSimpleBinaryExpression = /** @class */ (function () {
                 scope.root.headerFlags.str_int16_t_cat = true;
             }
         }
-        else if (leftType == types_1.UniversalVarType && rightType == types_1.UniversalVarType) {
+        else if (leftType == types_1.UniversalVarType || rightType == types_1.UniversalVarType) {
             var map = (_a = {},
                 _a[ts.SyntaxKind.AsteriskToken] = "JS_VAR_ASTERISK",
                 _a[ts.SyntaxKind.SlashToken] = "JS_VAR_SLASH",
@@ -806,10 +806,10 @@ var CSimpleBinaryExpression = /** @class */ (function () {
                 _a[ts.SyntaxKind.MinusToken] = "JS_VAR_MINUS",
                 _a);
             if (map[operatorKind]) {
-                var leftAsString = template_1.CodeTemplateFactory.templateToString(left);
-                var rightAsString = template_1.CodeTemplateFactory.templateToString(right);
+                var leftAsString = template_1.CodeTemplateFactory.templateToString(new variable_1.CAsUniversalVar(scope, node.left, this.left));
+                var rightAsString = template_1.CodeTemplateFactory.templateToString(new variable_1.CAsUniversalVar(scope, node.right, this.right));
                 var call = "js_var_compute(" + leftAsString + ", " + map[operatorKind] + ", " + rightAsString + ")";
-                this.inlineReplacement = new variable_1.CTempVarReplacement(scope, node, call);
+                this.inlineReplacement = new variable_1.CTempVarReplacement(scope, node, call, types_1.UniversalVarType);
                 scope.root.headerFlags.js_var_compute = true;
             }
         }
@@ -818,19 +818,19 @@ var CSimpleBinaryExpression = /** @class */ (function () {
             this.replacedWithCall = true;
             _b = callReplaceMap[operatorKind], this.call = _b[0], this.callCondition = _b[1];
         }
-        this.nodeText = node.getText();
+        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
         if (this.gcVarName) {
             scope.root.headerFlags.gc_iterator = true;
             scope.root.headerFlags.array = true;
         }
         var _a, _b;
     }
-    CSimpleBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVarAssignment}\n    ({left} = {replacementVarName})\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#elseif inlineReplacement}\n    {inlineReplacement}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
-    ], CSimpleBinaryExpression);
-    return CSimpleBinaryExpression;
+    CBinaryExpression = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if expression}\n    {expression}\n{#elseif operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVarAssignment}\n    ({left} = {replacementVarName})\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#elseif inlineReplacement}\n    {inlineReplacement}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", ts.SyntaxKind.BinaryExpression)
+    ], CBinaryExpression);
+    return CBinaryExpression;
 }());
-exports.CSimpleBinaryExpression = CSimpleBinaryExpression;
+exports.CBinaryExpression = CBinaryExpression;
 var CUnaryExpression = /** @class */ (function () {
     function CUnaryExpression(scope, node) {
         this.replacedWithVar = false;
@@ -1093,7 +1093,7 @@ var CString = /** @class */ (function () {
             this.value = s;
         if (typeof (value) !== "string" && scope.root.typeHelper.getCType(value) == types_1.UniversalVarType) {
             var call = "js_var_from_str(" + this.value + ")";
-            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call);
+            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call, types_1.UniversalVarType);
             scope.root.headerFlags.js_var_from_str = true;
         }
     }
@@ -1109,7 +1109,7 @@ var CNumber = /** @class */ (function () {
         this.value = value.getText();
         if (scope.root.typeHelper.getCType(value) == types_1.UniversalVarType) {
             var call = "js_var_from_int16_t(" + this.value + ")";
-            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call);
+            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call, types_1.UniversalVarType);
             scope.root.headerFlags.js_var_from_int16_t = true;
         }
     }
@@ -1632,13 +1632,14 @@ var CVariableAllocation = /** @class */ (function () {
 }());
 exports.CVariableAllocation = CVariableAllocation;
 var CTempVarReplacement = /** @class */ (function () {
-    function CTempVarReplacement(scope, node, inlineCall) {
+    function CTempVarReplacement(scope, node, inlineCall, type) {
         this.inlineCall = inlineCall;
+        this.type = type;
         this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
         this.reused = scope.root.memoryManager.variableWasReused(node);
         this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
         if (!this.reused)
-            scope.variables.push(new CVariable(scope, this.varName, scope.root.typeHelper.getCType(node)));
+            scope.variables.push(new CVariable(scope, this.varName, type));
         if (this.gcVarName) {
             scope.root.headerFlags.array = true;
             scope.root.headerFlags.gc_iterator = true;
@@ -1710,6 +1711,29 @@ var CVariableDestructors = /** @class */ (function () {
     return CVariableDestructors;
 }());
 exports.CVariableDestructors = CVariableDestructors;
+var CAsUniversalVar = /** @class */ (function () {
+    function CAsUniversalVar(scope, node, expr) {
+        var type = scope.root.typeHelper.getCType(node);
+        var expression = template_1.CodeTemplateFactory.templateToString(expr);
+        if (type == types_1.UniversalVarType)
+            this.universalWrapper = expression;
+        else if (type == types_1.StringVarType) {
+            this.universalWrapper = new CTempVarReplacement(scope, node, "js_var_from_str(" + expression + ")", types_1.UniversalVarType);
+            scope.root.headerFlags.js_var_from_str = true;
+        }
+        else if (type == types_1.NumberVarType) {
+            this.universalWrapper = new CTempVarReplacement(scope, node, "js_var_from_int16_t(" + expression + ")", types_1.UniversalVarType);
+            scope.root.headerFlags.js_var_from_int16_t = true;
+        }
+        else
+            this.universalWrapper = "/* expression '" + node.getText() + "' of type " + JSON.stringify(type) + " is not yet supported here */";
+    }
+    CAsUniversalVar = __decorate([
+        template_1.CodeTemplate("{universalWrapper}")
+    ], CAsUniversalVar);
+    return CAsUniversalVar;
+}());
+exports.CAsUniversalVar = CAsUniversalVar;
 var CVariable = /** @class */ (function () {
     function CVariable(scope, name, typeSource, options) {
         this.name = name;
@@ -2533,8 +2557,8 @@ var template_1 = require("../../template");
 var standard_1 = require("../../standard");
 var types_1 = require("../../types");
 var variable_1 = require("../../nodes/variable");
-var expressions_1 = require("../../nodes/expressions");
 var elementaccess_1 = require("../../nodes/elementaccess");
+var expressions_1 = require("../../nodes/expressions");
 var ArrayIndexOfResolver = /** @class */ (function () {
     function ArrayIndexOfResolver() {
     }
@@ -2581,8 +2605,16 @@ var CArrayIndexOf = /** @class */ (function () {
             this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
             scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
             scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
-            var arrayElementAccess = new elementaccess_1.CSimpleElementAccess(scope, objType, this.varAccess, this.iteratorVarName);
-            this.comparison = new expressions_1.CSimpleBinaryExpression(scope, arrayElementAccess, objType.elementType, args[0], objType.elementType, ts.SyntaxKind.EqualsEqualsToken, call);
+            // Synthesize binary node that represents comparison expression
+            var iteratorIdent = ts.createIdentifier(this.iteratorVarName);
+            var arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
+            var comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
+            iteratorIdent.parent = arrayElement;
+            arrayElement.parent = comparison;
+            scope.root.typeHelper.registerSyntheticNode(iteratorIdent, types_1.NumberVarType);
+            scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
+            scope.root.typeHelper.registerSyntheticNode(comparison, types_1.BooleanVarType);
+            this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
             scope.root.headerFlags.array = true;
         }
     }
@@ -2783,8 +2815,16 @@ var CArrayLastIndexOf = /** @class */ (function () {
             this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
             scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.NumberVarType));
             scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, types_1.NumberVarType));
-            var arrayElementAccess = new elementaccess_1.CSimpleElementAccess(scope, objType, this.varAccess, this.iteratorVarName);
-            this.comparison = new expressions_1.CSimpleBinaryExpression(scope, arrayElementAccess, objType.elementType, args[0], objType.elementType, ts.SyntaxKind.EqualsEqualsToken, call);
+            // Synthesize binary node that represents comparison expression
+            var iteratorIdent = ts.createIdentifier(this.iteratorVarName);
+            var arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
+            var comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
+            iteratorIdent.parent = arrayElement;
+            arrayElement.parent = comparison;
+            scope.root.typeHelper.registerSyntheticNode(iteratorIdent, types_1.NumberVarType);
+            scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
+            scope.root.typeHelper.registerSyntheticNode(comparison, types_1.BooleanVarType);
+            this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
             scope.root.headerFlags.array = true;
         }
     }
@@ -5229,6 +5269,13 @@ var TypeHelper = /** @class */ (function () {
             ));
         */
     };
+    /** Mostly used inside inferTypes */
+    TypeHelper.prototype.registerSyntheticNode = function (n, t) {
+        if (!n || !(n.flags & ts.NodeFlags.Synthesized))
+            return false;
+        n.end = TypeHelper.syntheticNodesCounter++;
+        this.setNodeType(n, t);
+    };
     TypeHelper.prototype.setNodeType = function (n, t) {
         if (n && t)
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
@@ -5392,6 +5439,7 @@ var TypeHelper = /** @class */ (function () {
         else
             return { type: arrayType, replaced: true };
     };
+    TypeHelper.syntheticNodesCounter = 0;
     return TypeHelper;
 }());
 exports.TypeHelper = TypeHelper;
