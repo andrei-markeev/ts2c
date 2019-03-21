@@ -72,8 +72,13 @@ export class MemoryManager {
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
                         if (plusOperator && (leftType == StringVarType || rightType == StringVarType))
                             this.scheduleNodeDisposal(binExpr, false);
-                        else if (leftType == UniversalVarType || rightType == UniversalVarType)
+                        else if (leftType == UniversalVarType || rightType == UniversalVarType) {
+                            if (leftType != UniversalVarType)
+                                this.scheduleNodeDisposal(binExpr.left);
+                            if (rightType != UniversalVarType)
+                                this.scheduleNodeDisposal(binExpr.right);
                             this.scheduleNodeDisposal(binExpr);
+                        }
                     }
                     break;
                 case ts.SyntaxKind.PrefixUnaryExpression:
@@ -321,7 +326,9 @@ export class MemoryManager {
 
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
-        if (ts.isStringLiteral(heapNode))
+        if (!isTemp)
+            varName = heapNode.getText().replace(/\./g,'->');
+        else if (ts.isStringLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
         else if (ts.isNumericLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
@@ -335,8 +342,10 @@ export class MemoryManager {
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
         else if (ts.isCallExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
+        else if (ts.isIdentifier(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
         else
-            varName = heapNode.getText().replace(/\./g, "->");
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 
         let vnode = heapNode;
         let key = vnode.pos + "_" + vnode.end;

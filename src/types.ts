@@ -390,7 +390,18 @@ export class TypeHelper {
         */
 
     }
-    private setNodeType(n, t) {
+
+    private static syntheticNodesCounter = 0;
+    /** Mostly used inside inferTypes */
+    public registerSyntheticNode(n, t) {
+        if (!n || !(n.flags & ts.NodeFlags.Synthesized))
+            return false;
+        
+        n.end = TypeHelper.syntheticNodesCounter++;
+        this.setNodeType(n, t);
+    }
+
+    public setNodeType(n, t) {
         if (n && t)
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
     }

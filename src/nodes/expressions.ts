@@ -3,36 +3,10 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, StringVarType, RegexVarType, NumberVarType, UniversalVarType} from '../types';
-import {CVariable, CTempVarReplacement} from './variable';
+import {CVariable, CTempVarReplacement, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
 
 export interface CExpression { }
-
-@CodeTemplate(`{expression}`, ts.SyntaxKind.BinaryExpression)
-class CBinaryExpression {
-    public expression: CExpression;
-    constructor(scope: IScope, node: ts.BinaryExpression)
-    {
-        if (node.operatorToken.kind == ts.SyntaxKind.FirstAssignment) {
-            this.expression = AssignmentHelper.create(scope, node.left, node.right, true);
-            return;
-        }
-        if (node.operatorToken.kind == ts.SyntaxKind.CommaToken) {
-            let nodeAsStatement = <ts.ExpressionStatement>ts.createNode(ts.SyntaxKind.ExpressionStatement);
-            nodeAsStatement.expression = node.left;
-            nodeAsStatement.parent = node.getSourceFile();
-            scope.statements.push(CodeTemplateFactory.createForNode(scope, nodeAsStatement));
-            this.expression = CodeTemplateFactory.createForNode(scope, node.right);
-            return;
-        }
-
-        let leftType = scope.root.typeHelper.getCType(node.left);
-        let left = CodeTemplateFactory.createForNode(scope, node.left);
-        let rightType = scope.root.typeHelper.getCType(node.right);
-        let right = CodeTemplateFactory.createForNode(scope, node.right);
-        this.expression = new CSimpleBinaryExpression(scope, left, leftType, right, rightType, node.operatorToken.kind, node);
-    }
-}
 
 @CodeTemplate(`
 {#statements}
@@ -59,7 +33,9 @@ class CBinaryExpression {
     {/if}
 
 {/statements}
-{#if operator}
+{#if expression}
+    {expression}
+{#elseif operator}
     {left} {operator} {right}
 {#elseif replacedWithCall}
     {call}({left}, {right}){callCondition}
@@ -71,8 +47,8 @@ class CBinaryExpression {
     {inlineReplacement}
 {#else}
     /* unsupported expression {nodeText} */
-{/if}`)
-export class CSimpleBinaryExpression {
+{/if}`, ts.SyntaxKind.BinaryExpression)
+export class CBinaryExpression {
     public nodeText: string;
     public operator: string;
     public replacedWithCall: boolean = false;
@@ -86,17 +62,39 @@ export class CSimpleBinaryExpression {
     public strPlusNumber: boolean = false;
     public numberPlusStr: boolean = false;
     public inlineReplacement: CTempVarReplacement = null;
-    constructor(scope: IScope, public left: CExpression, leftType: CType, public right: CExpression, rightType: CType, operatorKind: ts.SyntaxKind, node: ts.Node) {
+    public expression: CExpression = null;
+    public left: CExpression;
+    public right: CExpression;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        if (node.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
+            this.expression = AssignmentHelper.create(scope, node.left, node.right, true);
+            return;
+        }
+        if (node.operatorToken.kind == ts.SyntaxKind.CommaToken) {
+            let nodeAsStatement = <ts.ExpressionStatement>ts.createNode(ts.SyntaxKind.ExpressionStatement);
+            nodeAsStatement.expression = node.left;
+            nodeAsStatement.parent = node.getSourceFile();
+            scope.statements.push(CodeTemplateFactory.createForNode(scope, nodeAsStatement));
+            this.expression = CodeTemplateFactory.createForNode(scope, node.right);
+            return;
+        }
+
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        this.left = CodeTemplateFactory.createForNode(scope, node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        this.right = CodeTemplateFactory.createForNode(scope, node.right);
+        const operatorKind = node.operatorToken.kind;
+
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
         
         if (leftType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
             leftType = StringVarType;
-            this.left = new CRegexAsString(left);
+            this.left = new CRegexAsString(this.left);
         }
         if (rightType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
             rightType = StringVarType;
-            this.right = new CRegexAsString(right);
+            this.right = new CRegexAsString(this.right);
         }
 
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
@@ -202,7 +200,7 @@ export class CSimpleBinaryExpression {
             }
 
         }
-        else if (leftType == UniversalVarType && rightType == UniversalVarType) {
+        else if (leftType == UniversalVarType || rightType == UniversalVarType) {
             const map = {
                 [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
                 [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
@@ -211,10 +209,10 @@ export class CSimpleBinaryExpression {
                 [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
             };
             if (map[operatorKind]) {
-                const leftAsString = CodeTemplateFactory.templateToString(<any>left);
-                const rightAsString = CodeTemplateFactory.templateToString(<any>right);
+                const leftAsString = CodeTemplateFactory.templateToString(<any>new CAsUniversalVar(scope, node.left, this.left));
+                const rightAsString = CodeTemplateFactory.templateToString(<any>new CAsUniversalVar(scope, node.right, this.right));
                 const call = `js_var_compute(${leftAsString}, ${map[operatorKind]}, ${rightAsString})`;
-                this.inlineReplacement = new CTempVarReplacement(scope, node, call)
+                this.inlineReplacement = new CTempVarReplacement(scope, node, call, UniversalVarType)
                 scope.root.headerFlags.js_var_compute = true;
             }
         }
@@ -223,7 +221,7 @@ export class CSimpleBinaryExpression {
             this.replacedWithCall = true;
             [this.call, this.callCondition] = callReplaceMap[operatorKind];
         }
-        this.nodeText = node.getText();
+        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
 
         if (this.gcVarName) {
             scope.root.headerFlags.gc_iterator = true;

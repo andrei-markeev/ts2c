@@ -13,9 +13,9 @@ export class CElementAccess {
         let elementAccess: CElementAccess | string = null;
         let argumentExpression: string = null
 
-        if (node.kind == ts.SyntaxKind.Identifier) {
+        if (ts.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
-            elementAccess = node.getText();
+            elementAccess = node.text;
             let isLogicalContext = (node.parent.kind == ts.SyntaxKind.IfStatement
                 || node.parent.kind == ts.SyntaxKind.WhileStatement
                 || node.parent.kind == ts.SyntaxKind.DoStatement) && node.parent["expression"] == node;
@@ -39,16 +39,16 @@ export class CElementAccess {
         } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
             type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (propAccess.expression.kind == ts.SyntaxKind.Identifier)
-                elementAccess = propAccess.expression.getText();
+            if (ts.isIdentifier(propAccess.expression))
+                elementAccess = propAccess.expression.text;
             else
                 elementAccess = new CElementAccess(scope, propAccess.expression);
-            argumentExpression = propAccess.name.getText();
+            argumentExpression = propAccess.name.text;
         } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                elementAccess = elemAccess.expression.getText();
+            if (ts.isIdentifier(elemAccess.expression))
+                elementAccess = elemAccess.expression.text;
             else
                 elementAccess = new CElementAccess(scope, elemAccess.expression);
             if (type instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {

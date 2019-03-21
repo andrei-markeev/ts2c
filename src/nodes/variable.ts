@@ -1,9 +1,10 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper, UniversalVarType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper, UniversalVarType, StringVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
+import { CExpression } from './expressions';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
@@ -119,14 +120,14 @@ export class CTempVarReplacement {
     public varName: string;
     public reused: boolean;
     public gcVarName: string;
-    constructor(scope: IScope, node: ts.Node, public inlineCall: any)
+    constructor(scope: IScope, node: ts.Node, public inlineCall: any, public type: CType)
     {
         this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
         this.reused = scope.root.memoryManager.variableWasReused(node);
         this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
 
         if (!this.reused)
-            scope.variables.push(new CVariable(scope, this.varName, scope.root.typeHelper.getCType(node)));
+            scope.variables.push(new CVariable(scope, this.varName, type));
 
         if (this.gcVarName) {
             scope.root.headerFlags.array = true;
@@ -236,6 +237,28 @@ export class CVariableDestructors {
     }
 }
 
+@CodeTemplate(`{universalWrapper}`)
+export class CAsUniversalVar {
+    public universalWrapper: any;
+    constructor (scope: IScope, node: ts.Node, expr: CExpression) {
+        const type = scope.root.typeHelper.getCType(node);
+        const expression = CodeTemplateFactory.templateToString(<any>expr);
+
+        if (type == UniversalVarType)
+            this.universalWrapper = expression;
+        else if (type == StringVarType) {
+            this.universalWrapper = new CTempVarReplacement(scope, node, `js_var_from_str(${expression})`, UniversalVarType);
+            scope.root.headerFlags.js_var_from_str = true;
+        }
+        else if (type == NumberVarType) {
+            this.universalWrapper = new CTempVarReplacement(scope, node, `js_var_from_int16_t(${expression})`, UniversalVarType);
+            scope.root.headerFlags.js_var_from_int16_t = true;
+        }
+        else
+            this.universalWrapper = `/* expression '${node.getText()}' of type ${JSON.stringify(type)} is not yet supported here */`;
+
+    }
+}
 
 interface CVariableOptions {
     removeStorageSpecifier?: boolean;

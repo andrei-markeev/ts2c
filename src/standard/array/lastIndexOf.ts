@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {StandardCallResolver, IResolver} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
+import {ArrayType, NumberVarType, TypeHelper, BooleanVarType} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
-import {CExpression, CSimpleBinaryExpression} from '../../nodes/expressions';
-import {CElementAccess, CSimpleElementAccess} from '../../nodes/elementaccess';
+import {CBinaryExpression} from '../../nodes/expressions';
+import {CElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
 class ArrayLastIndexOfResolver implements IResolver {
@@ -60,7 +60,7 @@ class CArrayLastIndexOf {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public iteratorVarName: string;
-    public comparison: CSimpleBinaryExpression;
+    public comparison: CBinaryExpression;
     public staticArraySize: string = '';
     public varAccess: CElementAccess = null;
     constructor(scope: IScope, call: ts.CallExpression) {
@@ -76,8 +76,18 @@ class CArrayLastIndexOf {
             this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-            let arrayElementAccess = new CSimpleElementAccess(scope, objType, this.varAccess, this.iteratorVarName); 
-            this.comparison = new CSimpleBinaryExpression(scope, arrayElementAccess, objType.elementType, args[0], objType.elementType, ts.SyntaxKind.EqualsEqualsToken, call);
+
+            // Synthesize binary node that represents comparison expression
+            const iteratorIdent = ts.createIdentifier(this.iteratorVarName);
+            const arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
+            const comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
+            iteratorIdent.parent = arrayElement;
+            arrayElement.parent = comparison;
+            scope.root.typeHelper.registerSyntheticNode(iteratorIdent, NumberVarType);
+            scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
+            scope.root.typeHelper.registerSyntheticNode(comparison, BooleanVarType);
+            this.comparison = new CBinaryExpression(scope, comparison);
+
             scope.root.headerFlags.array = true;
         }
     }

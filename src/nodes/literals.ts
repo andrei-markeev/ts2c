@@ -130,7 +130,7 @@ export class CString {
 
         if (typeof(value) !== "string" && scope.root.typeHelper.getCType(value) == UniversalVarType) {
             const call = `js_var_from_str(${this.value})`;
-            this.universalWrapper = new CTempVarReplacement(scope, value, call)
+            this.universalWrapper = new CTempVarReplacement(scope, value, call, UniversalVarType)
             scope.root.headerFlags.js_var_from_str = true;
         }
     }
@@ -149,7 +149,7 @@ export class CNumber {
         this.value = value.getText();
         if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
             const call = `js_var_from_int16_t(${this.value})`;
-            this.universalWrapper = new CTempVarReplacement(scope, value, call)
+            this.universalWrapper = new CTempVarReplacement(scope, value, call, UniversalVarType)
             scope.root.headerFlags.js_var_from_int16_t = true;
         }
     }
