@@ -29,6 +29,20 @@ var MemoryManager = /** @class */ (function () {
         for (var _i = 0, nodes_1 = nodes; _i < nodes_1.length; _i++) {
             var node = nodes_1[_i];
             switch (node.kind) {
+                case ts.SyntaxKind.StringLiteral:
+                    {
+                        var type = this.typeHelper.getCType(node);
+                        if (type && type == types_1.UniversalVarType)
+                            this.scheduleNodeDisposal(node);
+                    }
+                    break;
+                case ts.SyntaxKind.NumericLiteral:
+                    {
+                        var type = this.typeHelper.getCType(node);
+                        if (type && type == types_1.UniversalVarType)
+                            this.scheduleNodeDisposal(node);
+                    }
+                    break;
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         var type = this.typeHelper.getCType(node);
@@ -46,12 +60,22 @@ var MemoryManager = /** @class */ (function () {
                 case ts.SyntaxKind.BinaryExpression:
                     {
                         var binExpr = node;
-                        if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken
-                            || binExpr.operatorToken.kind == ts.SyntaxKind.FirstCompoundAssignment) {
-                            var leftType = this.typeHelper.getCType(binExpr.left);
-                            var rightType = this.typeHelper.getCType(binExpr.right);
-                            if (leftType == types_1.StringVarType || rightType == types_1.StringVarType)
-                                this.scheduleNodeDisposal(binExpr, false);
+                        var leftType = this.typeHelper.getCType(binExpr.left);
+                        var rightType = this.typeHelper.getCType(binExpr.right);
+                        var plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
+                        if (plusOperator && (leftType == types_1.StringVarType || rightType == types_1.StringVarType))
+                            this.scheduleNodeDisposal(binExpr, false);
+                        else if (leftType == types_1.UniversalVarType || rightType == types_1.UniversalVarType)
+                            this.scheduleNodeDisposal(binExpr);
+                    }
+                    break;
+                case ts.SyntaxKind.PrefixUnaryExpression:
+                    {
+                        var expr = node;
+                        if (expr.operator == ts.SyntaxKind.PlusToken) {
+                            var type = this.typeHelper.getCType(expr.operand);
+                            if (type != types_1.NumberVarType)
+                                this.scheduleNodeDisposal(expr);
                         }
                     }
                     break;
@@ -69,7 +93,7 @@ var MemoryManager = /** @class */ (function () {
         var scopeId = parentDecl && parentDecl.pos + 1 + "" || "main";
         var realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId;
         var gcVars = [];
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && !v.array && !v.dict && !v.arrayWithContents; }).length) {
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && !v.array && !v.dict && !v.arrayWithContents && !v.js_var; }).length) {
             gcVars.push("gc_" + realScopeId);
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && v.array; }).length) {
@@ -80,6 +104,9 @@ var MemoryManager = /** @class */ (function () {
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && v.dict; }).length) {
             gcVars.push("gc_" + realScopeId + "_dicts");
+        }
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(function (v) { return !v.simple && v.js_var; }).length) {
+            gcVars.push("gc_" + realScopeId + "_js_vars");
         }
         return gcVars;
     };
@@ -94,6 +121,8 @@ var MemoryManager = /** @class */ (function () {
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays_c";
             else if (this.scopesOfVariables[key].dict)
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_dicts";
+            else if (this.scopesOfVariables[key].js_var)
+                return "gc_" + this.scopesOfVariables[key].scopeId + "_js_vars";
             else
                 return "gc_" + this.scopesOfVariables[key].scopeId;
         }
@@ -108,11 +137,13 @@ var MemoryManager = /** @class */ (function () {
             // string match allocates array of strings, and each of those strings should be also disposed
             for (var _i = 0, _a = this.scopes[scopeId].filter(function (v) { return v.simple && v.used; }); _i < _a.length; _i++) {
                 var simpleVarScopeInfo = _a[_i];
+                var type = this.typeHelper.getCType(simpleVarScopeInfo.node);
                 destructors.push({
                     varName: simpleVarScopeInfo.varName,
                     array: simpleVarScopeInfo.array,
                     dict: simpleVarScopeInfo.dict,
-                    string: this.typeHelper.getCType(simpleVarScopeInfo.node) == types_1.StringVarType,
+                    string: type == types_1.StringVarType,
+                    js_var: type == types_1.UniversalVarType,
                     arrayWithContents: simpleVarScopeInfo.arrayWithContents
                 });
             }
@@ -269,12 +300,18 @@ var MemoryManager = /** @class */ (function () {
         }
         var type = this.typeHelper.getCType(heapNode);
         var varName;
-        if (ts.isArrayLiteralExpression(heapNode))
+        if (ts.isStringLiteral(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+        else if (ts.isNumericLiteral(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
+        else if (ts.isArrayLiteralExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_array");
         else if (ts.isObjectLiteralExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_obj");
         else if (ts.isBinaryExpression(heapNode))
-            varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_result");
+        else if (ts.isPrefixUnaryExpression(heapNode))
+            varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
         else if (ts.isCallExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, standard_1.StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else
@@ -293,6 +330,7 @@ var MemoryManager = /** @class */ (function () {
             arrayWithContents: arrayWithContents,
             array: !arrayWithContents && type && type instanceof types_1.ArrayType && type.isDynamicArray,
             dict: type && type instanceof types_1.DictType,
+            js_var: type === types_1.UniversalVarType,
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp
@@ -484,7 +522,7 @@ var CCallExpression = /** @class */ (function () {
         });
         if (call.expression.kind == ts.SyntaxKind.Identifier && this.funcName == "parseInt") {
             scope.root.headerFlags.int16_t = true;
-            scope.root.headerFlags.parseInt = true;
+            scope.root.headerFlags.parse_int16_t = true;
         }
     }
     CCallExpression = __decorate([
@@ -651,10 +689,12 @@ var CSimpleBinaryExpression = /** @class */ (function () {
         this.replacedWithCall = false;
         this.replacedWithVar = false;
         this.replacedWithVarAssignment = false;
+        this.replacementVarName = null;
         this.gcVarName = null;
         this.strPlusStr = false;
         this.strPlusNumber = false;
         this.numberPlusStr = false;
+        this.inlineReplacement = null;
         var operatorMap = {};
         var callReplaceMap = {};
         if (leftType == types_1.RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
@@ -757,29 +797,45 @@ var CSimpleBinaryExpression = /** @class */ (function () {
                 scope.root.headerFlags.str_int16_t_cat = true;
             }
         }
+        else if (leftType == types_1.UniversalVarType && rightType == types_1.UniversalVarType) {
+            var map = (_a = {},
+                _a[ts.SyntaxKind.AsteriskToken] = "JS_VAR_ASTERISK",
+                _a[ts.SyntaxKind.SlashToken] = "JS_VAR_SLASH",
+                _a[ts.SyntaxKind.PercentToken] = "JS_VAR_PERCENT",
+                _a[ts.SyntaxKind.PlusToken] = "JS_VAR_PLUS",
+                _a[ts.SyntaxKind.MinusToken] = "JS_VAR_MINUS",
+                _a);
+            if (map[operatorKind]) {
+                var leftAsString = template_1.CodeTemplateFactory.templateToString(left);
+                var rightAsString = template_1.CodeTemplateFactory.templateToString(right);
+                var call = "js_var_compute(" + leftAsString + ", " + map[operatorKind] + ", " + rightAsString + ")";
+                this.inlineReplacement = new variable_1.CTempVarReplacement(scope, node, call);
+                scope.root.headerFlags.js_var_compute = true;
+            }
+        }
         this.operator = operatorMap[operatorKind];
         if (callReplaceMap[operatorKind]) {
             this.replacedWithCall = true;
-            _a = callReplaceMap[operatorKind], this.call = _a[0], this.callCondition = _a[1];
+            _b = callReplaceMap[operatorKind], this.call = _b[0], this.callCondition = _b[1];
         }
         this.nodeText = node.getText();
         if (this.gcVarName) {
             scope.root.headerFlags.gc_iterator = true;
             scope.root.headerFlags.array = true;
         }
-        var _a;
+        var _a, _b;
     }
     CSimpleBinaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVarAssignment}\n    ({left} = {replacementVarName})\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
+        template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar && strPlusStr}\n        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);\n        assert({replacementVarName} != NULL);\n        strcpy({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {#elseif replacedWithVar && strPlusNumber}\n        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        strcat({replacementVarName}, {left});\n        str_int16_t_cat({replacementVarName}, {right});\n    {#elseif replacedWithVar && numberPlusStr}\n        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        str_int16_t_cat({replacementVarName}, {left});\n        strcat({replacementVarName}, {right});\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if operator}\n    {left} {operator} {right}\n{#elseif replacedWithCall}\n    {call}({left}, {right}){callCondition}\n{#elseif replacedWithVarAssignment}\n    ({left} = {replacementVarName})\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#elseif inlineReplacement}\n    {inlineReplacement}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}")
     ], CSimpleBinaryExpression);
     return CSimpleBinaryExpression;
 }());
 exports.CSimpleBinaryExpression = CSimpleBinaryExpression;
 var CUnaryExpression = /** @class */ (function () {
     function CUnaryExpression(scope, node) {
+        this.replacedWithVar = false;
         this.replacedWithCall = false;
         var operatorMap = {};
-        var callReplaceMap = {};
         var type = scope.root.typeHelper.getCType(node.operand);
         operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
         if (type == types_1.NumberVarType) {
@@ -789,23 +845,24 @@ var CUnaryExpression = /** @class */ (function () {
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.TildeToken] = '~';
         }
-        if (type == types_1.StringVarType) {
-            callReplaceMap[ts.SyntaxKind.PlusToken] = ["atoi", ""];
-            if (callReplaceMap[node.operator])
-                scope.root.headerFlags.atoi = true;
+        if (type == types_1.StringVarType && node.operator === ts.SyntaxKind.PlusToken) {
+            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (!scope.root.memoryManager.variableWasReused(node)) {
+                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.UniversalVarType));
+                this.replacedWithVar = true;
+            }
+            else
+                this.replacedWithCall = true;
+            this.call = "str_to_int16_t";
+            scope.root.headerFlags.str_to_int16_t = true;
         }
         this.operator = operatorMap[node.operator];
-        if (callReplaceMap[node.operator]) {
-            this.replacedWithCall = true;
-            _a = callReplaceMap[node.operator], this.call = _a[0], this.callCondition = _a[1];
-        }
         this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
-        var _a;
     }
     CUnaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif replacedWithCall}\n    {call}({operand}){callCondition}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
+        template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif replacedWithCall}\n    {call}({operand})\n{#elseif replacedWithVar}\n    ({tempVarName} = {call}({operand}))\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
     ], CUnaryExpression);
     return CUnaryExpression;
 }());
@@ -1027,25 +1084,37 @@ var CRegexLiteralExpression = /** @class */ (function () {
 }());
 var CString = /** @class */ (function () {
     function CString(scope, value) {
+        this.universalWrapper = null;
         var s = typeof value === 'string' ? '"' + value + '"' : value.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, function (match, g1) { return String.fromCharCode(parseInt(g1, 16)); });
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
             this.value = s;
+        if (typeof (value) !== "string" && scope.root.typeHelper.getCType(value) == types_1.UniversalVarType) {
+            var call = "js_var_from_str(" + this.value + ")";
+            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call);
+            scope.root.headerFlags.js_var_from_str = true;
+        }
     }
     CString = __decorate([
-        template_1.CodeTemplate("{value}", ts.SyntaxKind.StringLiteral)
+        template_1.CodeTemplate("\n{#if universalWrapper}\n    {universalWrapper}\n{#else}\n    {value}\n{/if}", ts.SyntaxKind.StringLiteral)
     ], CString);
     return CString;
 }());
 exports.CString = CString;
 var CNumber = /** @class */ (function () {
     function CNumber(scope, value) {
+        this.universalWrapper = null;
         this.value = value.getText();
+        if (scope.root.typeHelper.getCType(value) == types_1.UniversalVarType) {
+            var call = "js_var_from_int16_t(" + this.value + ")";
+            this.universalWrapper = new variable_1.CTempVarReplacement(scope, value, call);
+            scope.root.headerFlags.js_var_from_int16_t = true;
+        }
     }
     CNumber = __decorate([
-        template_1.CodeTemplate("{value}", ts.SyntaxKind.NumericLiteral)
+        template_1.CodeTemplate("\n{#if universalWrapper}\n    {universalWrapper}\n{#else}\n    {value}\n{/if}", ts.SyntaxKind.NumericLiteral)
     ], CNumber);
     return CNumber;
 }());
@@ -1562,6 +1631,25 @@ var CVariableAllocation = /** @class */ (function () {
     return CVariableAllocation;
 }());
 exports.CVariableAllocation = CVariableAllocation;
+var CTempVarReplacement = /** @class */ (function () {
+    function CTempVarReplacement(scope, node, inlineCall) {
+        this.inlineCall = inlineCall;
+        this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+        this.reused = scope.root.memoryManager.variableWasReused(node);
+        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+        if (!this.reused)
+            scope.variables.push(new CVariable(scope, this.varName, scope.root.typeHelper.getCType(node)));
+        if (this.gcVarName) {
+            scope.root.headerFlags.array = true;
+            scope.root.headerFlags.gc_iterator = true;
+        }
+    }
+    CTempVarReplacement = __decorate([
+        template_1.CodeTemplate("\n{#statements}\n    {#if gcVarName}\n        {varName} = {inlineCall};\n        ARRAY_PUSH({gcVarName}, (void *){varName});\n    {/if}\n{/statements}\n{#if gcVarName}\n    {varName}\n{#elseif reused}\n    {inlineCall}\n{#else}\n    ({varName} = {inlineCall})\n{/if}")
+    ], CTempVarReplacement);
+    return CTempVarReplacement;
+}());
+exports.CTempVarReplacement = CTempVarReplacement;
 var CVariableDestructors = /** @class */ (function () {
     function CVariableDestructors(scope, node) {
         var _this = this;
@@ -1569,6 +1657,7 @@ var CVariableDestructors = /** @class */ (function () {
         this.gcArraysVarName = null;
         this.gcArraysCVarName = null;
         this.gcDictsVarName = null;
+        this.gcUniversalVarName = null;
         this.arrayDestructors = [];
         var gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (var _i = 0, gcVarNames_1 = gcVarNames; _i < gcVarNames_1.length; _i++) {
@@ -1579,6 +1668,8 @@ var CVariableDestructors = /** @class */ (function () {
                 this.gcDictsVarName = gc;
             else if (gc.indexOf("_arrays") > -1)
                 this.gcArraysVarName = gc;
+            else if (gc.indexOf("_js_vars") > -1)
+                this.gcUniversalVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -1602,6 +1693,10 @@ var CVariableDestructors = /** @class */ (function () {
                 _this.destructors.push(r.varName + "->values");
                 _this.destructors.push(r.varName);
             }
+            else if (r.js_var) {
+                _this.destructors.push(r.varName + "->data");
+                _this.destructors.push(r.varName);
+            }
             else if (r.string) {
                 _this.destructors.push("(char *)" + r.varName);
             }
@@ -1610,7 +1705,7 @@ var CVariableDestructors = /** @class */ (function () {
         });
     }
     CVariableDestructors = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}\n    {destructors => free({this});\n}\n    {#if gcArraysCVarName}\n        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {\n            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)\n                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n\n            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);\n            free({gcArraysCVarName}->data[gc_i]);\n        }\n        free({gcArraysCVarName}->data);\n        free({gcArraysCVarName});\n    {/if}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
+        template_1.CodeTemplate("\n{#statements}\n    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}\n    {destructors => free({this});\n}\n    {#if gcArraysCVarName}\n        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {\n            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)\n                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n\n            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);\n            free({gcArraysCVarName}->data[gc_i]);\n        }\n        free({gcArraysCVarName}->data);\n        free({gcArraysCVarName});\n    {/if}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcUniversalVarName}\n        for (gc_i = 0; gc_i < {gcUniversalVarName}->size; gc_i++) {\n            free({gcUniversalVarName}->data[gc_i]->data);\n            free({gcUniversalVarName}->data[gc_i]);\n        }\n        free({gcUniversalVarName}->data);\n        free({gcUniversalVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
     ], CVariableDestructors);
     return CVariableDestructors;
 }());
@@ -1627,6 +1722,8 @@ var CVariable = /** @class */ (function () {
             scope.root.headerFlags.int16_t = true;
         else if (type == types_1.BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+        else if (type == types_1.UniversalVarType)
+            scope.root.headerFlags.js_var = true;
         // root scope, make variables file-scoped by default
         if (scope.parent == null)
             this.static = true;
@@ -1721,6 +1818,10 @@ var HeaderFlags = /** @class */ (function () {
         this.int16_t = false;
         this.uint16_t = false;
         this.js_var = false;
+        this.js_var_from_str = false;
+        this.js_var_from_int16_t = false;
+        this.js_var_to_str = false;
+        this.js_var_compute = false;
         this.array = false;
         this.array_pop = false;
         this.array_insert = false;
@@ -1738,8 +1839,8 @@ var HeaderFlags = /** @class */ (function () {
         this.str_char_code_at = false;
         this.str_substring = false;
         this.str_slice = false;
-        this.atoi = false;
-        this.parseInt = false;
+        this.str_to_int16_t = false;
+        this.parse_int16_t = false;
         this.regex = false;
         this.regex_match = false;
     }
@@ -1778,6 +1879,8 @@ var CProgram = /** @class */ (function () {
                 gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1)
                 gcType = "ARRAY(ARRAY(ARRAY(void *)))";
+            if (gcVarName.indexOf("_js_vars") > -1)
+                gcType = "ARRAY(ARRAY(void *))";
             this.variables.push(new variable_1.CVariable(this, gcVarName, gcType));
             this.headerFlags.array = true;
         }
@@ -1800,7 +1903,7 @@ var CProgram = /** @class */ (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.str_substring\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.atoi || headerFlags.array || headerFlags.str_substring \n    || headerFlags.str_slice}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf || headerFlags.parseInt}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #include <limits.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||\n     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||\n     headerFlags.regex }\n    typedef short int16_t;\n{/if}\n{#if headerFlags.uint16_t}\n    typedef unsigned short uint16_t;\n{/if}\n{#if headerFlags.regex}\n    struct regex_indices_struct_t {\n        int16_t index;\n        int16_t end;\n    };\n    struct regex_match_struct_t {\n        int16_t index;\n        int16_t end;\n        struct regex_indices_struct_t *matches;\n        int16_t matches_count;\n    };\n    typedef struct regex_match_struct_t regex_func_t(const char*, int16_t);\n    struct regex_struct_t {\n        const char * str;\n        regex_func_t * func;\n    };\n{/if}\n\n{#if headerFlags.js_var}\n    enum js_var_type {JS_VAR_BOOL, JS_VAR_INT, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_STRUCT, JS_VAR_DICT};\n\tstruct js_var {\n\t    enum js_var_type type;\n\t    uint8_t bool;\n\t    int16_t number;\n\t    const char *string;\n\t    void *obj;\n\t};\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len || headerFlags.str_substring || headerFlags.str_slice}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_char_code_at}\n    int16_t str_char_code_at(const char * str, int16_t pos) {\n        int16_t i, res = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            if (pos == 0) {\n                res += (unsigned char)*str++;\n                if (i > 1) {\n                    res <<= 6; res -= 0x3080;\n                    res += (unsigned char)*str++;\n                }\n                return res;\n            }\n            str += i;\n            pos -= i == 4 ? 2 : 1;\n        }\n        return -1;\n    }\n{/if}\n{#if headerFlags.str_substring || headerFlags.str_slice}\n    const char * str_substring(const char * str, int16_t start, int16_t end) {\n        int16_t i, tmp, pos, len = str_len(str), byte_start = -1;\n        char *p, *buf;\n        start = start < 0 ? 0 : (start > len ? len : start);\n        end = end < 0 ? 0 : (end > len ? len : end);\n        if (end < start) {\n            tmp = start;\n            start = end;\n            end = tmp;\n        }\n        i = 0;\n        pos = 0;\n        p = (char *)str;\n        while (*p) {\n            if (start == pos)\n                byte_start = p - str;\n            if (end == pos)\n                break;\n            i = 1;\n            if ((*p & 0xE0) == 0xC0) i=2;\n            else if ((*p & 0xF0) == 0xE0) i=3;\n            else if ((*p & 0xF8) == 0xF0) i=4;\n            p += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        len = byte_start == -1 ? 0 : p - str - byte_start;\n        buf = malloc(len + 1);\n        assert(buf != NULL);\n        memcpy(buf, str + byte_start, len);\n        buf[len] = '\\0';\n        return buf;\n    }\n{/if}\n{#if headerFlags.str_slice}\n    const char * str_slice(const char * str, int16_t start, int16_t end) {\n        int16_t len = str_len(str);\n        start = start < 0 ? len + start : start;\n        end = end < 0 ? len + end : end;\n        if (end - start < 0)\n            end = start;\n        return str_substring(str, start, end);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int16_t*)a - *(int16_t*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n{#if headerFlags.parseInt}\n    int16_t parse_int16_t(const char * str) {\n        int r;\n        sscanf(str, \"%d\", &r);\n        return (int16_t) r;\n    }\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{#if headerFlags.regex}\n    void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {\n        int16_t i;\n        for (i = 0; i < groupN; i++) {\n            match_info->matches[i].index = -1;\n            match_info->matches[i].end = -1;\n        }\n    }\n{/if}\n\n{#if headerFlags.regex_match}\n    struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {\n        struct regex_match_struct_t match_info;\n        struct array_string_t *match_array = NULL;\n        int16_t i;\n\n        match_info = regex.func(s, TRUE);\n        if (match_info.index != -1) {\n            ARRAY_CREATE(match_array, match_info.matches_count + 1, match_info.matches_count + 1);\n            match_array->data[0] = str_substring(s, match_info.index, match_info.end);\n            for (i = 0;i < match_info.matches_count; i++) {\n                if (match_info.matches[i].index != -1 && match_info.matches[i].end != -1)\n                    match_array->data[i + 1] = str_substring(s, match_info.matches[i].index, match_info.matches[i].end);\n                else\n                    match_array->data[i + 1] = str_substring(s, 0, 0);\n            }\n        }\n        if (match_info.matches_count)\n            free(match_info.matches);\n\n        return match_array;\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n{#if headerFlags.gc_iterator2}\n    int16_t gc_j;\n{/if}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}\n")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.str_substring\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict\n    || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf || headerFlags.parse_int16_t}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #include <limits.h>\n{/if}\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}\n    #include <ctype.h>\n{/if}\n\n{#if headerFlags.bool}\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||\n     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||\n     headerFlags.regex || headerFlags.str_to_int16_t }\n    typedef short int16_t;\n{/if}\n{#if headerFlags.uint16_t}\n    typedef unsigned short uint16_t;\n{/if}\n{#if headerFlags.regex}\n    struct regex_indices_struct_t {\n        int16_t index;\n        int16_t end;\n    };\n    struct regex_match_struct_t {\n        int16_t index;\n        int16_t end;\n        struct regex_indices_struct_t *matches;\n        int16_t matches_count;\n    };\n    typedef struct regex_match_struct_t regex_func_t(const char*, int16_t);\n    struct regex_struct_t {\n        const char * str;\n        regex_func_t * func;\n    };\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len || headerFlags.str_substring || headerFlags.str_slice}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_char_code_at}\n    int16_t str_char_code_at(const char * str, int16_t pos) {\n        int16_t i, res = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            if (pos == 0) {\n                res += (unsigned char)*str++;\n                if (i > 1) {\n                    res <<= 6; res -= 0x3080;\n                    res += (unsigned char)*str++;\n                }\n                return res;\n            }\n            str += i;\n            pos -= i == 4 ? 2 : 1;\n        }\n        return -1;\n    }\n{/if}\n{#if headerFlags.str_substring || headerFlags.str_slice}\n    const char * str_substring(const char * str, int16_t start, int16_t end) {\n        int16_t i, tmp, pos, len = str_len(str), byte_start = -1;\n        char *p, *buf;\n        start = start < 0 ? 0 : (start > len ? len : start);\n        end = end < 0 ? 0 : (end > len ? len : end);\n        if (end < start) {\n            tmp = start;\n            start = end;\n            end = tmp;\n        }\n        i = 0;\n        pos = 0;\n        p = (char *)str;\n        while (*p) {\n            if (start == pos)\n                byte_start = p - str;\n            if (end == pos)\n                break;\n            i = 1;\n            if ((*p & 0xE0) == 0xC0) i=2;\n            else if ((*p & 0xF0) == 0xE0) i=3;\n            else if ((*p & 0xF8) == 0xF0) i=4;\n            p += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        len = byte_start == -1 ? 0 : p - str - byte_start;\n        buf = malloc(len + 1);\n        assert(buf != NULL);\n        memcpy(buf, str + byte_start, len);\n        buf[len] = '\\0';\n        return buf;\n    }\n{/if}\n{#if headerFlags.str_slice}\n    const char * str_slice(const char * str, int16_t start, int16_t end) {\n        int16_t len = str_len(str);\n        start = start < 0 ? len + start : start;\n        end = end < 0 ? len + end : end;\n        if (end - start < 0)\n            end = start;\n        return str_substring(str, start, end);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int16_t*)a - *(int16_t*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n{#if headerFlags.parse_int16_t}\n    int16_t parse_int16_t(const char * str) {\n        int r;\n        sscanf(str, \"%d\", &r);\n        return (int16_t) r;\n    }\n{/if}\n\n{#if headerFlags.js_var || headerFlags.str_to_int16_t}\n    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING};\n    struct js_var {\n        enum js_var_type type;\n        int16_t number;\n        void *data;\n    };\n{/if}\n\n{#if headerFlags.js_var_from_int16_t}\n    struct js_var *js_var_from_int16_t(int16_t n) {\n        struct js_var *v = malloc(sizeof(*v));\n        v->type = JS_VAR_INT16;\n        v->number = n;\n        v->data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_str}\n    struct js_var *js_var_from_str(const char *s) {\n        struct js_var *v = malloc(sizeof(*v));\n        int s_size = strlen(s) + 1;\n        char *p = malloc(s_size);\n        assert(p != NULL);\n        memcpy(p, s, s_size);\n        v->type = JS_VAR_STRING;\n        v->data = p;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}\n    struct js_var *str_to_int16_t(const char * str) {\n        struct js_var *v = malloc(sizeof(*v));\n        const char *p = str;\n        int r;\n\n        assert(v != NULL);\n\n        while (*p && isspace(*p))\n            p++;\n\n        if (*p == 0)\n            str = \"0\";\n\n        if (*p == '-' && *(p+1))\n            p++;\n\n        while (*p) {\n            if (!isdigit(*p)) {\n                v->type = JS_VAR_NAN;\n                return v;\n            }\n            p++;\n        }\n\n        sscanf(str, \"%d\", &r);\n        v->type = JS_VAR_INT16;\n        v->number = (int16_t)r;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    const char * js_var_to_str(struct js_var *v, uint8_t *need_dispose)\n    {\n        char *buf;\n        *need_dispose = 0;\n        if (v->type == JS_VAR_INT16) {\n            buf = malloc(STR_INT16_T_BUFLEN);\n            assert(buf != NULL);\n            *need_dispose = 1;\n            sprintf(buf, \"%d\", v->number);\n            return buf;\n        } else if (v->type == JS_VAR_BOOL)\n            return v->number ? \"true\" : \"false\";\n        else if (v->type == JS_VAR_STRING)\n            return (const char *)v->data;\n        else if (v->type == JS_VAR_NAN)\n            return \"NaN\";\n        else if (v->type == JS_VAR_NULL)\n            return \"null\";\n        else if (v->type == JS_VAR_UNDEFINED)\n            return \"undefined\";\n\n        return NULL;\n    }\n{/if}\n\n{#if headerFlags.js_var_compute}\n\n    struct js_var js_var_to_number(struct js_var *v)\n    {\n        struct js_var result;\n        struct js_var *tmp;\n        result.type = JS_VAR_INT16;\n        result.number = 0;\n\n        if (v->type == JS_VAR_INT16)\n            result.number = v->number;\n        else if (v->type == JS_VAR_BOOL)\n            result.number = v->number;\n        else if (v->type == JS_VAR_STRING) {\n            tmp = str_to_int16_t((const char *)v->data);\n            result.type = tmp->type;\n            if (result.type == JS_VAR_INT16)\n                result.number = tmp->number;\n            free(tmp);\n        }\n        else if (v->type == JS_VAR_NAN)\n            result.type = JS_VAR_NAN;\n        else if (v->type == JS_VAR_UNDEFINED)\n            result.type = JS_VAR_NAN;\n\n        return result;\n    }\n\n    enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};\n    struct js_var *js_var_compute(struct js_var *left, enum js_var_op op, struct js_var *right)\n    {\n        struct js_var *result = malloc(sizeof(*result));\n        struct js_var left_to_number, right_to_number;\n        const char *left_as_string, *right_as_string;\n        uint8_t need_dispose_left, need_dispose_right;\n        assert(result != NULL);\n        result->data = NULL;\n\n        if (op == JS_VAR_PLUS && (left->type == JS_VAR_STRING || right->type == JS_VAR_STRING))\n        {\n            left_as_string = js_var_to_str(left, &need_dispose_left);\n            right_as_string = js_var_to_str(right, &need_dispose_right);\n            \n            result->type = JS_VAR_STRING;\n            result->data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);\n            assert(result->data != NULL);\n\n            strcpy(result->data, left_as_string);\n            strcat(result->data, right_as_string);\n\n            if (need_dispose_left)\n                free((void *)left_as_string);\n            if (need_dispose_right)\n                free((void *)right_as_string);\n            return result;\n        }\n\n        left_to_number = js_var_to_number(left);\n        right_to_number = js_var_to_number(right);\n\n        if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {\n            result->type = JS_VAR_NAN;\n            return result;\n        }\n        \n        result->type = JS_VAR_INT16;\n        switch (op) {\n            case JS_VAR_PLUS:\n                result->number = left_to_number.number + right_to_number.number;\n                break;\n            case JS_VAR_MINUS:\n                result->number = left_to_number.number - right_to_number.number;\n                break;\n            case JS_VAR_ASTERISK:\n                result->number = left_to_number.number * right_to_number.number;\n                break;\n            case JS_VAR_SLASH:\n                result->number = left_to_number.number / right_to_number.number;\n                break;\n            case JS_VAR_PERCENT:\n                result->number = left_to_number.number % right_to_number.number;\n                break;\n        }\n        return result;\n    }\n\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{#if headerFlags.regex}\n    void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {\n        int16_t i;\n        for (i = 0; i < groupN; i++) {\n            match_info->matches[i].index = -1;\n            match_info->matches[i].end = -1;\n        }\n    }\n{/if}\n\n{#if headerFlags.regex_match}\n    struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {\n        struct regex_match_struct_t match_info;\n        struct array_string_t *match_array = NULL;\n        int16_t i;\n\n        match_info = regex.func(s, TRUE);\n        if (match_info.index != -1) {\n            ARRAY_CREATE(match_array, match_info.matches_count + 1, match_info.matches_count + 1);\n            match_array->data[0] = str_substring(s, match_info.index, match_info.end);\n            for (i = 0;i < match_info.matches_count; i++) {\n                if (match_info.matches[i].index != -1 && match_info.matches[i].end != -1)\n                    match_array->data[i + 1] = str_substring(s, match_info.matches[i].index, match_info.matches[i].end);\n                else\n                    match_array->data[i + 1] = str_substring(s, 0, 0);\n            }\n        }\n        if (match_info.matches_count)\n            free(match_info.matches);\n\n        return match_array;\n    }\n{/if}\n\n{#if headerFlags.gc_iterator}\n    int16_t gc_i;\n{/if}\n{#if headerFlags.gc_iterator2}\n    int16_t gc_j;\n{/if}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}\n")
     ], CProgram);
     return CProgram;
 }());
@@ -3518,6 +3621,7 @@ function processBinaryExpressions(scope, printNode) {
 }
 var CPrintf = /** @class */ (function () {
     function CPrintf(scope, printNode, accessor, varType, options) {
+        var _this = this;
         this.accessor = accessor;
         this.isStringLiteral = false;
         this.isQuotedCString = false;
@@ -3529,6 +3633,7 @@ var CPrintf = /** @class */ (function () {
         this.isStruct = false;
         this.isArray = false;
         this.isStaticArray = false;
+        this.isUniversalVar = false;
         this.elementPrintfs = [];
         this.elementFormatString = '';
         this.propPrefix = '';
@@ -3539,6 +3644,16 @@ var CPrintf = /** @class */ (function () {
         this.isRegex = varType == types_1.RegexVarType;
         this.isInteger = varType == types_1.NumberVarType;
         this.isBoolean = varType == types_1.BooleanVarType;
+        this.isUniversalVar = varType == types_1.UniversalVarType;
+        if (this.isUniversalVar) {
+            this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false);
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_need_dispose", false);
+            if (!scope.variables.some(function (v) { return v.name == _this.tempVarName; }))
+                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, types_1.StringVarType));
+            if (!scope.variables.some(function (v) { return v.name == _this.needDisposeVarName; }))
+                scope.variables.push(new variable_1.CVariable(scope, this.needDisposeVarName, types_1.BooleanVarType));
+            scope.root.headerFlags.js_var_to_str = true;
+        }
         this.PREFIX = options.prefix || '';
         this.POSTFIX = options.postfix || '';
         if (options.propName)
@@ -3581,7 +3696,7 @@ var CPrintf = /** @class */ (function () {
     }
     CPrintf_1 = CPrintf;
     CPrintf = CPrintf_1 = __decorate([
-        template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{PREFIX}{accessor}{POSTFIX}\");\n{#elseif isQuotedCString}\n    printf(\"{PREFIX}\\\"%s\\\"{POSTFIX}\", {accessor});\n{#elseif isCString}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor});\n{#elseif isRegex}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor}.str);\n{#elseif isInteger}\n    printf(\"{PREFIX}%d{POSTFIX}\", {accessor});\n{#elseif isBoolean && !PREFIX && !POSTFIX}\n    printf({accessor} ? \"true\" : \"false\");\n{#elseif isBoolean && (PREFIX || POSTFIX)}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor} ? \"true\" : \"false\");\n{#elseif isDict}\n    printf(\"{PREFIX}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{POSTFIX}\");\n{#elseif isStruct}\n    printf(\"{PREFIX}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{POSTFIX}\");\n{#elseif isStaticArray && elementFormatString && +arraySize==1}\n    printf(\"{PREFIX}[ {elementFormatString} ]{POSTFIX}\", {accessor}[0]);\n{#elseif isStaticArray && elementFormatString && +arraySize==2}\n    printf(\"{PREFIX}[ {elementFormatString}, {elementFormatString} ]{POSTFIX}\", {accessor}[0], {accessor}[1]);\n{#elseif isStaticArray && elementFormatString && +arraySize==3}\n    printf(\"{PREFIX}[ {elementFormatString}, {elementFormatString}, {elementFormatString} ]{POSTFIX}\", {accessor}[0], {accessor}[1], {accessor}[2]);\n{#elseif isArray}\n    printf(\"{PREFIX}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{POSTFIX}\");\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
+        template_1.CodeTemplate("\n{#if isStringLiteral}\n    printf(\"{PREFIX}{accessor}{POSTFIX}\");\n{#elseif isQuotedCString}\n    printf(\"{PREFIX}\\\"%s\\\"{POSTFIX}\", {accessor});\n{#elseif isCString}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor});\n{#elseif isRegex}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor}.str);\n{#elseif isInteger}\n    printf(\"{PREFIX}%d{POSTFIX}\", {accessor});\n{#elseif isBoolean && !PREFIX && !POSTFIX}\n    printf({accessor} ? \"true\" : \"false\");\n{#elseif isBoolean && (PREFIX || POSTFIX)}\n    printf(\"{PREFIX}%s{POSTFIX}\", {accessor} ? \"true\" : \"false\");\n{#elseif isDict}\n    printf(\"{PREFIX}{ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    printf(\"\\\"%s\\\": \", {accessor}->index->data[{iteratorVarName}]);\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" }{POSTFIX}\");\n{#elseif isStruct}\n    printf(\"{PREFIX}{ \");\n    {INDENT}{elementPrintfs {    printf(\", \");\n    }=> {this}}\n    {INDENT}printf(\" }{POSTFIX}\");\n{#elseif isStaticArray && elementFormatString && +arraySize==1}\n    printf(\"{PREFIX}[ {elementFormatString} ]{POSTFIX}\", {accessor}[0]);\n{#elseif isStaticArray && elementFormatString && +arraySize==2}\n    printf(\"{PREFIX}[ {elementFormatString}, {elementFormatString} ]{POSTFIX}\", {accessor}[0], {accessor}[1]);\n{#elseif isStaticArray && elementFormatString && +arraySize==3}\n    printf(\"{PREFIX}[ {elementFormatString}, {elementFormatString}, {elementFormatString} ]{POSTFIX}\", {accessor}[0], {accessor}[1], {accessor}[2]);\n{#elseif isArray}\n    printf(\"{PREFIX}[ \");\n    {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {INDENT}    if ({iteratorVarName} != 0)\n    {INDENT}        printf(\", \");\n    {INDENT}    {elementPrintfs}\n    {INDENT}}\n    {INDENT}printf(\" ]{POSTFIX}\");\n{#elseif isUniversalVar}\n    printf(\"{PREFIX}%s{POSTFIX}\", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));\n    {INDENT}if ({needDisposeVarName})\n    {INDENT}    free((void *){tempVarName});\n{#else}\n    printf(/* Unsupported printf expression */);\n{/if}")
     ], CPrintf);
     return CPrintf;
     var CPrintf_1;
@@ -3631,7 +3746,7 @@ var ParseIntResolver = /** @class */ (function () {
 var CParseInt = /** @class */ (function () {
     function CParseInt(scope, call) {
         this.arguments = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        scope.root.headerFlags.parseInt = true;
+        scope.root.headerFlags.parse_int16_t = true;
     }
     CParseInt = __decorate([
         template_1.CodeTemplate("parse_int16_t({arguments {, }=> {this}})")
@@ -4482,7 +4597,8 @@ var SymbolsHelper = /** @class */ (function () {
     /** Generate name for a new temporary variable and register it in temporaryVariables table.
      * Generated name is guarantied not to conflict with any existing names in specified scope.
      */
-    SymbolsHelper.prototype.addTemp = function (scopeNode, proposedName) {
+    SymbolsHelper.prototype.addTemp = function (scopeNode, proposedName, reserve) {
+        if (reserve === void 0) { reserve = true; }
         var parentFunc = types_1.findParentFunction(scopeNode);
         var scopeId = parentFunc && parentFunc.pos + 1 || 'main';
         var existingSymbolNames = scopeNode == null ? [] : this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(function (s) { return s.name; });
@@ -4495,7 +4611,8 @@ var SymbolsHelper = /** @class */ (function () {
                 i++;
             proposedName = proposedName + "_" + i;
         }
-        this.temporaryVariables[scopeId].push(proposedName);
+        if (reserve)
+            this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
     };
     return SymbolsHelper;
@@ -4888,6 +5005,10 @@ function isLiteral(n) {
     return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
 }
 exports.isLiteral = isLiteral;
+function isConvertToNumberExpression(n) {
+    return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
+}
+exports.isConvertToNumberExpression = isConvertToNumberExpression;
 var TypeHelper = /** @class */ (function () {
     function TypeHelper(typeChecker) {
         this.typeChecker = typeChecker;
@@ -4960,7 +5081,7 @@ var TypeHelper = /** @class */ (function () {
         else
             throw new Error("Cannot determine variable type from source " + (source && source.getText ? source.getText() : JSON.stringify(source)));
     };
-    /** Postprocess TypeScript AST for better type inference */
+    /** Postprocess TypeScript AST for better type inference and map TS types to C types */
     /** Creates typeOfNodeDict that is later used in getCType */
     TypeHelper.prototype.inferTypes = function (allNodes) {
         var _this = this;
@@ -4977,11 +5098,18 @@ var TypeHelper = /** @class */ (function () {
             else
                 typeEqualities.push([typeGuard, node1, node2]);
         };
+        // expressions
         addEquality(ts.isIdentifier, function (n) { return n; }, function (n) { return getDeclaration(_this.typeChecker, n); });
         addEquality(isEqualsExpression, function (n) { return n.left; }, function (n) { return n.right; });
         addEquality(ts.isConditionalExpression, function (n) { return n.whenTrue; }, function (n) { return n.whenFalse; });
         addEquality(ts.isConditionalExpression, function (n) { return n; }, function (n) { return n.whenTrue; });
-        addEquality(ts.isVariableDeclaration, function (n) { return n; }, function (n) { return n.initializer; });
+        addEquality(isConvertToNumberExpression, function (n) { return n; }, type(function (n) { return _this.getCType(n.operand) == exports.NumberVarType ? exports.NumberVarType : exports.UniversalVarType; }));
+        addEquality(ts.isBinaryExpression, function (n) { return n; }, type(function (n) {
+            var leftType = _this.getCType(n.left);
+            var rightType = _this.getCType(n.right);
+            return leftType === exports.UniversalVarType || rightType === exports.UniversalVarType ? exports.UniversalVarType : null;
+        }));
+        // fields
         addEquality(ts.isPropertyAssignment, function (n) { return n; }, function (n) { return n.initializer; });
         addEquality(ts.isPropertyAssignment, function (n) { return n.parent; }, type(function (n) { return struct(n.name.getText(), n.pos, _this.getCType(n) || exports.PointerVarType); }));
         addEquality(ts.isPropertyAssignment, function (n) { return n; }, type(function (n) {
@@ -5013,6 +5141,7 @@ var TypeHelper = /** @class */ (function () {
                         : type instanceof ArrayType || type instanceof DictType ? type.elementType
                             : null;
         }));
+        // calls
         addEquality(ts.isCallExpression, function (n) { return n; }, function (n) { return getDeclaration(_this.typeChecker, n.expression); });
         var _loop_1 = function (i) {
             addEquality(ts.isCallExpression, function (n) { return n.arguments[i]; }, function (n) {
@@ -5032,6 +5161,8 @@ var TypeHelper = /** @class */ (function () {
         for (var i = 0; i < 10; i++) {
             _loop_2(i);
         }
+        // statements
+        addEquality(ts.isVariableDeclaration, function (n) { return n; }, function (n) { return n.initializer; });
         addEquality(ts.isFunctionDeclaration, function (n) { return n; }, type(exports.VoidType));
         addEquality(isForOfWithSimpleInitializer, function (n) { return n.expression; }, type(function (n) { return new ArrayType(_this.getCType(n.initializer.declarations[0]) || exports.PointerVarType, 0, false); }));
         addEquality(isForOfWithSimpleInitializer, function (n) { return n.initializer.declarations[0]; }, type(function (n) {
@@ -5082,10 +5213,10 @@ var TypeHelper = /** @class */ (function () {
                 }
             }
         } while (changed);
-        /*
         allNodes
-            .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
-            .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
+            .filter(function (n) { return !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList; })
+            .forEach(function (n) { return console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(_this.getCType(n))); });
+        /*
         
         allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
@@ -5171,14 +5302,14 @@ var TypeHelper = /** @class */ (function () {
             return type2_result;
         else if (type1 == exports.PointerVarType)
             return type2_result;
-        else if (type1 == exports.UniversalVarType)
-            return type2_result;
         else if (type2 == exports.VoidType)
             return type1_result;
         else if (type2 == exports.PointerVarType)
             return type1_result;
-        else if (type2 == exports.UniversalVarType)
+        else if (type1 == exports.UniversalVarType)
             return type1_result;
+        else if (type2 == exports.UniversalVarType)
+            return type2_result;
         else if (type1 == exports.StringVarType && type2 instanceof StructType) {
             if (Object.keys(type2.properties).length == 1 && (type2.properties["length"] == exports.PointerVarType || type2.properties["length"] == exports.NumberVarType))
                 return type1_result;
@@ -5236,8 +5367,8 @@ var TypeHelper = /** @class */ (function () {
                 return type2_result;
             return noChanges;
         }
-        throw new Error("Error: Not supported yet. This code requires universal variable types, that aren't yet implemented. " +
-            "Variable is assigned incompatible values: " + this.getTypeString(type1) + " and " + this.getTypeString(type2));
+        else
+            return { type: exports.UniversalVarType, replaced: true };
     };
     TypeHelper.prototype.mergeArrayAndStruct = function (arrayType, structType) {
         var props = Object.keys(structType.properties);
