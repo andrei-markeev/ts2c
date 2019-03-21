@@ -373,10 +373,10 @@ export class TypeHelper {
             }
         } while (changed);
 
+        /*
         allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
-        /*
         
         allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")

@@ -435,6 +435,7 @@ class HeaderFlags {
         int r;
 
         assert(v != NULL);
+        v->data = NULL;
 
         while (*p && isspace(*p))
             p++;
