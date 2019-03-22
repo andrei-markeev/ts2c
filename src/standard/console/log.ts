@@ -113,7 +113,7 @@ interface PrintfOptions {
 @CodeTemplate(`
 {#if isStringLiteral}
     printf("{PREFIX}{accessor}{POSTFIX}");
-{#elseif isQuotedCString}
+{#elseif isCString && quoted}
     printf("{PREFIX}\\"%s\\"{POSTFIX}", {accessor});
 {#elseif isCString}
     printf("{PREFIX}%s{POSTFIX}", {accessor});
@@ -152,8 +152,12 @@ interface PrintfOptions {
     {INDENT}    {elementPrintfs}
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
-{#elseif isUniversalVar}
+{#elseif isUniversalVar && quoted}
     printf({accessor}.type == JS_VAR_STRING ? "{PREFIX}\\"%s\\"{POSTFIX}" : "{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
+    {INDENT}if ({needDisposeVarName})
+    {INDENT}    free((void *){tempVarName});
+{#elseif isUniversalVar}
+    printf("{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
     {INDENT}if ({needDisposeVarName})
     {INDENT}    free((void *){tempVarName});
 {#else}
@@ -162,7 +166,7 @@ interface PrintfOptions {
 class CPrintf {
 
     public isStringLiteral: boolean = false;
-    public isQuotedCString: boolean = false;
+    public quoted: boolean = false;
     public isCString: boolean = false;
     public isRegex: boolean = false;
     public isInteger: boolean = false;
@@ -186,12 +190,13 @@ class CPrintf {
 
     constructor(scope: IScope, printNode: ts.Node, public accessor: string, varType: CType, options: PrintfOptions) {
         this.isStringLiteral = varType == StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
-        this.isQuotedCString = varType == StringVarType && options.quotedString;
-        this.isCString = varType == StringVarType && !options.quotedString;
+        this.isCString = varType == StringVarType;
         this.isRegex = varType == RegexVarType;
         this.isInteger = varType == NumberVarType;
         this.isBoolean = varType == BooleanVarType;
         this.isUniversalVar = varType == UniversalVarType;
+
+        this.quoted = options.quotedString;
 
         if (this.isUniversalVar) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false)

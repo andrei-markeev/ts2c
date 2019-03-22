@@ -210,8 +210,8 @@ export class CBinaryExpression {
         }
         else if (leftType == UniversalVarType || rightType == UniversalVarType) {
             this.computeOperation = js_var_operator_map[operatorKind];
-            this.left = new CAsUniversalVar(scope, node.left, this.left);
-            this.right = new CAsUniversalVar(scope, node.right, this.right);
+            this.left = new CAsUniversalVar(scope, node.left, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, node.right, this.right, rightType);
             scope.root.headerFlags.js_var_compute = true;
         }
         this.operator = operatorMap[operatorKind];

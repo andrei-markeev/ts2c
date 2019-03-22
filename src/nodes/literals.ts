@@ -1,10 +1,11 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, UniversalVarType} from '../types';
-import {CVariable, CVariableAllocation} from './variable';
+import {ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType} from '../types';
+import {CVariable, CVariableAllocation, CAsUniversalVar} from './variable';
 import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
+import { CExpression } from './expressions';
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
 class CArrayLiteralExpression {
@@ -111,45 +112,31 @@ class CRegexLiteralExpression {
     }
 }
 
-@CodeTemplate(`
-{#if universalWrapper}
-    js_var_from_str({value})
-{#else}
-    {value}
-{/if}`, ts.SyntaxKind.StringLiteral)
+@CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
 export class CString {
-    public value: string;
+    public value: CExpression;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, value: ts.StringLiteral | string) {
-        let s = typeof value === 'string' ? '"' + value + '"' : value.getText();
+    constructor(scope: IScope, nodeOrString: ts.StringLiteral | string) {
+        let s = typeof nodeOrString === 'string' ? '"' + nodeOrString + '"' : nodeOrString.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
             this.value = s;
 
-        if (typeof(value) !== "string" && scope.root.typeHelper.getCType(value) == UniversalVarType) {
-            this.universalWrapper = true;
-            scope.root.headerFlags.js_var_from_str = true;
-        }
+        if (typeof(nodeOrString) !== "string" && scope.root.typeHelper.getCType(nodeOrString) == UniversalVarType)
+            this.value = new CAsUniversalVar(scope, nodeOrString, this.value, StringVarType);
     }
 }
 
-@CodeTemplate(`
-{#if universalWrapper}
-    js_var_from_int16_t({value})
-{#else}
-    {value}
-{/if}`, ts.SyntaxKind.NumericLiteral)
+@CodeTemplate(`{value}`, ts.SyntaxKind.NumericLiteral)
 export class CNumber {
-    public value: string;
+    public value: CExpression;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, value: ts.Node) {
-        this.value = value.getText();
-        if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
-            this.universalWrapper = true;
-            scope.root.headerFlags.js_var_from_int16_t = true;
-        }
+    constructor(scope: IScope, node: ts.Node) {
+        this.value = node.getText();
+        if (scope.root.typeHelper.getCType(node) == UniversalVarType)
+            this.value = new CAsUniversalVar(scope, node, this.value, NumberVarType);
     }
 }
 
@@ -160,19 +147,33 @@ export class CNumber {
     {value}
 {/if}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
 export class CBoolean {
-    public value: string;
+    public value: CExpression;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, value: ts.Node) {
-        this.value = value.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
+    constructor(scope: IScope, node: ts.Node) {
+        this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
-        if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
-            this.universalWrapper = true;
-            scope.root.headerFlags.js_var_from_uint8_t = true;
-        }
+        if (scope.root.typeHelper.getCType(node) == UniversalVarType)
+            this.value = new CAsUniversalVar(scope, node, this.value, BooleanVarType);
     }
 }
 
-@CodeTemplate(`NULL`, ts.SyntaxKind.NullKeyword)
+@CodeTemplate(`js_var_from(JS_VAR_NULL)`, ts.SyntaxKind.NullKeyword)
 export class CNull {
-    constructor(scope: IScope, value: ts.Node) { }
+    constructor(scope: IScope, node: ts.Node) {
+        scope.root.headerFlags.js_var_from = true;
+    }
+}
+
+@CodeTemplate(`js_var_from(JS_VAR_UNDEFINED)`, ts.SyntaxKind.UndefinedKeyword)
+export class CUndefined {
+    constructor(scope: IScope, node: ts.Node) {
+        scope.root.headerFlags.js_var_from = true;
+    }
+}
+
+@CodeTemplate(`js_var_from(JS_VAR_NAN)`, ts.SyntaxKind.Count + 1)
+export class CNaN {
+    constructor(scope: IScope, node: ts.Node) {
+        scope.root.headerFlags.js_var_from = true;
+    }
 }

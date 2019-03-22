@@ -145,6 +145,10 @@ export function isLiteral(n): n is ts.LiteralExpression {
 export function isConvertToNumberExpression(n): n is ts.PrefixUnaryExpression {
     return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
 }
+export const SyntaxKind_NaNKeyword = ts.SyntaxKind.Count + 1;
+export function isNullOrUndefinedOrNaN(n): n is ts.Node {
+    return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword || n.kind === SyntaxKind_NaNKeyword;
+}
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
@@ -223,11 +227,11 @@ export class TypeHelper {
     public getTypeString(source) {
 
         let cType = source;
-        if (source.flags != null && source.intrinsicName != null) // ts.Type
+        if (source && source.flags != null && source.intrinsicName != null) // ts.Type
             cType = this.convertType(source)
-        else if (source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
+        else if (source && source.flags != null && source.callSignatures != null && source.constructSignatures != null) // ts.Type
             cType = this.convertType(source)
-        else if (source.kind != null && source.flags != null) // ts.Node
+        else if (source && source.kind != null && source.flags != null) // ts.Node
             cType = this.getCType(source);
 
         if (cType instanceof ArrayType) {
@@ -239,7 +243,7 @@ export class TypeHelper {
         else if (typeof cType === 'string')
             return cType;
         else
-            throw new Error("Cannot determine variable type from source " + (source && source.getText ? source.getText() : JSON.stringify(source)));
+            return "/* Cannot determine variable type from source " + (source && source.getText ? source.getText() : JSON.stringify(source)) + "*/";
     }
 
     /** Postprocess TypeScript AST for better type inference and map TS types to C types */
@@ -269,6 +273,7 @@ export class TypeHelper {
             const rightType = this.getCType(n.right);
             return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType : null;
         }))
+        addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);

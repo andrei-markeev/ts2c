@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import {TypeHelper, ArrayType} from './types';
+import {TypeHelper, ArrayType, SyntaxKind_NaNKeyword} from './types';
 import {SymbolsHelper} from './symbols';
 import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
@@ -58,6 +58,7 @@ class HeaderFlags {
     int16_t: boolean = false;
     uint16_t: boolean = false;
     js_var: boolean = false;
+    js_var_from: boolean = false;
     js_var_from_str: boolean = false;
     js_var_from_int16_t: boolean = false;
     js_var_from_uint8_t: boolean = false;
@@ -407,6 +408,15 @@ class HeaderFlags {
     };
 {/if}
 
+{#if headerFlags.js_var_from}
+    struct js_var js_var_from(enum js_var_type type) {
+        struct js_var v;
+        v.type = type;
+        v.data = NULL;
+        return v;
+    }
+{/if}
+
 {#if headerFlags.js_var_from_uint8_t}
     struct js_var js_var_from_uint8_t(uint8_t b) {
         struct js_var v;
@@ -666,6 +676,20 @@ export class CProgram implements IScope {
             while (i < nodes.length)
                 nodes.push.apply(nodes, nodes[i++].getChildren());
         }
+
+        // crutch for NaN and undefined
+        nodes.forEach(n => {
+            if (ts.isIdentifier(n)) {
+                if (n.text == "NaN")
+                    (<any>n.kind) = SyntaxKind_NaNKeyword;
+                
+                const symbol = this.typeChecker.getSymbolAtLocation(n);
+                if (symbol) {
+                    if (this.typeChecker.isUndefinedSymbol(symbol))
+                        (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
+                }
+            }
+        });
         
         this.typeHelper.inferTypes(nodes);
         this.memoryManager.scheduleNodeDisposals(nodes);

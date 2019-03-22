@@ -255,8 +255,7 @@ export class CAsUniversalVar {
     public isNumber: boolean;
     public isBoolean: boolean;
     public expression: CExpression;
-    constructor (scope: IScope, node: ts.Node, expr: CExpression) {
-        const type = scope.root.typeHelper.getCType(node);
+    constructor (scope: IScope, node: ts.Node, expr: CExpression, type: CType) {
         this.isUniversalVar = type == UniversalVarType;
         this.isString = type == StringVarType;
         this.isNumber = type == NumberVarType;

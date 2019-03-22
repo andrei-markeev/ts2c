@@ -105,7 +105,7 @@ export class CAssignment {
             this.arrayLiteralSize = arrLiteral.elements.length;
             this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
         } else if (argType == UniversalVarType) {
-            this.expression = new CAsUniversalVar(scope, right, CodeTemplateFactory.createForNode(scope, right));
+            this.expression = new CAsUniversalVar(scope, right, CodeTemplateFactory.createForNode(scope, right), scope.root.typeHelper.getCType(right));
         } else
             this.expression = CodeTemplateFactory.createForNode(scope, right);
 

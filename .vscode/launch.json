@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/js_var/tuple.ts"],
+            "args": ["tests/js_var/binexpr1.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

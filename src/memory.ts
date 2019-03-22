@@ -28,7 +28,7 @@ export class MemoryManager {
     public scheduleNodeDisposals(nodes: ts.Node[]) {
         nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
             const symbol = this.typeChecker.getSymbolAtLocation(n);
-            if (symbol) {
+            if (symbol && symbol.valueDeclaration) {
                 this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
                 this.references[symbol.valueDeclaration.pos].push(n);
             }

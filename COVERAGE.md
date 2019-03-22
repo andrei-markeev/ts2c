@@ -31,7 +31,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [ ] Primary Expressions
     - [ ] `this`
     - [x] **Identifier reference**
-    - [x] Literal
+    - [x] **Literal**
         - [x] **`null`**
         - [x] **`true` / `false`**
         - [x] **number literal** _(partial: only 16-bit integers)_
@@ -109,9 +109,9 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
 ### Built-in objects
 
  - [ ] Global
-     - [ ] NaN
+     - [x] **NaN**
      - [ ] Infinity
-     - [ ] undefined
+     - [x] **undefined**
      - [ ] ~~eval~~  _(will not be implemented)_
      - [x] **parseInt** _(partial: radix parameter not supported)_
      - [ ] parseFloat

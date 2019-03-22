@@ -1,0 +1,11 @@
+var x = null;
+var y = undefined;
+var z = 5;
+var nan = NaN;
+console.log(null + "test");
+console.log(x + 10);
+console.log(undefined + "test");
+console.log(z - x + y / 5);
+console.log(z - x * 5);
+console.log(y + 20);
+console.log(nan % y);
