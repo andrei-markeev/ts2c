@@ -46,13 +46,7 @@ export class CFunction implements IScope {
     constructor(public root: CProgram, node: ts.FunctionDeclaration | ts.FunctionExpression) {
         this.parent = root;
 
-        if (node.name) {
-            this.name = node.name.getText();
-        }
-        else {
-            this.name = `anonymousFunction${anonymousNameCounter++}`;
-        }
-
+        this.name = node.name.getText();
         this.funcDecl = new CVariable(root, this.name, node, { removeStorageSpecifier: true });
 
         this.parameters = node.parameters.map(p => {

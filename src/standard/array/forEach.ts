@@ -4,7 +4,7 @@ import {CElementAccess} from '../../nodes/elementaccess';
 import {CExpression} from '../../nodes/expressions';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {CVariable} from '../../nodes/variable';
-import {IScope} from '../../program';
+import {IScope, CProgram} from '../../program';
 import {StandardCallResolver, IResolver} from '../../standard';
 
 @StandardCallResolver
@@ -34,60 +34,44 @@ class ArrayForEachResolver implements IResolver {
 }
 
 @CodeTemplate(`
-{#statements}
-    {#if staticArraySize}
-        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {
-            {iteratorFnAccess}({varAccess}[{iteratorVarName}]);
-        }
-    {#else}
-        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {
-            iteratorFnAccess({varAccess}[{iteratorVarName}]);
-        }
-    {/if}
-{/statements}`)
-class CArrayForEach {
+for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
+    {variables {   }=> {this};\n}
+    {paramName} = {varAccess}[{iteratorVarName}];
+    {statements {    }=> {this}}
+}
+`)
+class CArrayForEach implements IScope {
+    public parent: IScope;
+    public func: IScope;
+    public root: CProgram;
+    public variables: CVariable[] = [];
+    public statements: any[] = [];
     public iteratorFnAccess: CElementAccess = null;
     public iteratorVarName: string;
-    public staticArraySize: string = '';
+    public arraySize: string = '';
     public topExpressionOfStatement: boolean;
-    public varAccess: CElementAccess = null;
+    public varAccess: string;
+    public paramName: string;
 
     constructor(scope: IScope, call: ts.CallExpression) {
+        this.parent = scope;
+        this.func = scope.func;
+        this.root = scope.root;
+
         let propAccess = <ts.PropertyAccessExpression>call.expression;
-
-        this.varAccess = new CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
 
-        this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
-        this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
-
-        if (call.arguments.length === 0) throw Error('Array.forEach needs an argument.');
-
-        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
-
-        this.iteratorFnAccess = args[0];
-
+        this.varAccess = CodeTemplateFactory.templateToString(<any>new CElementAccess(scope, propAccess.expression));
+        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
+        this.arraySize = objType.isDynamicArray ? this.varAccess + "->size" : objType.capacity + "";
+        const iteratorFunc = <ts.FunctionExpression>call.arguments[0];
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+
+        this.paramName = (<ts.Identifier>iteratorFunc.parameters[0].name).text;
+        iteratorFunc.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
+        this.variables.push(new CVariable(scope, this.paramName, objType.elementType));
+
     }
 
-}
-
-@CodeTemplate(`
-{#if staticArraySize}
-    {staticArraySize}
-{#elseif isArray}
-    {value}->size
-{#else}
-    1
-{/if}`)
-class CGetSize {
-    public staticArraySize: number;
-    public isArray: boolean;
-    constructor(scope: IScope, valueNode: ts.Node, public value: CExpression) {
-        let type = scope.root.typeHelper.getCType(valueNode);
-        this.isArray = type instanceof ArrayType;
-        this.staticArraySize = type instanceof ArrayType && type.capacity;
-    }
 }

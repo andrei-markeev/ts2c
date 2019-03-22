@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/js_var/binexpr1.ts"],
+            "args": ["tests_esp/array.forEach.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

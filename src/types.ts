@@ -127,6 +127,9 @@ export function isEqualsExpression(n): n is ts.BinaryExpression {
 export function isMethodCall(n): n is MethodCallExpression {
     return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
 }
+export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
+    return ts.isFunctionExpression(n) && ts.isCallExpression(n.parent) && n.parent.arguments[0] == n && ts.isPropertyAccessExpression(n.parent.expression);
+}
 export function isFieldElementAccess(n): n is ts.ElementAccessExpression {
     return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
 }
@@ -153,11 +156,11 @@ export function isNullOrUndefinedOrNaN(n): n is ts.Node {
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
 type Equality<T extends ts.Node> = [{ (n): n is T }, NodeFunc<T>, NodeResolver<T>];
-interface MethodCallExpression extends ts.LeftHandSideExpression, ts.Declaration {
-    kind: ts.SyntaxKind.CallExpression;
+interface MethodCallExpression extends ts.CallExpression {
     expression: ts.PropertyAccessExpression;
-    typeArguments?: ts.NodeArray<ts.TypeNode>;
-    arguments: ts.NodeArray<ts.Expression>;
+}
+interface FunctionArgInMethodCall extends ts.FunctionExpression {
+    parent: MethodCallExpression;
 }
 
 interface ForOfWithSimpleInitializer extends ts.ForOfStatement {
@@ -320,6 +323,10 @@ export class TypeHelper {
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
         for (let i = 0; i < 10; i++)
             addEquality(isMethodCall, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
+        addEquality(isFunctionArgInMethodCall, n => n.parameters[0], type(n => {
+            const objType = this.getCType(n.parent.expression.expression);
+            return objType instanceof ArrayType && n.parent.expression.name.text == "forEach" ? objType.elementType : null;
+        }));
 
         // statements
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
@@ -438,11 +445,7 @@ export class TypeHelper {
             return BooleanVarType;
         if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0)
             return this.generateStructure(tsType);
-        if (tsType.flags == ts.TypeFlags.Any)
-            return PointerVarType;
 
-        if (this.typeChecker.typeToString(tsType) != "{}")
-            console.log("WARNING: Non-standard type: " + this.typeChecker.typeToString(tsType));
         return PointerVarType;
     }
 
