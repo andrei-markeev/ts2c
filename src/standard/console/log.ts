@@ -153,7 +153,7 @@ interface PrintfOptions {
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
 {#elseif isUniversalVar}
-    printf("{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
+    printf({accessor}.type == JS_VAR_STRING ? "{PREFIX}\\"%s\\"{POSTFIX}" : "{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
     {INDENT}if ({needDisposeVarName})
     {INDENT}    free((void *){tempVarName});
 {#else}

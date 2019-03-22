@@ -35,20 +35,6 @@ export class MemoryManager {
         });
         for (let node of nodes) {
             switch (node.kind) {
-                case ts.SyntaxKind.StringLiteral:
-                    {
-                        let type = this.typeHelper.getCType(node);
-                        if (type && type == UniversalVarType)
-                            this.scheduleNodeDisposal(node);
-                    }
-                    break;
-                case ts.SyntaxKind.NumericLiteral:
-                    {
-                        let type = this.typeHelper.getCType(node);
-                        if (type && type == UniversalVarType)
-                            this.scheduleNodeDisposal(node);
-                    }
-                    break;
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
@@ -72,23 +58,6 @@ export class MemoryManager {
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
                         if (plusOperator && (leftType == StringVarType || rightType == StringVarType))
                             this.scheduleNodeDisposal(binExpr, false);
-                        else if (leftType == UniversalVarType || rightType == UniversalVarType) {
-                            if (leftType != UniversalVarType)
-                                this.scheduleNodeDisposal(binExpr.left);
-                            if (rightType != UniversalVarType)
-                                this.scheduleNodeDisposal(binExpr.right);
-                            this.scheduleNodeDisposal(binExpr);
-                        }
-                    }
-                    break;
-                case ts.SyntaxKind.PrefixUnaryExpression:
-                    {
-                        const expr = <ts.PrefixUnaryExpression>node;
-                        if (expr.operator == ts.SyntaxKind.PlusToken) {
-                            const type = this.typeHelper.getCType(expr.operand);
-                            if (type != NumberVarType)
-                                this.scheduleNodeDisposal(expr);
-                        }
                     }
                     break;
                 case ts.SyntaxKind.CallExpression:

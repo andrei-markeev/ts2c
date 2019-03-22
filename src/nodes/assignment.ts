@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, DictType} from '../types';
+import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
-import {CVariableAllocation} from './variable';
+import { CAsUniversalVar } from './variable';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
@@ -65,7 +65,6 @@ export class CAssignment {
     public isArrayLiteralAssignment: boolean = false;
     public arrayLiteralSize: number;
     public arrInitializers: CAssignment[];
-    public isSimpleVar: boolean;
     public isDynamicArray: boolean = false;
     public isStaticArray: boolean = false;
     public isStruct: boolean = false;
@@ -76,7 +75,6 @@ export class CAssignment {
     public CR: string;
     constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression, inline: boolean = false) {
         this.CR = inline ? "" : ";\n";
-        this.isSimpleVar = typeof type === 'string';
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.isDict = type instanceof DictType;
@@ -106,6 +104,8 @@ export class CAssignment {
             let arrLiteral = <ts.ArrayLiteralExpression>right;
             this.arrayLiteralSize = arrLiteral.elements.length;
             this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
+        } else if (argType == UniversalVarType) {
+            this.expression = new CAsUniversalVar(scope, right, CodeTemplateFactory.createForNode(scope, right));
         } else
             this.expression = CodeTemplateFactory.createForNode(scope, right);
 

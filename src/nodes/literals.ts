@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType, DictType, UniversalVarType} from '../types';
-import {CVariable, CVariableAllocation, CTempVarReplacement} from './variable';
+import {CVariable, CVariableAllocation} from './variable';
 import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 
@@ -113,13 +113,13 @@ class CRegexLiteralExpression {
 
 @CodeTemplate(`
 {#if universalWrapper}
-    {universalWrapper}
+    js_var_from_str({value})
 {#else}
     {value}
 {/if}`, ts.SyntaxKind.StringLiteral)
 export class CString {
     public value: string;
-    public universalWrapper: CTempVarReplacement = null;
+    public universalWrapper: boolean = false;
     constructor(scope: IScope, value: ts.StringLiteral | string) {
         let s = typeof value === 'string' ? '"' + value + '"' : value.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
@@ -129,8 +129,7 @@ export class CString {
             this.value = s;
 
         if (typeof(value) !== "string" && scope.root.typeHelper.getCType(value) == UniversalVarType) {
-            const call = `js_var_from_str(${this.value})`;
-            this.universalWrapper = new CTempVarReplacement(scope, value, call, UniversalVarType)
+            this.universalWrapper = true;
             scope.root.headerFlags.js_var_from_str = true;
         }
     }
@@ -138,29 +137,38 @@ export class CString {
 
 @CodeTemplate(`
 {#if universalWrapper}
-    {universalWrapper}
+    js_var_from_int16_t({value})
 {#else}
     {value}
 {/if}`, ts.SyntaxKind.NumericLiteral)
 export class CNumber {
     public value: string;
-    public universalWrapper: CTempVarReplacement = null;
+    public universalWrapper: boolean = false;
     constructor(scope: IScope, value: ts.Node) {
         this.value = value.getText();
         if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
-            const call = `js_var_from_int16_t(${this.value})`;
-            this.universalWrapper = new CTempVarReplacement(scope, value, call, UniversalVarType)
+            this.universalWrapper = true;
             scope.root.headerFlags.js_var_from_int16_t = true;
         }
     }
 }
 
-@CodeTemplate(`{value}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
+@CodeTemplate(`
+{#if universalWrapper}
+    js_var_from_uint8_t({value})
+{#else}
+    {value}
+{/if}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
 export class CBoolean {
     public value: string;
+    public universalWrapper: boolean = false;
     constructor(scope: IScope, value: ts.Node) {
         this.value = value.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
+        if (scope.root.typeHelper.getCType(value) == UniversalVarType) {
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_from_uint8_t = true;
+        }
     }
 }
 

@@ -60,7 +60,9 @@ class HeaderFlags {
     js_var: boolean = false;
     js_var_from_str: boolean = false;
     js_var_from_int16_t: boolean = false;
+    js_var_from_uint8_t: boolean = false;
     js_var_to_str: boolean = false;
+    js_var_to_number: boolean = false;
     js_var_compute: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
@@ -405,37 +407,42 @@ class HeaderFlags {
     };
 {/if}
 
+{#if headerFlags.js_var_from_uint8_t}
+    struct js_var js_var_from_uint8_t(uint8_t b) {
+        struct js_var v;
+        v.type = JS_VAR_BOOL;
+        v.number = b;
+        v.data = NULL;
+        return v;
+    }
+{/if}
+
 {#if headerFlags.js_var_from_int16_t}
-    struct js_var *js_var_from_int16_t(int16_t n) {
-        struct js_var *v = malloc(sizeof(*v));
-        v->type = JS_VAR_INT16;
-        v->number = n;
-        v->data = NULL;
+    struct js_var js_var_from_int16_t(int16_t n) {
+        struct js_var v;
+        v.type = JS_VAR_INT16;
+        v.number = n;
+        v.data = NULL;
         return v;
     }
 {/if}
 
 {#if headerFlags.js_var_from_str}
-    struct js_var *js_var_from_str(const char *s) {
-        struct js_var *v = malloc(sizeof(*v));
-        int s_size = strlen(s) + 1;
-        char *p = malloc(s_size);
-        assert(p != NULL);
-        memcpy(p, s, s_size);
-        v->type = JS_VAR_STRING;
-        v->data = p;
+    struct js_var js_var_from_str(const char *s) {
+        struct js_var v;
+        v.type = JS_VAR_STRING;
+        v.data = (void *)s;
         return v;
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}
-    struct js_var *str_to_int16_t(const char * str) {
-        struct js_var *v = malloc(sizeof(*v));
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_compute}
+    struct js_var str_to_int16_t(const char * str) {
+        struct js_var v;
         const char *p = str;
         int r;
 
-        assert(v != NULL);
-        v->data = NULL;
+        v.data = NULL;
 
         while (*p && isspace(*p))
             p++;
@@ -448,94 +455,90 @@ class HeaderFlags {
 
         while (*p) {
             if (!isdigit(*p)) {
-                v->type = JS_VAR_NAN;
+                v.type = JS_VAR_NAN;
                 return v;
             }
             p++;
         }
 
         sscanf(str, "%d", &r);
-        v->type = JS_VAR_INT16;
-        v->number = (int16_t)r;
+        v.type = JS_VAR_INT16;
+        v.number = (int16_t)r;
         return v;
     }
 {/if}
 
 {#if headerFlags.js_var_compute || headerFlags.js_var_to_str}
-    const char * js_var_to_str(struct js_var *v, uint8_t *need_dispose)
+    const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
         *need_dispose = 0;
-        if (v->type == JS_VAR_INT16) {
+        if (v.type == JS_VAR_INT16) {
             buf = malloc(STR_INT16_T_BUFLEN);
             assert(buf != NULL);
             *need_dispose = 1;
-            sprintf(buf, "%d", v->number);
+            sprintf(buf, "%d", v.number);
             return buf;
-        } else if (v->type == JS_VAR_BOOL)
-            return v->number ? "true" : "false";
-        else if (v->type == JS_VAR_STRING)
-            return (const char *)v->data;
-        else if (v->type == JS_VAR_NAN)
+        } else if (v.type == JS_VAR_BOOL)
+            return v.number ? "true" : "false";
+        else if (v.type == JS_VAR_STRING)
+            return (const char *)v.data;
+        else if (v.type == JS_VAR_NAN)
             return "NaN";
-        else if (v->type == JS_VAR_NULL)
+        else if (v.type == JS_VAR_NULL)
             return "null";
-        else if (v->type == JS_VAR_UNDEFINED)
+        else if (v.type == JS_VAR_UNDEFINED)
             return "undefined";
 
         return NULL;
     }
 {/if}
 
-{#if headerFlags.js_var_compute}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_compute}
 
-    struct js_var js_var_to_number(struct js_var *v)
+    struct js_var js_var_to_number(struct js_var v)
     {
         struct js_var result;
-        struct js_var *tmp;
         result.type = JS_VAR_INT16;
         result.number = 0;
 
-        if (v->type == JS_VAR_INT16)
-            result.number = v->number;
-        else if (v->type == JS_VAR_BOOL)
-            result.number = v->number;
-        else if (v->type == JS_VAR_STRING) {
-            tmp = str_to_int16_t((const char *)v->data);
-            result.type = tmp->type;
-            if (result.type == JS_VAR_INT16)
-                result.number = tmp->number;
-            free(tmp);
-        }
-        else if (v->type == JS_VAR_NAN)
+        if (v.type == JS_VAR_INT16)
+            result.number = v.number;
+        else if (v.type == JS_VAR_BOOL)
+            result.number = v.number;
+        else if (v.type == JS_VAR_STRING)
+            return str_to_int16_t((const char *)v.data);
+        else if (v.type == JS_VAR_NAN)
             result.type = JS_VAR_NAN;
-        else if (v->type == JS_VAR_UNDEFINED)
+        else if (v.type == JS_VAR_UNDEFINED)
             result.type = JS_VAR_NAN;
 
         return result;
     }
 
+{/if}
+
+{#if headerFlags.js_var_compute}
+
     enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
-    struct js_var *js_var_compute(struct js_var *left, enum js_var_op op, struct js_var *right)
+    struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)
     {
-        struct js_var *result = malloc(sizeof(*result));
-        struct js_var left_to_number, right_to_number;
+        struct js_var result, left_to_number, right_to_number;
         const char *left_as_string, *right_as_string;
         uint8_t need_dispose_left, need_dispose_right;
-        assert(result != NULL);
-        result->data = NULL;
+        result.data = NULL;
 
-        if (op == JS_VAR_PLUS && (left->type == JS_VAR_STRING || right->type == JS_VAR_STRING))
+        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING))
         {
             left_as_string = js_var_to_str(left, &need_dispose_left);
             right_as_string = js_var_to_str(right, &need_dispose_right);
             
-            result->type = JS_VAR_STRING;
-            result->data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
-            assert(result->data != NULL);
+            result.type = JS_VAR_STRING;
+            result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
+            assert(result.data != NULL);
 
-            strcpy(result->data, left_as_string);
-            strcat(result->data, right_as_string);
+            strcpy(result.data, left_as_string);
+            strcat(result.data, right_as_string);
 
             if (need_dispose_left)
                 free((void *)left_as_string);
@@ -548,26 +551,26 @@ class HeaderFlags {
         right_to_number = js_var_to_number(right);
 
         if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {
-            result->type = JS_VAR_NAN;
+            result.type = JS_VAR_NAN;
             return result;
         }
         
-        result->type = JS_VAR_INT16;
+        result.type = JS_VAR_INT16;
         switch (op) {
             case JS_VAR_PLUS:
-                result->number = left_to_number.number + right_to_number.number;
+                result.number = left_to_number.number + right_to_number.number;
                 break;
             case JS_VAR_MINUS:
-                result->number = left_to_number.number - right_to_number.number;
+                result.number = left_to_number.number - right_to_number.number;
                 break;
             case JS_VAR_ASTERISK:
-                result->number = left_to_number.number * right_to_number.number;
+                result.number = left_to_number.number * right_to_number.number;
                 break;
             case JS_VAR_SLASH:
-                result->number = left_to_number.number / right_to_number.number;
+                result.number = left_to_number.number / right_to_number.number;
                 break;
             case JS_VAR_PERCENT:
-                result->number = left_to_number.number % right_to_number.number;
+                result.number = left_to_number.number % right_to_number.number;
                 break;
         }
         return result;

@@ -237,26 +237,40 @@ export class CVariableDestructors {
     }
 }
 
-@CodeTemplate(`{universalWrapper}`)
+@CodeTemplate(`
+{#if isUniversalVar}
+    {expression}
+{#elseif isString}
+    js_var_from_str({expression})
+{#elseif isNumber}
+    js_var_from_int16_t({expression})
+{#elseif isBoolean}
+    js_var_from_uint8_t({expression})
+{#else}
+    /** converting {expression} to js_var is not supported yet */
+{/if}`)
 export class CAsUniversalVar {
-    public universalWrapper: any;
+    public isUniversalVar: boolean;
+    public isString: boolean;
+    public isNumber: boolean;
+    public isBoolean: boolean;
+    public expression: CExpression;
     constructor (scope: IScope, node: ts.Node, expr: CExpression) {
         const type = scope.root.typeHelper.getCType(node);
-        const expression = CodeTemplateFactory.templateToString(<any>expr);
+        this.isUniversalVar = type == UniversalVarType;
+        this.isString = type == StringVarType;
+        this.isNumber = type == NumberVarType;
+        this.isBoolean = type == BooleanVarType;
+        this.expression = CodeTemplateFactory.templateToString(<any>expr);
 
-        if (type == UniversalVarType)
-            this.universalWrapper = expression;
-        else if (type == StringVarType) {
-            this.universalWrapper = new CTempVarReplacement(scope, node, `js_var_from_str(${expression})`, UniversalVarType);
+        if (type == StringVarType)
             scope.root.headerFlags.js_var_from_str = true;
-        }
-        else if (type == NumberVarType) {
-            this.universalWrapper = new CTempVarReplacement(scope, node, `js_var_from_int16_t(${expression})`, UniversalVarType);
+        if (type == NumberVarType)
             scope.root.headerFlags.js_var_from_int16_t = true;
-        }
-        else
-            this.universalWrapper = `/* expression '${node.getText()}' of type ${JSON.stringify(type)} is not yet supported here */`;
+        if (type == BooleanVarType)
+            scope.root.headerFlags.js_var_from_uint8_t = true;
 
+        scope.root.headerFlags.js_var = true;
     }
 }
 
@@ -268,7 +282,7 @@ interface CVariableOptions {
 export class CVariable {
     private static: boolean;
     private initializer: string;
-    private type: CType;
+    public type: CType;
     private typeHelper: TypeHelper;
 
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
@@ -283,8 +297,6 @@ export class CVariable {
             scope.root.headerFlags.int16_t = true;
         else if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
-        else if (type == UniversalVarType)
-            scope.root.headerFlags.js_var = true;
 
         // root scope, make variables file-scoped by default
         if (scope.parent == null)

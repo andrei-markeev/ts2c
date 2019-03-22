@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
 
 export type CType = string | StructType | ArrayType | DictType;
-export const UniversalVarType = "struct js_var *";
+export const UniversalVarType = "struct js_var";
 export const VoidType = "void";
 export const PointerVarType = "void *";
 export const StringVarType = "const char *";
