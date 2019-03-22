@@ -226,9 +226,6 @@ export class CVariableDestructors {
                     this.destructors.push(r.varName + "->values->data");
                     this.destructors.push(r.varName + "->values");
                     this.destructors.push(r.varName);
-                } else if (r.js_var) {
-                    this.destructors.push(r.varName + "->data");
-                    this.destructors.push(r.varName);
                 } else if (r.string) {
                     this.destructors.push("(char *)" + r.varName);
                 } else

@@ -10,7 +10,6 @@ type VariableScopeInfo = {
     array: boolean;
     arrayWithContents: boolean;
     dict: boolean;
-    js_var: boolean;
     varName: string;
     scopeId: string;
     used: boolean;
@@ -22,6 +21,7 @@ export class MemoryManager {
     private reusedVariables: { [key: string]: string } = {};
     private originalNodes: { [key: string]: ts.Node } = {};
     private references: { [key: string]: ts.Node[] } = {};
+    private needsGCMainForJsVar: boolean = false;
 
     constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
@@ -55,9 +55,13 @@ export class MemoryManager {
                         const leftType = this.typeHelper.getCType(binExpr.left);
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
+                        if (leftType == UniversalVarType || rightType == UniversalVarType)
+                            this.needsGCMainForJsVar = true;
+
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
                         if (plusOperator && (leftType == StringVarType || rightType == StringVarType))
                             this.scheduleNodeDisposal(binExpr, false);
+                            
                     }
                     break;
                 case ts.SyntaxKind.CallExpression:
@@ -75,8 +79,11 @@ export class MemoryManager {
         var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents && !v.js_var).length) {
+        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
             gcVars.push("gc_" + realScopeId);
+        }
+        if (scopeId == "main" && this.needsGCMainForJsVar && gcVars[0] != "gc_main") {
+            gcVars.push("gc_main");
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {
             gcVars.push("gc_" + realScopeId + "_arrays");
@@ -87,9 +94,7 @@ export class MemoryManager {
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.dict).length) {
             gcVars.push("gc_" + realScopeId + "_dicts");
         }
-        if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.js_var).length) {
-            gcVars.push("gc_" + realScopeId + "_js_vars");
-        }
+
         return gcVars;
     }
 
@@ -105,8 +110,6 @@ export class MemoryManager {
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_arrays_c";
             else if (this.scopesOfVariables[key].dict)
                 return "gc_" + this.scopesOfVariables[key].scopeId + "_dicts";
-            else if (this.scopesOfVariables[key].js_var)
-                return "gc_" + this.scopesOfVariables[key].scopeId + "_js_vars";
             else
                 return "gc_" + this.scopesOfVariables[key].scopeId;
         }
@@ -117,7 +120,7 @@ export class MemoryManager {
     public getDestructorsForScope(node: ts.Node) {
         let parentDecl = this.findParentFunctionNode(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
-        let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean, js_var: boolean }[] = [];
+        let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean }[] = [];
         if (this.scopes[scopeId]) {
 
             // string match allocates array of strings, and each of those strings should be also disposed
@@ -128,7 +131,6 @@ export class MemoryManager {
                     array: simpleVarScopeInfo.array,
                     dict: simpleVarScopeInfo.dict,
                     string: type == StringVarType,
-                    js_var: type == UniversalVarType,
                     arrayWithContents: simpleVarScopeInfo.arrayWithContents
                 });
             }
@@ -331,7 +333,6 @@ export class MemoryManager {
             arrayWithContents: arrayWithContents,
             array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray,
             dict: type && type instanceof DictType,
-            js_var: type === UniversalVarType,
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp

@@ -71,6 +71,7 @@ class HeaderFlags {
     array_remove: boolean = false;
     array_int16_t_cmp: boolean = false;
     array_str_cmp: boolean = false;
+    gc_main: boolean = false;
     gc_iterator: boolean = false;
     gc_iterator2: boolean = false;
     dict: boolean = false;
@@ -149,7 +150,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict}
+{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_compute}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -157,7 +158,7 @@ class HeaderFlags {
     } *
 {/if}
 
-{#if headerFlags.array || headerFlags.dict}
+{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_compute}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
         array->data = malloc((init_capacity) * sizeof(*array->data)); \\
@@ -528,6 +529,10 @@ class HeaderFlags {
 
 {/if}
 
+{#if headerFlags.gc_main}
+    static ARRAY(void *) gc_main;
+{/if}
+
 {#if headerFlags.js_var_compute}
 
     enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
@@ -546,6 +551,7 @@ class HeaderFlags {
             result.type = JS_VAR_STRING;
             result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
             assert(result.data != NULL);
+            ARRAY_PUSH(gc_main, result.data);
 
             strcpy(result.data, left_as_string);
             strcat(result.data, right_as_string);
@@ -624,7 +630,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.gc_iterator}
+{#if headerFlags.gc_iterator || headerFlags.js_var_compute}
     int16_t gc_i;
 {/if}
 {#if headerFlags.gc_iterator2}
@@ -696,12 +702,15 @@ export class CProgram implements IScope {
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
+            this.headerFlags.array = true;
+            if (gcVarName == "gc_main") {
+                this.headerFlags.gc_main = true;
+                continue;
+            }
             let gcType = "ARRAY(void *)";
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
-            if (gcVarName.indexOf("_js_vars") > -1) gcType = "ARRAY(ARRAY(void *))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
-            this.headerFlags.array = true;
         }
 
         for (let source of tsProgram.getSourceFiles()) {
