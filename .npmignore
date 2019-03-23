@@ -3,4 +3,3 @@ ts2c.bundle.js
 *.js.map
 .vscode
 tests
-tests_esp

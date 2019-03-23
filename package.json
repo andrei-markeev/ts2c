@@ -1,6 +1,6 @@
 {
   "name": "ts2c",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "TypeScript/JavaScript to C transpiler",
   "main": "ts2c.js",
   "bin": {

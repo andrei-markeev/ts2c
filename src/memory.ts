@@ -251,7 +251,7 @@ export class MemoryManager {
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     } else {
                         let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
-                        if (!symbol) {
+                        if (!symbol || !symbol.valueDeclaration) {
                             let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
 
                             if (isStandardCall) {
@@ -261,9 +261,8 @@ export class MemoryManager {
                                     queue.push(standardCallEscapeNode);
                                 }
                             } else {
-                                console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + ". Scope changed to main.");
+                                console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + "." + (topScope != "main" ? "Scope changed to main." : ""));
                                 topScope = "main";
-                                isSimple = false;
                             }
                         }
                         else {

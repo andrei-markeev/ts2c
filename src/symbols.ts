@@ -21,7 +21,7 @@ export class SymbolsHelper {
             this.userStructs[structName].structName = structName;
         }
 
-        let structs = Object.keys(this.userStructs).map(k => ({
+        let structs = Object.keys(this.userStructs).filter(k => !this.userStructs[k].external).map(k => ({
             name: k,
             properties: Object.keys(this.userStructs[k].properties).map(pk => ({
                 name: pk,

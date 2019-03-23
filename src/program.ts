@@ -116,6 +116,10 @@ class HeaderFlags {
     #include <ctype.h>
 {/if}
 
+{#if includes.length}
+    {includes => #include <{this}>\n}
+{/if}
+
 {#if headerFlags.bool}
     #define TRUE 1
     #define FALSE 0
@@ -656,6 +660,7 @@ export class CProgram implements IScope {
     public parent: IScope = null;
     public root = this;
     public func = this;
+    public includes: string[] = [];
     public variables: CVariable[] = [];
     public statements: any[] = [];
     public functions: any[] = [];
@@ -675,10 +680,12 @@ export class CProgram implements IScope {
         this.symbolsHelper = new SymbolsHelper(this.typeChecker, this.typeHelper);
         this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
 
-        let nodes;
-        for (let source of tsProgram.getSourceFiles()) {
-            nodes = source.getChildren();
-            let i = 0;
+        const sources = tsProgram.getSourceFiles().filter(s => !s.isDeclarationFile);
+
+        let nodes = [];
+        for (let source of sources) {
+            let i = nodes.length;
+            nodes = nodes.concat(source.getChildren());
             while (i < nodes.length)
                 nodes.push.apply(nodes, nodes[i++].getChildren());
         }
@@ -713,7 +720,7 @@ export class CProgram implements IScope {
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
-        for (let source of tsProgram.getSourceFiles()) {
+        for (let source of sources) {
             for (let s of source.statements) {
                 if (s.kind == ts.SyntaxKind.FunctionDeclaration)
                     this.functions.push(new CFunction(this, <any>s));

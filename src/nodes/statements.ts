@@ -336,3 +336,24 @@ export class CBlock implements IScope {
     }
 }
 
+@CodeTemplate(`
+{#if !externalInclude}
+    /* importing other TS files is not yet supported: {nodeText} */\n
+{/if}`, ts.SyntaxKind.ImportDeclaration)
+export class CImport {
+    public externalInclude: boolean;
+    public moduleName: string;
+    public nodeText: string;
+    constructor(scope: IScope, node: ts.ImportDeclaration) {
+        let moduleName = (<ts.StringLiteral>node.moduleSpecifier).text;
+        this.externalInclude = moduleName.indexOf('ts2c-target') == 0;
+        if (this.externalInclude) {
+            moduleName = moduleName.split('/').slice(1).join('/');
+            if (moduleName.slice(-6) == "/index")
+                moduleName = moduleName.slice(0, -6);
+            if (scope.root.includes.indexOf(moduleName) == -1)
+                scope.root.includes.push(moduleName);
+        }
+        this.nodeText = node.getText();
+    }
+}
