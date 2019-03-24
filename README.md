@@ -70,7 +70,7 @@ Project status
 
 __**Work in progress:**__ it works, but only about **50% of ES3** syntax is currently supported.
 
-Notable NOT supported features include, for example: float numbers (all numbers are `int16_t` currently), `this`, `new`, `function` inside expression, `typeof`, `Date`, `Math`, etc.
+Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `this`, `new`, `function` inside expression, `typeof`, `Date`, `Math`, etc.
 
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
 
@@ -102,9 +102,13 @@ resources to your program.
 Of course, transpiler cannot map 100% of the JavaScript language and some things are have to be left out,
 notably `eval`. Still, current conclusion is, that it is possible to transpile most of the language.
 
-These are some examples of planned target platforms for using with TS2C:
+Targets
+-------
+
+Planned transpilation targets:
+
+ - [ESP32](https://en.wikipedia.org/wiki/ESP32) - work in progress, see project [ESP-IDF target for TS2C](https://github.com/andrei-markeev/ts2c-target-esp-idf)
  - [ESP8266](https://en.wikipedia.org/wiki/ESP8266)
- - [Pebble watch](https://en.wikipedia.org/wiki/Pebble_(watch))
  - [Atmel AVR](https://en.wikipedia.org/wiki/Atmel_AVR#Basic_families) family (used in Arduino boards)
  - [TI MSP430](https://en.wikipedia.org/wiki/TI_MSP430) family
 
@@ -112,12 +116,28 @@ These are some examples of planned target platforms for using with TS2C:
 Usage
 -----
 
+**Command line:**
+```
+npm install -g ts2c
+```
+
 Syntax:
 ```sh
 ts2c <files to transpile>
 ```
 
-In browser (also see **index.html** file):
+**Node.js:**
+```
+npm install ts2c
+```
+
+```javascript
+const ts2c = require("ts2c");
+const cCode = ts2c.transpile("console.log('Hello world!')");
+console.log(cCode);
+```
+
+**In browser:**
 ```html
 <script src="https://unpkg.com/typescript"></script>
 <script src="ts2c.bundle.js"></script>
@@ -127,9 +147,3 @@ In browser (also see **index.html** file):
 </script>
 ```
 
-In Node.js:
-```javascript
-const ts2c = require("ts2c");
-const cCode = ts2c.transpile("console.log('Hello world!')");
-console.log(cCode);
-```
