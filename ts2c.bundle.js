@@ -1529,7 +1529,7 @@ var CImport = /** @class */ (function () {
         this.nodeText = node.getText();
     }
     CImport = __decorate([
-        template_1.CodeTemplate("\n{#if !externalInclude}\n    /* importing other TS files is not yet supported: {nodeText} */\n\n{/if}", ts.SyntaxKind.ImportDeclaration)
+        template_1.CodeTemplate("", ts.SyntaxKind.ImportDeclaration)
     ], CImport);
     return CImport;
 }());
