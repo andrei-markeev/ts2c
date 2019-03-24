@@ -86,7 +86,7 @@ export class CAssignment {
         if (argumentExpression) {
             if (type instanceof StructType && typeof argumentExpression === 'string')
                 argType = type.properties[argumentExpression];
-            else if (type instanceof ArrayType)
+            else if (type instanceof ArrayType || type instanceof DictType)
                 argType = type.elementType;
             argAccessor = new CSimpleElementAccess(scope, type, accessor, argumentExpression);
         }

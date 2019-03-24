@@ -1,0 +1,21 @@
+{
+  "tagName": "",
+  "attrs": "{}",
+  "childNodes": [
+    {
+      "tagName": "html",
+      "attrs": "attrs",
+      "childNodes": [
+        {
+          "tagName": "body",
+          "attrs": "attrs",
+          "childNodes": [],
+          "innerHTML": ""
+        }
+      ],
+      "innerHTML": "<body></body>"
+    }
+  ],
+  "parentNode": null,
+  "innerHTML": "<html><body></body></html>"
+}

@@ -67,20 +67,30 @@ class CArrayLiteralExpression {
         {initializers}
     {/if}
 {/statements}
-{expression}`, ts.SyntaxKind.ObjectLiteralExpression)
+{#if universalWrapper}
+    js_var_from_dict({expression})
+{#else}
+    {expression}
+{/if}`, ts.SyntaxKind.ObjectLiteralExpression)
 class CObjectLiteralExpression {
     public expression: string = '';
     public isStruct: boolean;
     public isDict: boolean;
+    public universalWrapper: boolean = false;
     public allocator: CVariableAllocation;
     public initializers: CAssignment[];
     constructor(scope: IScope, node: ts.ObjectLiteralExpression) {
         let type = scope.root.typeHelper.getCType(node);
+        if (type === UniversalVarType) {
+            type = new DictType(UniversalVarType);
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_dict = true;
+        }
         this.isStruct = type instanceof StructType;
         this.isDict = type instanceof DictType;
         if (this.isStruct || this.isDict) {
             let varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-            
+
             if (!scope.root.memoryManager.variableWasReused(node))
                 scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
             

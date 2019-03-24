@@ -43,11 +43,7 @@ export class MemoryManager {
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
-                    {
-                        let type = this.typeHelper.getCType(node);
-                        if (type && (type instanceof StructType || type instanceof DictType))
-                            this.scheduleNodeDisposal(node);
-                    }
+                    this.scheduleNodeDisposal(node);
                     break;
                 case ts.SyntaxKind.BinaryExpression:
                     {

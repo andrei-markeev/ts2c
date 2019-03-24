@@ -91,14 +91,10 @@ export class StructType {
 /** Type that represents JS object with dynamic properties (implemented as dynamic dictionary) */
 export class DictType {
     public getText() {
-        let elementType = this.elementType;
-        let elementTypeText;
-        if (typeof elementType === 'string')
-            elementTypeText = elementType;
+        if (this.elementType == UniversalVarType)
+            return "struct dict_js_var_t *";
         else
-            elementTypeText = elementType.getText();
-
-        return "DICT(" + elementTypeText + ")";
+            return "DICT(" + (typeof this.elementType === "string" ? this.elementType : this.elementType.getText()) + ")";
     }
     public getBodyText() {
         return "{" + getTypeBodyText(this.elementType) + "}";

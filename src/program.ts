@@ -58,6 +58,8 @@ class HeaderFlags {
     int16_t: boolean = false;
     uint16_t: boolean = false;
     js_var: boolean = false;
+    js_var_array: boolean = false;
+    js_var_dict: boolean = false;
     js_var_from: boolean = false;
     js_var_from_str: boolean = false;
     js_var_from_int16_t: boolean = false;
@@ -200,7 +202,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.dict}
+{#if headerFlags.dict || headerFlags.js_var_dict}
     #define DICT(T) struct { \\
         ARRAY(const char *) index; \\
         ARRAY(T) values; \\
@@ -407,11 +409,26 @@ class HeaderFlags {
 {/if}
 
 {#if headerFlags.js_var || headerFlags.str_to_int16_t}
-    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING};
+    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_DICT};
     struct js_var {
         enum js_var_type type;
         int16_t number;
         void *data;
+    };
+{/if}
+
+{#if headerFlags.js_var_array || headerFlags.js_var_dict}
+    struct array_js_var_t {
+        int16_t size;
+        int16_t capacity;
+        struct js_var *data;
+    };
+{/if}
+
+{#if headerFlags.js_var_dict}
+    struct dict_js_var_t {
+        struct array_string_t *index;
+        struct array_js_var_t *values;
     };
 {/if}
 
@@ -449,6 +466,15 @@ class HeaderFlags {
         struct js_var v;
         v.type = JS_VAR_STRING;
         v.data = (void *)s;
+        return v;
+    }
+{/if}
+
+{#if headerFlags.js_var_dict}
+    struct js_var js_var_from_dict(struct dict_js_var_t *dict) {
+        struct js_var v;
+        v.type = JS_VAR_DICT;
+        v.data = (void *)dict;
         return v;
     }
 {/if}
@@ -500,6 +526,8 @@ class HeaderFlags {
             return v.number ? "true" : "false";
         else if (v.type == JS_VAR_STRING)
             return (const char *)v.data;
+        else if (v.type == JS_VAR_DICT)
+            return "[object Object]";
         else if (v.type == JS_VAR_NAN)
             return "NaN";
         else if (v.type == JS_VAR_NULL)
@@ -525,9 +553,7 @@ class HeaderFlags {
             result.number = v.number;
         else if (v.type == JS_VAR_STRING)
             return str_to_int16_t((const char *)v.data);
-        else if (v.type == JS_VAR_NAN)
-            result.type = JS_VAR_NAN;
-        else if (v.type == JS_VAR_UNDEFINED)
+        else if (v.type != JS_VAR_NULL)
             result.type = JS_VAR_NAN;
 
         return result;
