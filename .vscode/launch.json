@@ -7,8 +7,15 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/js_var/typeof.ts"],
+            "args": ["tests/js_var/void.ts"],
             "cwd": "${workspaceRoot}",
+            "sourceMaps": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Calc conformance",
+            "program": "${workspaceFolder}/calc_conformance.js",
             "sourceMaps": true
         }
     ]

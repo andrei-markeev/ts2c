@@ -16,7 +16,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **`for` `of`**
  - [x] **`for` `in`**
  - [x] **`continue`**
- - [x] **`break`** _(partial: labels not supported)_
+ - [x] **`break`**
  - [x] **`return`**
  - [x] **`switch`**
  - [ ] ~~`with`~~  _(will not be implemented in v1)_
