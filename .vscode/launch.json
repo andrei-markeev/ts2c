@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/esp-idf/hello-world.ts"],
+            "args": ["tests/statements/import.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

@@ -4,7 +4,6 @@ import {CProgram, IScope} from '../program';
 import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression} from './expressions';
-import {CString} from './literals';
 import {CElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 
@@ -336,10 +335,7 @@ export class CBlock implements IScope {
     }
 }
 
-@CodeTemplate(`
-{#if !externalInclude}
-    /* importing other TS files is not yet supported: {nodeText} */\n
-{/if}`, ts.SyntaxKind.ImportDeclaration)
+@CodeTemplate(``, ts.SyntaxKind.ImportDeclaration)
 export class CImport {
     public externalInclude: boolean;
     public moduleName: string;
