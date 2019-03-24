@@ -286,6 +286,7 @@ export class TypeHelper {
             return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType : null;
         }))
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
+        addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);

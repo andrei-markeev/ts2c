@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/bin/ts2c",
             "stopOnEntry": false,
-            "args": ["tests/statements/import.ts"],
+            "args": ["tests/js_var/typeof.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

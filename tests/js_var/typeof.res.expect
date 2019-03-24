@@ -1,0 +1,7 @@
+typeof true === typeof false
+typeof null === "object"
+undefined
+object something
+typeof y: object
+typeof z: object
+typeof z.prop1: string

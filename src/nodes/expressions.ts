@@ -2,7 +2,7 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType} from '../types';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType} from '../types';
 import {CVariable, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
 
@@ -290,5 +290,38 @@ class CGroupingExpression {
     public expression: CExpression;
     constructor(scope: IScope, node: ts.ParenthesizedExpression) {
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+    }
+}
+
+@CodeTemplate(`
+{#if isUniversalVar}
+    js_var_typeof({expression})
+{#elseif isString}
+    "string"
+{#elseif isNumber}
+    "number"
+{#elseif isBoolean}
+    "number"
+{#else}
+    "object"
+{/if}`, ts.SyntaxKind.TypeOfExpression)
+class CTypeOf {
+    expression: CExpression;
+    isUniversalVar: boolean;
+    isNumber: boolean;
+    isBoolean: boolean;
+    isString: boolean;
+    constructor(scope: IScope, node: ts.TypeOfExpression) {
+        const type = scope.root.typeHelper.getCType(node.expression);
+        this.isUniversalVar = type === UniversalVarType;
+        this.isString = type === StringVarType;
+        this.isNumber = type === NumberVarType;
+        this.isBoolean = type === BooleanVarType;
+        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+
+        if (type == UniversalVarType) {
+            scope.root.headerFlags.js_var = true;
+            scope.root.headerFlags.js_var_typeof = true;
+        }
     }
 }

@@ -52,7 +52,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [ ] Unary operators
     - [ ] `delete`
     - [ ] `void`
-    - [ ] `typeof`
+    - [x] **`typeof`**
     - [x] **Prefix increment operator `++`** _(only numbers)_
     - [x] **Prefix decrement operator `--`** _(only numbers)_
     - [x] **Unary `+`**
