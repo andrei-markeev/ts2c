@@ -51,7 +51,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`++`**
  - [ ] Unary operators
     - [ ] `delete`
-    - [ ] `void`
+    - [x] **`void`**
     - [x] **`typeof`**
     - [x] **Prefix increment operator `++`** _(only numbers)_
     - [x] **Prefix decrement operator `--`** _(only numbers)_
@@ -60,12 +60,12 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Bitwise NOT `~`** _(only numbers)_
     - [x] **Logical NOT `!`**
  - [x] **Multiplicative operators**
-    - [x] **`*`** _(only numbers)_
-    - [x] **`/`** _(only numbers)_
-    - [x] **`%`** _(only numbers)_
+    - [x] **`*`**
+    - [x] **`/`**
+    - [x] **`%`**
  - [x] **Additive operators**
-    - [x] **`+`** _(partial: number+number, string+number, string+string)_
-    - [x] **`-`** _(only numbers)_
+    - [x] **`+`**
+    - [x] **`-`**
  - [x] **Bitwise shift operators**
     - [x] **`<<`** _(only numbers)_
     - [x] **`>>`** _(only numbers)_
@@ -87,8 +87,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`|`** _(only numbers)_
     - [x] **`^`** _(only numbers)_
  - [x] **Binary logical operators**
-    - [x] **`&&`**
-    - [x] **`||`**
+    - [x] **`&&`** _(partial: results are boolean)_
+    - [x] **`||`** _(partial: results are boolean)_
  - [x] **Conditional operator `?` `:`**
  - [x] **Assignment operators**
     - [x] **Simple assignment `=`**

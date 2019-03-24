@@ -325,3 +325,13 @@ class CTypeOf {
         }
     }
 }
+
+@CodeTemplate(`js_var_to_undefined({expression})`, ts.SyntaxKind.VoidExpression)
+class CVoid {
+    public expression: CExpression;
+    constructor(scope: IScope, node: ts.TypeOfExpression) {
+        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+        scope.root.headerFlags.js_var = true;
+        scope.root.headerFlags.js_var_to_undefined = true;
+    }
+}

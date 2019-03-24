@@ -64,8 +64,9 @@ class HeaderFlags {
     js_var_from_uint8_t: boolean = false;
     js_var_to_str: boolean = false;
     js_var_to_number: boolean = false;
+    js_var_to_undefined: boolean = false;
+    js_var_typeof: boolean = false;
     js_var_compute: boolean = false;
-    js_var_typeof: boolean;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;
@@ -532,6 +533,15 @@ class HeaderFlags {
         return result;
     }
 
+{/if}
+
+{#if headerFlags.js_var_to_undefined}
+    struct js_var js_var_to_undefined(void *value) {
+        struct js_var v;
+        v.type = JS_VAR_UNDEFINED;
+        v.data = NULL;
+        return v;
+    }
 {/if}
 
 {#if headerFlags.js_var_typeof}

@@ -286,6 +286,8 @@ export class TypeHelper {
             return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType : null;
         }))
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
+        addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
+        addEquality(ts.isVoidExpression, n => n.expression, type(PointerVarType));
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
     
         // fields
@@ -468,6 +470,8 @@ export class TypeHelper {
     private generateStructure(tsType: ts.Type): StructType {
         let userStructInfo = {};
         for (let prop of tsType.getProperties()) {
+            if (prop.name == "prototype")
+                continue;
             let declaration = <ts.NamedDeclaration>prop.valueDeclaration;
             let propTsType = this.typeChecker.getTypeOfSymbolAtLocation(prop, declaration);
             let propType = this.convertType(propTsType, <ts.Identifier>declaration.name) || PointerVarType;
@@ -508,11 +512,11 @@ export class TypeHelper {
 
         else if (type1 == VoidType)
             return type2_result;
-        else if (type1 == PointerVarType)
-            return type2_result;
-
         else if (type2 == VoidType)
             return type1_result;
+
+        else if (type1 == PointerVarType)
+            return type2_result;
         else if (type2 == PointerVarType)
             return type1_result;
 
