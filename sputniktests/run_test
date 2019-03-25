@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+
+const { exec } = require('child_process');
+const { readFileSync } = require('fs');
+
+runTest(process.argv[2]).then(result => {
+    console.log(result);
+    process.exit(0);
+});
+
+
+async function runTest(testFile) {
+    const isNegative = readFileSync(testFile, "utf8").indexOf("@negative") > -1;
+    const { ERROR, PASS } = isNegative ? { ERROR: "PASS: (negative)", PASS: "ERROR: (negative)" } : { ERROR: "ERROR:", PASS: "PASS:" };
+    
+    let res = await execAsync(`../bin/ts2c --sputnik ${testFile}`);
+    if (res.err)
+        return `${ERROR} cannot transpile ${testFile}`;
+    
+    const testFile_c = testFile.replace(/\.js$/, ".c");
+    const testFile_elf = testFile.replace(/\.js$/, ".elf");
+    res = await execAsync(`gcc ${testFile_c} -ansi -pedantic -Wall -g -o ${testFile_elf}`);
+    if (res.err) {
+        console.error(res.stderr);
+        return `${ERROR} cannot compile ${testFile_c}`;
+    }
+
+    res = await execAsync(`./${testFile_elf}`);
+    if (res.err)
+        return `${ERROR} cannot execute ${testFile_elf}`;
+    if (res.stdout)
+        return `${ERROR} ${res.stdout.split('\n').length} errors found when validating ${testFile}`;
+
+    return `${PASS} ${testFile}`;
+}
+
+async function execAsync(cmd) {
+    return new Promise(resolve => exec(cmd, (err, stdout, stderr) => {
+        resolve({ err, stdout, stderr });
+    }));
+}
