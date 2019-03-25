@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 const { exec } = require('child_process');
-const { readFileSync } = require('fs');
+const { readFileSync, writeFileSync } = require('fs');
+const { transpile } = require('../ts2c');
 
 runTest(process.argv[2]).then(result => {
     console.log(result);
@@ -10,20 +11,25 @@ runTest(process.argv[2]).then(result => {
 
 
 async function runTest(testFile) {
-    const isNegative = readFileSync(testFile, "utf8").indexOf("@negative") > -1;
+    const testFileContents = readFileSync(testFile, "utf8")
+        .replace(/\$ERROR\(/g, "console.log(")
+        .replace(/\$FAIL\(/g, "console.log(")
+        .replace(/eval\(("[^\n\r]+")\)/g, (m, m1) => eval(m1));
+    const isNegative = testFileContents.indexOf("@negative") > -1;
     const { ERROR, PASS } = isNegative ? { ERROR: "PASS: (negative)", PASS: "ERROR: (negative)" } : { ERROR: "ERROR:", PASS: "PASS:" };
-    
-    let res = await execAsync(`../bin/ts2c --sputnik ${testFile}`);
-    if (res.err)
-        return `${ERROR} cannot transpile ${testFile}`;
-    
+
     const testFile_c = testFile.replace(/\.js$/, ".c");
-    const testFile_elf = testFile.replace(/\.js$/, ".elf");
-    res = await execAsync(`gcc ${testFile_c} -ansi -pedantic -Wall -g -o ${testFile_elf}`);
-    if (res.err) {
-        console.error(res.stderr);
-        return `${ERROR} cannot compile ${testFile_c}`;
+    try {
+        const cCode = transpile(testFileContents);
+        writeFileSync(testFile_c, cCode);
+    } catch(e) {
+        return `${ERROR} cannot transpile ${testFile}`;
     }
+    
+    const testFile_elf = testFile.replace(/\.js$/, ".elf");
+    let res = await execAsync(`gcc ${testFile_c} -ansi -pedantic -Wall -g -o ${testFile_elf}`);
+    if (res.err)
+        return `${ERROR} cannot compile ${testFile_c}`;
 
     res = await execAsync(`./${testFile_elf}`);
     if (res.err)
