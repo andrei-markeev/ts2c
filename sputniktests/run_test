@@ -19,10 +19,14 @@ async function runTest(testFile) {
     const { ERROR, PASS } = isNegative ? { ERROR: "PASS: (negative)", PASS: "ERROR: (negative)" } : { ERROR: "ERROR:", PASS: "PASS:" };
 
     const testFile_c = testFile.replace(/\.js$/, ".c");
+    const log = console.log;
+    console.log = () => {};
     try {
         const cCode = transpile(testFileContents);
         writeFileSync(testFile_c, cCode);
+        console.log = log;
     } catch(e) {
+        console.log = log;
         return `${ERROR} cannot transpile ${testFile}`;
     }
     
