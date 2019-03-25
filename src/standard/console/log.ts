@@ -5,13 +5,9 @@ import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import { StandardCallResolver, IResolver } from '../../standard';
 
-declare var global;
-
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (global && global.ts2cOptions.sputnik && call.expression.getText() == "$ERROR")
-            return true;
         if (!ts.isPropertyAccessExpression(call.expression))
             return false;
         return call.expression.getText() == "console.log";

@@ -2,19 +2,36 @@
 var path = require('path');
 var fs = require('fs');
 var ts = require('typescript');
-var ts2c = require(path.join(__dirname, "..", "ts2c.js"));
 var ts2cprogram = require(path.join(__dirname, "../src/", "program.js"));
 
 if (process.argv.length < 2)
     process.exit();
 
 var fileNames = [], params = {};
-process.argv.slice(2).forEach(p => p.indexOf('--') == 0 ? params[p.slice(2)] = true: fileNames.push(p));
+process.argv.slice(2).forEach(p => p.indexOf('--') == 0 ? params[p.slice(2)] = true : fileNames.push(p));
 
-var program = ts.createProgram(fileNames, { noLib: true, allowJs: true });
+var sputnikCompilerHost = {
+    getSourceFile: (fileName, target) => {
+        let source = fs.readFileSync(fileName, "utf8");
+        source = source
+            .replace(/\$ERROR\(/g, "console.log(")
+            .replace(/eval\(("[^\n\r]+")\)/g, (m, m1) => eval(m1));
+        return ts.createSourceFile(fileName, source, ts.ScriptTarget.ES5, true);
+    },
+    writeFile: (name, text, writeByteOrderMark) => { },
+    getDefaultLibFileName: () => { return "lib.d.ts"; },
+    useCaseSensitiveFileNames: () => { return false; },
+    getCanonicalFileName: fileName => fileName,
+    getCurrentDirectory: () => "",
+    getDirectories: () => [],
+    getNewLine: () => "\n",
+    fileExists: fileName => fileNames.indexOf(fileName) > 0,
+    readFile: fileName => fileNames.indexOf(fileName) > 0 ? getSourceFile(fileName) : null,
+    directoryExists: dirName => dirName == "",
+};
+var program = ts.createProgram(fileNames, { noLib: true, allowJs: true }, params.sputnik ? sputnikCompilerHost : null);
 
-global.ts2cOptions = params;
-var output = new ts2cprogram.CProgram(program, params)["resolve"]();
+var output = new ts2cprogram.CProgram(program)["resolve"]();
 fs.writeFileSync(fileNames[0].slice(0, -3) + '.c', output);
 
 process.exit();
