@@ -2,14 +2,16 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType, UniversalVarType} from '../../types';
 import {IScope} from '../../program';
-import {CExpression} from '../../nodes/expressions';
-import {CCallExpression} from '../../nodes/call';
 import {CVariable} from '../../nodes/variable';
 import { StandardCallResolver, IResolver } from '../../standard';
+
+declare var global;
 
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
+        if (global && global.ts2cOptions.sputnik && call.expression.getText() == "$ERROR")
+            return true;
         if (!ts.isPropertyAccessExpression(call.expression))
             return false;
         return call.expression.getText() == "console.log";

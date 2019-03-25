@@ -9,4 +9,5 @@
 .vscode/c_cpp_properties.json
 node_modules
 tests/coverage
+sputniktests/results.txt
 ts2c.bundle.js
