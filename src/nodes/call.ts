@@ -19,16 +19,11 @@ export class CCallExpression {
         this.funcName = call.expression.getText();
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
 
-        if (this.standardCall) {
+        if (this.standardCall)
             return;
-        }
 
         this.arguments = call.arguments.map(a => {
             return CodeTemplateFactory.createForNode(scope, a);
         });
-        if (call.expression.kind == ts.SyntaxKind.Identifier && this.funcName == "parseInt") {
-            scope.root.headerFlags.int16_t = true;
-            scope.root.headerFlags.parse_int16_t = true;
-        }
     }
 }

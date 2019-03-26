@@ -369,15 +369,24 @@ class CVoid {
 @CodeTemplate(`
 {#if universalWrapper}
     js_var_to_bool({expression})
+{#elseif isString && expressionIsIdentifier}
+    *{expression}
+{#elseif isString}
+    *({expression})
 {#else}
     {expression}
 {/if}`)
 export class CCondition {
     public universalWrapper: boolean = false;
+    public isString: boolean = false;
     public expression: CExpression;
+    public expressionIsIdentifier: boolean = false;
     constructor(scope: IScope, node: ts.Expression) {
         this.expression = CodeTemplateFactory.createForNode(scope, node);
-        if (scope.root.typeHelper.getCType(node) == UniversalVarType) {
+        this.expressionIsIdentifier = ts.isIdentifier(node);
+        const type = scope.root.typeHelper.getCType(node);
+        this.isString = type == StringVarType;
+        if (type == UniversalVarType) {
             this.universalWrapper = true;
             scope.root.headerFlags.js_var_to_bool = true;
         }
