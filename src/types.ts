@@ -285,6 +285,7 @@ export class TypeHelper {
             return equality ? BooleanVarType : universalExpr ? UniversalVarType : null;
         }))
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
+        addEquality(ts.isParenthesizedExpression, n => n, n => n.expression);
         addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
         addEquality(ts.isVoidExpression, n => n.expression, type(PointerVarType));
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));

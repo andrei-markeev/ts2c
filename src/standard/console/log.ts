@@ -75,7 +75,7 @@ class CConsoleLog {
                     prefix: (i > 0 && j == 0 ? " " : "") + prefix,
                     postfix: postfix + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
                 };
-                printfs.push(new CPrintf(scope, node, accessor, type, options));
+                printfs.push(new CPrintf(scope, node, accessor, scope.root.typeHelper.getCType(node), options));
             }
         }
         this.printfCalls = printfs.slice(0, -1);
@@ -86,10 +86,9 @@ class CConsoleLog {
 
 function processBinaryExpressions(scope: IScope, printNode: ts.Node) {
     let type = scope.root.typeHelper.getCType(printNode);
-    if (type == StringVarType && printNode.kind == ts.SyntaxKind.BinaryExpression) {
+    if (type == StringVarType && ts.isBinaryExpression(printNode)) {
         let binExpr = <ts.BinaryExpression>printNode;
-        if (scope.root.typeHelper.getCType(binExpr.left) == StringVarType
-            && scope.root.typeHelper.getCType(binExpr.right) == StringVarType)
+        if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken)
         {
             let left = processBinaryExpressions(scope, binExpr.left);
             let right = processBinaryExpressions(scope, binExpr.right);

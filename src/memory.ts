@@ -58,7 +58,8 @@ export class MemoryManager {
                             this.needsGCMainForJsVar = true;
 
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
-                        if (plusOperator && (leftType == StringVarType || rightType == StringVarType))
+                        const isInConsoleLog = ts.isCallExpression(binExpr.parent) && binExpr.parent.expression.getText() == "console.log";
+                        if (plusOperator && !isInConsoleLog && (leftType == StringVarType || rightType == StringVarType))
                             this.scheduleNodeDisposal(binExpr, false);
                             
                     }
