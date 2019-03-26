@@ -51,10 +51,11 @@ export class MemoryManager {
                         const leftType = this.typeHelper.getCType(binExpr.left);
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
-                        const isEqualityOp = binExpr.operatorToken.kind == ts.SyntaxKind.EqualsEqualsToken || binExpr.operatorToken.kind == ts.SyntaxKind.EqualsEqualsEqualsToken
-                            || binExpr.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsToken || binExpr.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
+                        const ignoreOps = [ ts.SyntaxKind.EqualsToken,
+                            ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+                            ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken ];
             
-                        if (!isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType))
+                        if (ignoreOps.indexOf(binExpr.operatorToken.kind) == -1 && (leftType == UniversalVarType || rightType == UniversalVarType))
                             this.needsGCMainForJsVar = true;
 
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
