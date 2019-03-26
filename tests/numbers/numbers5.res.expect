@@ -1,0 +1,5 @@
+true
+Number.NaN != NaN, that's fine.
+false
+NaN
+good!

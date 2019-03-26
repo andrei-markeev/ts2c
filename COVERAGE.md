@@ -78,10 +78,10 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [ ] `instanceof`
     - [ ] `in`
  - [x] **Equality operators**
-    - [x] **`==`** _(partial: number+number, string+number, string+string)_
-    - [x] **`!=`** _(partial: number+number, string+number, string+string)_
-    - [x] **`===`** _(partial: number+number, string+string)_
-    - [x] **`!==`** _(partial: number+number, string+string)_
+    - [x] **`==`**
+    - [x] **`!=`**
+    - [x] **`===`**
+    - [x] **`!==`**
  - [x] **Binary bitwise operators**
     - [x] **`&`** _(only numbers)_
     - [x] **`|`** _(only numbers)_
@@ -176,10 +176,11 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] valueOf
  - [ ] Number
+     - [x] **constructor as function**
      - [ ] new
      - [ ] MAX_VALUE
      - [ ] MIN_VALUE
-     - [ ] NaN
+     - [x] **NaN**
      - [ ] NEGATIVE_INFINITY
      - [ ] POSITIVE_INFINITY
      - [ ] toString

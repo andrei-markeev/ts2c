@@ -3,7 +3,7 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
 import {ArrayType, NumberVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
-import {CExpression} from './expressions';
+import {CExpression, CCondition} from './expressions';
 import {CElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 
@@ -47,7 +47,7 @@ export class CIfStatement {
     public elseBlock: CBlock;
     public hasElseBlock: boolean;
     constructor(scope: IScope, node: ts.IfStatement) {
-        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.condition = new CCondition(scope, node.expression);
         this.thenBlock = new CBlock(scope, node.thenStatement);
         this.hasElseBlock = !!node.elseStatement;
         this.elseBlock = this.hasElseBlock && new CBlock(scope, node.elseStatement);
@@ -136,7 +136,7 @@ export class CWhileStatement {
     public block: CBlock;
     constructor(scope: IScope, node: ts.WhileStatement) {
         this.block = new CBlock(scope, node.statement);
-        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.condition = new CCondition(scope, node.expression);
     }
 }
 
@@ -149,7 +149,7 @@ export class CDoWhileStatement {
     public block: CBlock;
     constructor(scope: IScope, node: ts.WhileStatement) {
         this.block = new CBlock(scope, node.statement);
-        this.condition = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.condition = new CCondition(scope, node.expression);
     }
 }
 
@@ -174,7 +174,7 @@ export class CForStatement {
         }
         else
             this.init = CodeTemplateFactory.createForNode(scope, node.initializer);
-        this.condition = CodeTemplateFactory.createForNode(scope, node.condition);
+        this.condition = new CCondition(scope, node.condition);
         this.increment = CodeTemplateFactory.createForNode(scope, node.incrementor);
     }
 }

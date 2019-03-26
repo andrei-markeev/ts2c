@@ -2,19 +2,11 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType} from '../types';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType, ArrayType, StructType, DictType} from '../types';
 import {CVariable, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
 
 export interface CExpression { }
-
-const js_var_operator_map = {
-    [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
-    [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
-    [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
-    [ts.SyntaxKind.PlusToken]: "JS_VAR_PLUS",
-    [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
-};
 
 @CodeTemplate(`
 {#statements}
@@ -46,7 +38,7 @@ const js_var_operator_map = {
 {#elseif operator}
     {left} {operator} {right}
 {#elseif replacedWithCall}
-    {call}({left}, {right}){callCondition}
+    {call}({left}, {right}{callAddArgs}){callCondition}
 {#elseif replacedWithVarAssignment}
     ({left} = {replacementVarName})
 {#elseif replacedWithVar}
@@ -62,6 +54,7 @@ export class CBinaryExpression {
     public replacedWithCall: boolean = false;
     public call: string;
     public callCondition: string;
+    public callAddArgs: string = "";
     public replacedWithVar: boolean = false;
     public replacedWithVarAssignment: boolean = false;
     public replacementVarName: string = null;
@@ -107,6 +100,9 @@ export class CBinaryExpression {
 
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
+
+        const isEqualityOp = operatorKind == ts.SyntaxKind.EqualsEqualsToken || operatorKind == ts.SyntaxKind.EqualsEqualsEqualsToken
+            || operatorKind == ts.SyntaxKind.ExclamationEqualsToken || operatorKind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
 
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
@@ -208,16 +204,50 @@ export class CBinaryExpression {
             }
 
         }
-        else if (leftType == UniversalVarType || rightType == UniversalVarType) {
+        else if (isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType)) {
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == FALSE'];
+            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['js_var_eq|, FALSE', ' == FALSE'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == TRUE'];
+            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['js_var_eq|, FALSE', ' == TRUE'];
+            this.left = new CAsUniversalVar(scope, node.left, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, node.right, this.right, rightType);
+            scope.root.headerFlags.js_var_eq = true;
+        }
+        else if (!isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType)) {
+
+            const js_var_operator_map = {
+                [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
+                [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
+                [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
+                [ts.SyntaxKind.PlusToken]: "JS_VAR_PLUS",
+                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
+            };
+            
             this.computeOperation = js_var_operator_map[operatorKind];
             this.left = new CAsUniversalVar(scope, node.left, this.left, leftType);
             this.right = new CAsUniversalVar(scope, node.right, this.right, rightType);
             scope.root.headerFlags.js_var_compute = true;
+
+        } else if (leftType instanceof StructType || leftType instanceof ArrayType || leftType instanceof DictType
+                || rightType instanceof StructType || rightType instanceof ArrayType || rightType instanceof DictType) {
+
+            operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
+            operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
+            operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
+            operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
+
+            if (leftType != rightType) {
+                this.expression = "FALSE";
+                scope.root.headerFlags.bool = true;
+            }
+
         }
         this.operator = operatorMap[operatorKind];
         if (callReplaceMap[operatorKind]) {
             this.replacedWithCall = true;
             [this.call, this.callCondition] = callReplaceMap[operatorKind];
+            if (this.call.indexOf('|') > -1)
+                [this.call, this.callAddArgs] = this.call.split('|');
         }
         this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
 
@@ -333,5 +363,23 @@ class CVoid {
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         scope.root.headerFlags.js_var = true;
         scope.root.headerFlags.js_var_to_undefined = true;
+    }
+}
+
+@CodeTemplate(`
+{#if universalWrapper}
+    js_var_to_bool({expression})
+{#else}
+    {expression}
+{/if}`)
+export class CCondition {
+    public universalWrapper: boolean = false;
+    public expression: CExpression;
+    constructor(scope: IScope, node: ts.Expression) {
+        this.expression = CodeTemplateFactory.createForNode(scope, node);
+        if (scope.root.typeHelper.getCType(node) == UniversalVarType) {
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_to_bool = true;
+        }
     }
 }

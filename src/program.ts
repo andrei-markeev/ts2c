@@ -39,6 +39,8 @@ import './standard/string/indexOf';
 import './standard/string/lastIndexOf';
 import './standard/string/match';
 
+import './standard/number/number';
+
 import './standard/console/log';
 
 export interface IScope {
@@ -67,7 +69,9 @@ class HeaderFlags {
     js_var_to_str: boolean = false;
     js_var_to_number: boolean = false;
     js_var_to_undefined: boolean = false;
+    js_var_to_bool: boolean = false;
     js_var_typeof: boolean = false;
+    js_var_eq: boolean;
     js_var_compute: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
@@ -99,7 +103,7 @@ class HeaderFlags {
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.str_substring
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict
-    || headerFlags.js_var_compute || headerFlags.js_var_from_str}
+    || headerFlags.js_var_compute || headerFlags.js_var_from_str || headerFlags.js_var_eq}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
@@ -124,7 +128,7 @@ class HeaderFlags {
     {includes => #include <{this}>\n}
 {/if}
 
-{#if headerFlags.bool}
+{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq }
     #define TRUE 1
     #define FALSE 0
 {/if}
@@ -479,7 +483,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}
     struct js_var str_to_int16_t(const char * str) {
         struct js_var v;
         const char *p = str;
@@ -511,7 +515,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_compute || headerFlags.js_var_to_str}
+{#if headerFlags.js_var_to_str || headerFlags.js_var_compute}
     const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
@@ -539,7 +543,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_number || headerFlags.js_var_compute}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}
 
     struct js_var js_var_to_number(struct js_var v)
     {
@@ -557,6 +561,24 @@ class HeaderFlags {
             result.type = JS_VAR_NAN;
 
         return result;
+    }
+
+{/if}
+
+{#if headerFlags.js_var_to_bool}
+
+    uint8_t js_var_to_bool(struct js_var v)
+    {
+        if (v.type == JS_VAR_INT16)
+            return v.number != 0;
+        else if (v.type == JS_VAR_BOOL)
+            return v.number;
+        else if (v.type == JS_VAR_STRING)
+            return *((const char *)v.data) != 0;
+        else if (v.type == JS_VAR_NULL || v.type == JS_VAR_UNDEFINED || v.type == JS_VAR_NAN)
+            return FALSE;
+        else
+            return TRUE;
     }
 
 {/if}
@@ -590,6 +612,37 @@ class HeaderFlags {
 
 {#if headerFlags.gc_main}
     static ARRAY(void *) gc_main;
+{/if}
+
+{#if headerFlags.js_var_eq}
+uint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)
+{
+    if (left.type == right.type) {
+        if (left.type == JS_VAR_NULL || left.type == JS_VAR_UNDEFINED)
+            return TRUE;
+        else if (left.type == JS_VAR_NAN)
+            return FALSE;
+        else if (left.type == JS_VAR_INT16 || left.type == JS_VAR_BOOL)
+            return left.number == right.number ? TRUE : FALSE;
+        else if (left.type == JS_VAR_STRING)
+            return !strcmp((const char *)left.data, (const char *)right.data) ? TRUE : FALSE;
+        else
+            return left.data == right.data;
+    } else if (!strict) {
+        if ((left.type == JS_VAR_NULL && right.type == JS_VAR_UNDEFINED) || (left.type == JS_VAR_UNDEFINED && right.type == JS_VAR_NULL))
+            return TRUE;
+        else if ((left.type == JS_VAR_INT16 && right.type == JS_VAR_STRING) || (left.type == JS_VAR_STRING && right.type == JS_VAR_INT16))
+            return js_var_eq(js_var_to_number(left), js_var_to_number(right), strict);
+        else if (left.type == JS_VAR_BOOL)
+            return js_var_eq(js_var_to_number(left), right, strict);
+        else if (right.type == JS_VAR_BOOL)
+            return js_var_eq(left, js_var_to_number(right), strict);
+        else
+            return FALSE;
+    } else
+        return FALSE;
+}
+
 {/if}
 
 {#if headerFlags.js_var_compute}
@@ -748,10 +801,15 @@ export class CProgram implements IScope {
         // crutch for NaN and undefined
         nodes.forEach(n => {
             if (ts.isIdentifier(n)) {
-                if (n.text == "NaN")
-                    (<any>n.kind) = SyntaxKind_NaNKeyword;
-                
                 const symbol = this.typeChecker.getSymbolAtLocation(n);
+                if (!symbol && n.text == "NaN" && !ts.isPropertyAssignment(n)) {
+                    if (ts.isElementAccessExpression(n.parent) || ts.isPropertyAccessExpression(n.parent)) {
+                        if (ts.isIdentifier(n.parent.expression) && n.parent.expression.text == "Number")
+                            (<any>n.parent.kind) = SyntaxKind_NaNKeyword;
+                    } else
+                        (<any>n.kind) = SyntaxKind_NaNKeyword;
+                }
+                
                 if (symbol) {
                     if (this.typeChecker.isUndefinedSymbol(symbol))
                         (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;

@@ -279,7 +279,10 @@ export class TypeHelper {
         addEquality(ts.isBinaryExpression, n => n, type(n => {
             const leftType = this.getCType(n.left);
             const rightType = this.getCType(n.right);
-            return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType : null;
+            const universalExpr = leftType === UniversalVarType || rightType === UniversalVarType;
+            const equality = n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsToken || n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsEqualsToken
+                || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsToken || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
+            return equality ? BooleanVarType : universalExpr ? UniversalVarType : null;
         }))
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
         addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
@@ -329,8 +332,11 @@ export class TypeHelper {
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
+        addEquality(ts.isCallExpression, n => n, type(n => StandardCallHelper.getReturnType(this, n)));
         for (let i = 0; i < 10; i++)
-            addEquality(isMethodCall, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
+            addEquality(ts.isCallExpression, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
+        
+        // crutch for callback argument type in foreach
         addEquality(isFunctionArgInMethodCall, n => n.parameters[0], type(n => {
             const objType = this.getCType(n.parent.expression.expression);
             return objType instanceof ArrayType && n.parent.expression.name.text == "forEach" ? objType.elementType : null;
