@@ -103,6 +103,11 @@ export class CBinaryExpression {
 
         const isEqualityOp = operatorKind == ts.SyntaxKind.EqualsEqualsToken || operatorKind == ts.SyntaxKind.EqualsEqualsEqualsToken
             || operatorKind == ts.SyntaxKind.ExclamationEqualsToken || operatorKind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
+        
+        if (leftType == BooleanVarType && isEqualityOp)
+            leftType = NumberVarType;
+        if (rightType == BooleanVarType && isEqualityOp)
+            rightType = NumberVarType;
 
         if (leftType == NumberVarType && rightType == NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
