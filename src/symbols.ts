@@ -77,7 +77,24 @@ export class SymbolsHelper {
         return userStructCode;
     }
     
-    private temporaryVariables: { [scopeId: string]: string[] } = {};
+    private temporaryVariables: { [scopeId: string]: string[] } = {
+        // reserved symbols that are used in program.ts
+        "main": [
+            "TRUE", "FALSE", "uint8_t", "int16_t", 
+            "regex_indices_struct_t", "regex_match_struct_t", "regex_func_t",
+            "ARRAY", "ARRAY_CREATE", "ARRAY_PUSH", "ARRAY_INSERT", "ARRAY_REMOVE", "ARRAY_POP",
+            "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos",
+            "STR_INT16_T_BUFLEN", "str_int16_t_cmp", "str_pos", "str_rpos", "str_len",
+            "str_char_code_at", "str_substring", "str_slice", "str_int16_t_cat",
+            "array_int16_t_cmp", "array_str_cmp", "parse_int16_t",
+            "js_var_type", "js_var", "array_js_var_t", "dict_js_var_t",
+            "js_var_from", "js_var_from_int16_t", "js_var_from_uint8_t", "js_var_from_str", "js_var_from_dict",
+            "str_to_int16_t", "js_var_to_str", "js_var_to_number", "js_var_to_bool", "js_var_to_undefined",
+            "js_var_typeof", "js_var_eq", "js_var_op", "js_var_compute",
+            "regex_clear_matches", "regex_match",
+            "gc_main", "gc_i", "gc_j"
+        ]
+    };
     private iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
     /** Generate name for a new iterator variable and register it in temporaryVariables table.
      * Generated name is guarantied not to conflict with any existing names in specified scope.

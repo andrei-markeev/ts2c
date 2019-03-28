@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
+import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var";
@@ -121,57 +122,9 @@ export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
     return s && <ts.NamedDeclaration>s.valueDeclaration
 }
 
-export function isNode(n): n is ts.Node {
-    return n && n.kind !== undefined && n.flags !== undefined && n.pos !== undefined && n.end !== undefined;
-}
-export function isEqualsExpression(n): n is ts.BinaryExpression {
-    return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
-}
-export function isMethodCall(n): n is MethodCallExpression {
-    return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
-}
-export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
-    return ts.isFunctionExpression(n) && ts.isCallExpression(n.parent) && n.parent.arguments[0] == n && ts.isPropertyAccessExpression(n.parent.expression);
-}
-export function isFieldElementAccess(n): n is ts.ElementAccessExpression {
-    return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
-}
-export function isFieldPropertyAccess(n): n is ts.PropertyAccessExpression {
-    return ts.isPropertyAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
-}
-export function isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
-    return ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
-}
-export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionInitializer {
-    return ts.isForOfStatement(n) && ts.isIdentifier(n.initializer);
-}
-export function isLiteral(n): n is ts.LiteralExpression {
-    return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
-}
-export function isConvertToNumberExpression(n): n is ts.PrefixUnaryExpression {
-    return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
-}
-export const SyntaxKind_NaNKeyword = ts.SyntaxKind.Count + 1;
-export function isNullOrUndefinedOrNaN(n): n is ts.Node {
-    return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword || n.kind === SyntaxKind_NaNKeyword;
-}
-
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
 type Equality<T extends ts.Node> = [{ (n): n is T }, NodeFunc<T>, NodeResolver<T>];
-interface MethodCallExpression extends ts.CallExpression {
-    expression: ts.PropertyAccessExpression;
-}
-interface FunctionArgInMethodCall extends ts.FunctionExpression {
-    parent: MethodCallExpression;
-}
-
-interface ForOfWithSimpleInitializer extends ts.ForOfStatement {
-    initializer: ts.VariableDeclarationList;
-}
-interface ForOfWithExpressionInitializer extends ts.ForOfStatement {
-    initializer: ts.Identifier;
-}
 
 export class TypeHelper {
 
@@ -289,13 +242,19 @@ export class TypeHelper {
         addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
         addEquality(ts.isVoidExpression, n => n.expression, type(PointerVarType));
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
+        addEquality(isDeleteExpression, n => n, type(BooleanVarType));
+        addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
-        addEquality(ts.isPropertyAssignment, n => n.parent, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
+        addEquality(ts.isPropertyAssignment, n => n.parent, type(n => {
+            const propName = (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && n.name.text;
+            return struct(propName, n.pos, this.getCType(n) || PointerVarType)
+        }));
         addEquality(ts.isPropertyAssignment, n => n, type(n => {
+            const propName = (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && n.name.text;
             const type = this.getCType(n.parent);
-            return type instanceof StructType ? type.properties[n.name.getText()] : null;
+            return type instanceof StructType ? type.properties[propName] : null;
         }));
         addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
@@ -400,10 +359,10 @@ export class TypeHelper {
             }
         } while (changed);
 
-        /*
         allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
+        /*
         
         allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")

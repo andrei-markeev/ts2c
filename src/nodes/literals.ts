@@ -98,7 +98,10 @@ class CObjectLiteralExpression {
             this.initializers = node.properties
                  .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
                  .map(p => <ts.PropertyAssignment>p)
-                 .map(p => new CAssignment(scope, varName, this.isDict ? '"' + p.name.getText() + '"' : p.name.getText(), type, p.initializer));
+                 .map(p => {
+                     const propName = (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text;
+                     return new CAssignment(scope, varName, this.isDict ? '"' + propName + '"' : propName, type, p.initializer)
+                 });
             
             this.expression = varName;
         } else

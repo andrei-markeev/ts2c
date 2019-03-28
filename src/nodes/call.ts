@@ -1,9 +1,8 @@
-import { IScope, CProgram } from '../program';
+import * as ts from 'typescript';
+import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
-import * as ts from 'typescript';
-import {CFunction, CFunctionPrototype} from './function';
 
 @CodeTemplate(`
 {#if standardCall}

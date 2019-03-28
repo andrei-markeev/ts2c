@@ -49,8 +49,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **Postfix expressions**
     - [x] **`--`**
     - [x] **`++`**
- - [ ] Unary operators
-    - [ ] `delete`
+ - [x] **Unary operators**
+    - [x] **`delete`**
     - [x] **`void`**
     - [x] **`typeof`**
     - [x] **Prefix increment operator `++`** _(only numbers)_

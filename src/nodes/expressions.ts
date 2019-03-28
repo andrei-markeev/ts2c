@@ -5,8 +5,36 @@ import {IScope} from '../program';
 import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType, ArrayType, StructType, DictType} from '../types';
 import {CVariable, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
+import { CString } from './literals';
 
 export interface CExpression { }
+
+@CodeTemplate(`
+{#if universalWrapper}
+    js_var_to_bool({expression})
+{#elseif isString && expressionIsIdentifier}
+    *{expression}
+{#elseif isString}
+    *({expression})
+{#else}
+    {expression}
+{/if}`)
+export class CCondition {
+    public universalWrapper: boolean = false;
+    public isString: boolean = false;
+    public expression: CExpression;
+    public expressionIsIdentifier: boolean = false;
+    constructor(scope: IScope, node: ts.Expression) {
+        this.expression = CodeTemplateFactory.createForNode(scope, node);
+        this.expressionIsIdentifier = ts.isIdentifier(node);
+        const type = scope.root.typeHelper.getCType(node);
+        this.isString = type == StringVarType;
+        if (type == UniversalVarType) {
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_to_bool = true;
+        }
+    }
+}
 
 @CodeTemplate(`
 {#statements}
@@ -372,28 +400,36 @@ class CVoid {
 }
 
 @CodeTemplate(`
-{#if universalWrapper}
-    js_var_to_bool({expression})
-{#elseif isString && expressionIsIdentifier}
-    *{expression}
-{#elseif isString}
-    *({expression})
-{#else}
-    {expression}
-{/if}`)
-export class CCondition {
-    public universalWrapper: boolean = false;
-    public isString: boolean = false;
-    public expression: CExpression;
-    public expressionIsIdentifier: boolean = false;
-    constructor(scope: IScope, node: ts.Expression) {
-        this.expression = CodeTemplateFactory.createForNode(scope, node);
-        this.expressionIsIdentifier = ts.isIdentifier(node);
-        const type = scope.root.typeHelper.getCType(node);
-        this.isString = type == StringVarType;
-        if (type == UniversalVarType) {
-            this.universalWrapper = true;
-            scope.root.headerFlags.js_var_to_bool = true;
-        }
+{#statements}
+    {tempVarName} = dict_find_pos({dict}->index->data, {dict}->index->size, {argExpression});
+    if ({tempVarName} >= 0)
+    {
+        ARRAY_REMOVE({dict}->index, {tempVarName}, 1);
+        ARRAY_REMOVE({dict}->values, {tempVarName}, 1);
+    }
+{/statements}
+{#if !topExpressionOfStatement}
+    TRUE
+{/if}`, ts.SyntaxKind.DeleteExpression)
+class CDelete {
+    public dict: CExpression;
+    public argExpression: CExpression;
+    public tempVarName: string;
+    public topExpressionOfStatement: boolean;
+    constructor(scope: IScope, node: ts.DeleteExpression) {
+        this.topExpressionOfStatement = node.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.dict = (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))
+            && CodeTemplateFactory.createForNode(scope, node.expression.expression);
+        if (ts.isElementAccessExpression(node.expression))
+            this.argExpression = ts.isNumericLiteral(node.expression.argumentExpression)
+                ? '"' + node.expression.argumentExpression.text + '"' 
+                : CodeTemplateFactory.createForNode(scope, node.expression.argumentExpression)
+        else if (ts.isPropertyAccessExpression(node.expression))
+            this.argExpression = new CString(scope, node.expression.name.text);
+        this.tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_dict_pos");
+        scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));
+        scope.root.headerFlags.bool = true;
+        scope.root.headerFlags.array_remove = true;
     }
 }
+

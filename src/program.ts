@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import {TypeHelper, ArrayType, SyntaxKind_NaNKeyword} from './types';
+import {TypeHelper, NumberVarType} from './types';
 import {SymbolsHelper} from './symbols';
 import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
@@ -42,6 +42,7 @@ import './standard/string/match';
 import './standard/number/number';
 
 import './standard/console/log';
+import { SyntaxKind_NaNKeyword } from './typeguards';
 
 export interface IScope {
     parent: IScope;
@@ -128,7 +129,7 @@ class HeaderFlags {
     {includes => #include <{this}>\n}
 {/if}
 
-{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq }
+{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove }
     #define TRUE 1
     #define FALSE 0
 {/if}
@@ -843,6 +844,13 @@ export class CProgram implements IScope {
         }
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
+        const hasStringArray = structs.filter(s => s.name == "array_string_t").length > 0;
+        if (this.headerFlags.js_var_dict && !hasStringArray)
+            structs.push({ name: "array_string_t", properties: [
+                { name: "size", type: NumberVarType },
+                { name: "capacity", type: NumberVarType },
+                { name: "data", type: "const char **" }
+            ] });
 
         this.userStructs = structs.map(s => ({
             name: s.name,

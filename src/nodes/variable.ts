@@ -1,10 +1,11 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, isNode, TypeHelper, UniversalVarType, StringVarType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, TypeHelper, UniversalVarType, StringVarType} from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import { CExpression } from './expressions';
+import { isNode } from '../typeguards';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
@@ -291,8 +292,10 @@ export class CVariable {
 
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
-        else if (type == BooleanVarType)
+        if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+        if (type instanceof DictType && type.elementType == UniversalVarType)
+            scope.root.headerFlags.js_var_dict = true;
 
         // root scope, make variables file-scoped by default
         if (scope.parent == null)
