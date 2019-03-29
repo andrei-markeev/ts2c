@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import {TypeHelper, NumberVarType} from './types';
+import {TypeHelper, NumberVarType, findParentFunction} from './types';
 import {SymbolsHelper} from './symbols';
 import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
@@ -781,17 +781,12 @@ export class CProgram implements IScope {
     public typeHelper: TypeHelper;
     public symbolsHelper: SymbolsHelper;
     public memoryManager: MemoryManager;
-    public typeChecker: ts.TypeChecker;
     constructor(tsProgram: ts.Program) {
 
-        this.typeChecker = tsProgram.getTypeChecker();
-        this.typeHelper = new TypeHelper(this.typeChecker);
-        this.symbolsHelper = new SymbolsHelper(this.typeChecker, this.typeHelper);
-        this.memoryManager = new MemoryManager(this.typeChecker, this.typeHelper, this.symbolsHelper);
-
+        const tsTypeChecker = tsProgram.getTypeChecker();
         const sources = tsProgram.getSourceFiles().filter(s => !s.isDeclarationFile);
 
-        let nodes = [];
+        let nodes: ts.Node[] = [];
         for (let source of sources) {
             let i = nodes.length;
             nodes = nodes.concat(source.getChildren());
@@ -799,10 +794,10 @@ export class CProgram implements IScope {
                 nodes.push.apply(nodes, nodes[i++].getChildren());
         }
 
-        // crutch for NaN and undefined
-        nodes.forEach(n => {
+        // Post processing TypeScript AST
+        for (let n of nodes) {
             if (ts.isIdentifier(n)) {
-                const symbol = this.typeChecker.getSymbolAtLocation(n);
+                const symbol = tsTypeChecker.getSymbolAtLocation(n);
                 if (!symbol && n.text == "NaN" && !ts.isPropertyAssignment(n)) {
                     if (ts.isElementAccessExpression(n.parent) || ts.isPropertyAccessExpression(n.parent)) {
                         if (ts.isIdentifier(n.parent.expression) && n.parent.expression.text == "Number")
@@ -812,13 +807,17 @@ export class CProgram implements IScope {
                 }
                 
                 if (symbol) {
-                    if (this.typeChecker.isUndefinedSymbol(symbol))
+                    if (tsTypeChecker.isUndefinedSymbol(symbol))
                         (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
                 }
             }
-        });
+        }
         
-        this.typeHelper.inferTypes(nodes);
+        this.typeHelper = new TypeHelper(tsTypeChecker, nodes);
+        this.symbolsHelper = new SymbolsHelper(tsTypeChecker, this.typeHelper);
+        this.memoryManager = new MemoryManager(tsTypeChecker, this.typeHelper, this.symbolsHelper);
+
+        this.typeHelper.inferTypes();
         this.memoryManager.scheduleNodeDisposals(nodes);
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);

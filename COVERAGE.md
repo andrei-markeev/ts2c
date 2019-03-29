@@ -28,8 +28,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
 
 ### Expressions
 
- - [ ] Primary Expressions
-    - [ ] `this`
+ - [x] **Primary Expressions**
+    - [x] **`this`** _(partial: global this not supported)_
     - [x] **Identifier reference**
     - [x] **Literal**
         - [x] **`null`**
@@ -42,7 +42,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Grouping operator `(` `)`**
  - [ ] Left-hand-side Expressions
     - [x] **Property accessors**
-    - [ ] `new` operator
+    - [x] **`new` operator**
     - [x] **Function call**
     - [x] **Argument list**
     - [ ] Function expression `function() {` ... `}`

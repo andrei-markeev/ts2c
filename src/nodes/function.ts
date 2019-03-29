@@ -50,8 +50,12 @@ export class CFunction implements IScope {
         this.funcDecl = new CVariable(root, this.name, node, { removeStorageSpecifier: true });
 
         this.parameters = node.parameters.map(p => {
-            return new CVariable(this, p.name.getText(), p.name, { removeStorageSpecifier: true });
+            return new CVariable(this, (<ts.Identifier>p.name).text, p.name, { removeStorageSpecifier: true });
         });
+        const instanceType = root.typeHelper.instanceNodes[node.pos];
+        if (instanceType)
+            this.parameters.unshift(new CVariable(this, "this", instanceType, { removeStorageSpecifier: true }));
+
         this.variables = [];
 
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);

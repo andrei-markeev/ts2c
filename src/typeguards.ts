@@ -55,3 +55,6 @@ export function isNullOrUndefinedOrNaN(n): n is ts.Node {
 export function isDeleteExpression(n): n is DeleteExpression {
     return ts.isDeleteExpression(n) && (ts.isPropertyAccessExpression(n.expression) || ts.isElementAccessExpression(n.expression));
 }
+export function isThisKeyword(n): n is ts.Node {
+    return n.kind === ts.SyntaxKind.ThisKeyword;
+}

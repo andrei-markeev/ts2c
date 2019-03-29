@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression } from './typeguards';
+import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType;
 export const UniversalVarType = "struct js_var";
@@ -100,9 +100,7 @@ export class DictType {
     public getBodyText() {
         return "{" + getTypeBodyText(this.elementType) + "}";
     }
-    constructor(
-        public elementType: CType
-    ) { }
+    constructor(public elementType: CType) { }
 }
 
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
@@ -131,8 +129,9 @@ export class TypeHelper {
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
     private typeOfNodeDict: { [id: string]: { node: ts.Node, type: CType } } = {};
+    public instanceNodes: { [pos: number]: ts.Node } = {};
 
-    constructor(private typeChecker: ts.TypeChecker) { }
+    constructor(private typeChecker: ts.TypeChecker, private allNodes: ts.Node[]) { }
 
     /** Get C type of TypeScript node */
     public getCType(node: ts.Node): CType {
@@ -174,7 +173,7 @@ export class TypeHelper {
                 }
         }
 
-        if (node.kind != ts.SyntaxKind.ImportClause) {
+        if (node.kind != ts.SyntaxKind.ImportClause && node.pos != -1) {
             let tsType = this.typeChecker.getTypeAtLocation(node);
             let type = tsType && this.convertType(tsType, node);
             if (type)
@@ -209,7 +208,7 @@ export class TypeHelper {
 
     /** Postprocess TypeScript AST for better type inference and map TS types to C types */
     /** Creates typeOfNodeDict that is later used in getCType */
-    public inferTypes(allNodes: ts.Node[]) {
+    public inferTypes() {
 
         const type = <T extends ts.Node>(t: { (n: T): CType } | string): NodeResolver<T> => ({ getType: typeof (t) === "string" ? _ => t : t });
         const struct = (prop: string, pos: number, elemType: CType = PointerVarType): StructType => new StructType({ [prop]: { type: elemType, order: pos } });
@@ -244,6 +243,8 @@ export class TypeHelper {
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
         addEquality(isDeleteExpression, n => n, type(BooleanVarType));
         addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
+        addEquality(isThisKeyword, n => n, n => this.createInstanceNode(n));
+        addEquality(ts.isNewExpression, n => n, type(n => this.getInstanceType(n.expression)));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
@@ -319,15 +320,15 @@ export class TypeHelper {
         addEquality(ts.isReturnStatement, n => n.expression, n => findParentFunction(n));
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
 
-        this.resolveTypes(allNodes, typeEqualities);
+        this.resolveTypes(typeEqualities);
     }
 
-    private resolveTypes(allNodes: ts.Node[], typeEqualities: Equality<any>[]) {
-        allNodes.forEach(n => this.setNodeType(n, this.getCType(n)))
+    private resolveTypes(typeEqualities: Equality<any>[]) {
+        this.allNodes.forEach(n => this.setNodeType(n, this.getCType(n)))
 
         let equalities: [ts.Node, Equality<any>][] = [];
         typeEqualities.forEach(teq =>
-            allNodes.forEach(node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
+            this.allNodes.forEach(node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
         );
 
         let changed;
@@ -359,12 +360,12 @@ export class TypeHelper {
             }
         } while (changed);
 
-        allNodes
+        /*
+        this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
-        /*
         
-        allNodes
+        this.allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
             .forEach(n => console.log(
                 n.getText(),
@@ -387,9 +388,25 @@ export class TypeHelper {
         this.setNodeType(n, t);
     }
 
-    public setNodeType(n, t) {
+    private setNodeType(n, t) {
         if (n && t)
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
+    }
+
+    public getInstanceType(node: ts.Node): CType {
+        const decl = getDeclaration(this.typeChecker, node);
+        return decl ? this.getCType(this.instanceNodes[decl.pos]) : null;
+    }
+
+    private createInstanceNode(node: ts.Node): ts.Node {
+        const funcNode = findParentFunction(node);
+        if (!funcNode)
+            return null;
+        if (!this.instanceNodes[funcNode.pos]) {
+            const node = ts.createNode(ts.SyntaxKind.ThisType, -1, TypeHelper.syntheticNodesCounter++);
+            this.instanceNodes[funcNode.pos] = node;
+        }
+        return this.instanceNodes[funcNode.pos];
     }
 
     private typesDict = {};

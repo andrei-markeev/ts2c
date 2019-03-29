@@ -5,13 +5,14 @@ import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import { CAsUniversalVar } from './variable';
+import { CNew } from './call';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
         let accessor;
         let varType;
         let argumentExpression;
-        if (left.kind == ts.SyntaxKind.ElementAccessExpression) {
+        if (left.kind === ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>left;
             varType = scope.root.typeHelper.getCType(elemAccess.expression);
             if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
@@ -39,6 +40,8 @@ export class AssignmentHelper {
 
 @CodeTemplate(`
 {#if assignmentRemoved}
+{#elseif isNewExpression}
+    {expression}{CR}
 {#elseif isObjLiteralAssignment}
     {objInitializers}
 {#elseif isArrayLiteralAssignment}
@@ -69,12 +72,14 @@ export class CAssignment {
     public isStaticArray: boolean = false;
     public isStruct: boolean = false;
     public isDict: boolean = false;
+    public isNewExpression: boolean = false;
     public assignmentRemoved: boolean = false;
     public expression: CExpression;
     public nodeText: string;
     public CR: string;
     constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression, inline: boolean = false) {
         this.CR = inline ? "" : ";\n";
+        this.isNewExpression = right.kind === ts.SyntaxKind.NewExpression;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.isDict = type instanceof DictType;

@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType} from '../types';
+import {ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType, findParentFunction} from '../types';
 import {CVariable, CVariableAllocation, CAsUniversalVar} from './variable';
 import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
@@ -189,4 +189,9 @@ export class CNaN {
     constructor(scope: IScope, node: ts.Node) {
         scope.root.headerFlags.js_var_from = true;
     }
+}
+
+@CodeTemplate(`this`, ts.SyntaxKind.ThisKeyword)
+export class CThis {
+    constructor(scope: IScope, node: ts.Node) { }
 }

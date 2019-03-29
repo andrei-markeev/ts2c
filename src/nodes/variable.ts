@@ -33,7 +33,7 @@ export class CVariableDeclaration {
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
-        const name = scope.root.typeChecker.getSymbolAtLocation(varDecl.name).name;
+        const name = varDecl.name.getText();
         const type = scope.root.typeHelper.getCType(varDecl.name);
         if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
             const canUseInitializerList = varDecl.initializer.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);

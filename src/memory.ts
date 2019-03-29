@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, getDeclaration } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -27,10 +27,10 @@ export class MemoryManager {
 
     public scheduleNodeDisposals(nodes: ts.Node[]) {
         nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
-            const symbol = this.typeChecker.getSymbolAtLocation(n);
-            if (symbol && symbol.valueDeclaration) {
-                this.references[symbol.valueDeclaration.pos] = this.references[symbol.valueDeclaration.pos] || [];
-                this.references[symbol.valueDeclaration.pos].push(n);
+            const decl = getDeclaration(this.typeChecker, n);
+            if (decl) {
+                this.references[decl.pos] = this.references[decl.pos] || [];
+                this.references[decl.pos].push(n);
             }
         });
         for (let node of nodes) {
@@ -69,6 +69,11 @@ export class MemoryManager {
                     {
                         if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
                             this.scheduleNodeDisposal(node);
+                    }
+                    break;
+                case ts.SyntaxKind.NewExpression:
+                    {
+                        this.scheduleNodeDisposal(node);
                     }
                     break;
             }
@@ -198,9 +203,9 @@ export class MemoryManager {
 
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
-                const symbol = this.typeChecker.getSymbolAtLocation(node);
-                if (symbol)
-                    refs = this.references[symbol.valueDeclaration.pos] || refs;
+                const decl = getDeclaration(this.typeChecker, node);
+                if (decl)
+                    refs = this.references[decl.pos] || refs;
             }
             let returned = false;
             for (let ref of refs) {
@@ -251,8 +256,8 @@ export class MemoryManager {
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     } else {
-                        let symbol = this.typeChecker.getSymbolAtLocation(call.expression);
-                        if (!symbol || !symbol.valueDeclaration) {
+                        const decl = getDeclaration(this.typeChecker, call.expression);
+                        if (!decl) {
                             let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
 
                             if (isStandardCall) {
@@ -267,7 +272,7 @@ export class MemoryManager {
                             }
                         }
                         else {
-                            let funcDecl = <ts.FunctionDeclaration>symbol.valueDeclaration;
+                            let funcDecl = <ts.FunctionDeclaration>decl;
                             for (let i = 0; i < call.arguments.length; i++) {
                                 if (call.arguments[i].pos <= ref.pos && call.arguments[i].end >= ref.end) {
                                     if (funcDecl.pos + 1 == topScope) {
