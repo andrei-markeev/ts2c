@@ -243,8 +243,6 @@ export class TypeHelper {
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
         addEquality(isDeleteExpression, n => n, type(BooleanVarType));
         addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
-        addEquality(isThisKeyword, n => n, n => this.createInstanceNode(n));
-        addEquality(ts.isNewExpression, n => n, type(n => this.getInstanceType(n.expression)));
     
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
@@ -292,11 +290,20 @@ export class TypeHelper {
             });
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
+
+        addEquality(ts.isNewExpression, n => n, type(n => this.getInstanceType(n.expression)));
+        addEquality(isThisKeyword, n => n, n => this.createInstanceNode(n));
+        for (let i = 0; i < 10; i++)
+            addEquality(ts.isNewExpression, n => n.arguments[i], n => {
+                const func = <ts.FunctionDeclaration>getDeclaration(this.typeChecker, n.expression);
+                return func ? func.parameters[i] : null
+            });
+
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
         addEquality(ts.isCallExpression, n => n, type(n => StandardCallHelper.getReturnType(this, n)));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this, n)[i]));
-        
+            
         // crutch for callback argument type in foreach
         addEquality(isFunctionArgInMethodCall, n => n.parameters[0], type(n => {
             const objType = this.getCType(n.parent.expression.expression);
