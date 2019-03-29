@@ -5442,8 +5442,6 @@ var TypeHelper = /** @class */ (function () {
         addEquality(ts.isTypeOfExpression, function (n) { return n; }, type(exports.StringVarType));
         addEquality(typeguards_1.isDeleteExpression, function (n) { return n; }, type(exports.BooleanVarType));
         addEquality(typeguards_1.isDeleteExpression, function (n) { return n.expression.expression; }, type(function (n) { return new DictType(exports.UniversalVarType); }));
-        addEquality(typeguards_1.isThisKeyword, function (n) { return n; }, function (n) { return _this.createInstanceNode(n); });
-        addEquality(ts.isNewExpression, function (n) { return n; }, type(function (n) { return _this.getInstanceType(n.expression); }));
         // fields
         addEquality(ts.isPropertyAssignment, function (n) { return n; }, function (n) { return n.initializer; });
         addEquality(ts.isPropertyAssignment, function (n) { return n.parent; }, type(function (n) {
@@ -5493,13 +5491,24 @@ var TypeHelper = /** @class */ (function () {
         }
         addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.name; });
         addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.initializer; });
-        addEquality(typeguards_1.isMethodCall, function (n) { return n.expression.expression; }, type(function (n) { return standard_1.StandardCallHelper.getObjectType(_this, n); }));
-        addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return standard_1.StandardCallHelper.getReturnType(_this, n); }));
+        addEquality(ts.isNewExpression, function (n) { return n; }, type(function (n) { return _this.getInstanceType(n.expression); }));
+        addEquality(typeguards_1.isThisKeyword, function (n) { return n; }, function (n) { return _this.createInstanceNode(n); });
         var _loop_2 = function (i_2) {
-            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_2]; }, type(function (n) { return typeguards_1.isLiteral(n.arguments[i_2]) ? null : standard_1.StandardCallHelper.getArgumentTypes(_this, n)[i_2]; }));
+            addEquality(ts.isNewExpression, function (n) { return n.arguments[i_2]; }, function (n) {
+                var func = getDeclaration(_this.typeChecker, n.expression);
+                return func ? func.parameters[i_2] : null;
+            });
         };
         for (var i_2 = 0; i_2 < 10; i_2++) {
             _loop_2(i_2);
+        }
+        addEquality(typeguards_1.isMethodCall, function (n) { return n.expression.expression; }, type(function (n) { return standard_1.StandardCallHelper.getObjectType(_this, n); }));
+        addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return standard_1.StandardCallHelper.getReturnType(_this, n); }));
+        var _loop_3 = function (i_3) {
+            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_3]; }, type(function (n) { return typeguards_1.isLiteral(n.arguments[i_3]) ? null : standard_1.StandardCallHelper.getArgumentTypes(_this, n)[i_3]; }));
+        };
+        for (var i_3 = 0; i_3 < 10; i_3++) {
+            _loop_3(i_3);
         }
         // crutch for callback argument type in foreach
         addEquality(typeguards_1.isFunctionArgInMethodCall, function (n) { return n.parameters[0]; }, type(function (n) {
