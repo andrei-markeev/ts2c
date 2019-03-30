@@ -815,7 +815,7 @@ export class CProgram implements IScope {
         
         this.typeHelper = new TypeHelper(tsTypeChecker, nodes);
         this.symbolsHelper = new SymbolsHelper(tsTypeChecker, this.typeHelper);
-        this.memoryManager = new MemoryManager(tsTypeChecker, this.typeHelper, this.symbolsHelper);
+        this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper);
 
         this.typeHelper.inferTypes();
         this.memoryManager.scheduleNodeDisposals(nodes);

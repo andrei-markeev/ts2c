@@ -1,13 +1,8 @@
 import * as ts from 'typescript';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper, StructType} from '../types';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {StandardCallResolver, IResolver} from '../standard';
-import { CExpression } from './expressions';
-import { StandardCallHelper } from '../standard';
-
-let anonymousNameCounter = 0;
+import {FuncType} from '../types';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype {
@@ -47,14 +42,14 @@ export class CFunction implements IScope {
         this.parent = root;
 
         this.name = node.name.getText();
-        this.funcDecl = new CVariable(root, this.name, node, { removeStorageSpecifier: true });
+        const funcType = root.typeHelper.getCType(node) as FuncType;
+        this.funcDecl = new CVariable(root, this.name, funcType.returnType, { removeStorageSpecifier: true });
 
         this.parameters = node.parameters.map(p => {
             return new CVariable(this, (<ts.Identifier>p.name).text, p.name, { removeStorageSpecifier: true });
         });
-        const instanceType = root.typeHelper.getInstanceType(node.name);
-        if (instanceType)
-            this.parameters.unshift(new CVariable(this, "this", instanceType, { removeStorageSpecifier: true }));
+        if (funcType.instanceType)
+            this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
 
         this.variables = [];
 

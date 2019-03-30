@@ -4,7 +4,7 @@ import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import { CVariable } from './variable';
-import { StructType } from '../types';
+import { FuncType } from '../types';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -21,9 +21,12 @@ export class CCallExpression {
     constructor(scope: IScope, call: ts.CallExpression) {
 
         // call of function that uses "this"
-        const instanceType = scope.root.typeHelper.getInstanceType(call.expression);
-        if (instanceType instanceof StructType)
-            return;
+        const decl = scope.root.typeHelper.getDeclaration(call.expression);
+        if (decl) {
+            const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
+            if (funcType.instanceType != null)
+                return;
+        }
 
         this.funcName = call.expression.getText();
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
@@ -56,12 +59,15 @@ export class CNew {
     public nodeText: string;
     constructor(scope: IScope, node: ts.NewExpression) {
         if (ts.isIdentifier(node.expression)) {
+            const decl = scope.root.typeHelper.getDeclaration(node.expression);
+            const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
+
             this.funcName = CodeTemplateFactory.createForNode(scope, node.expression);
             this.arguments = node.arguments.map(arg => CodeTemplateFactory.createForNode(scope, arg));
             
             this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
-                scope.variables.push(new CVariable(scope, this.varName, scope.root.typeHelper.getInstanceType(node.expression)))
+                scope.variables.push(new CVariable(scope, this.varName, funcType.instanceType))
             this.arguments.unshift(this.varName);
 
             scope.root.headerFlags.malloc = true;

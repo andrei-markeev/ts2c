@@ -23,7 +23,7 @@ export class MemoryManager {
     private references: { [key: string]: ts.Node[] } = {};
     private needsGCMainForJsVar: boolean = false;
 
-    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
+    constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
     public scheduleNodeDisposals(nodes: ts.Node[]) {
         nodes.filter(n => ts.isIdentifier(n)).forEach(n => {

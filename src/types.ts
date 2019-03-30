@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
 import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword } from './typeguards';
 
-export type CType = string | StructType | ArrayType | DictType;
+export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
 export const VoidType = "void";
 export const PointerVarType = "void *";
@@ -103,6 +103,29 @@ export class DictType {
     constructor(public elementType: CType) { }
 }
 
+export class FuncType {
+    public static getReturnType(typeHelper: TypeHelper, node: ts.Node): CType {
+        const decl = typeHelper.getDeclaration(node);
+        const type = typeHelper.getCType(decl);
+        return type && type instanceof FuncType ? type.returnType : null;
+    }
+    public static getInstanceType(typeHelper: TypeHelper, node: ts.Node): CType {
+        const decl = typeHelper.getDeclaration(node);
+        const type = typeHelper.getCType(decl);
+        return type && type instanceof FuncType ? type.instanceType : null
+    }
+    public getText() {
+        return typeof(this.returnType) === "string" ? this.returnType : this.returnType.getText();
+    }
+    public getBodyText() {
+        const paramTypes = [].concat(this.parameterTypes);
+        if (this.instanceType)
+            paramTypes.unshift(this.instanceType);
+        return getTypeBodyText(this.returnType) + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")";
+    }
+    constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
+}
+
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
     let parentFunc = node;
     while (parentFunc && !ts.isFunctionDeclaration(parentFunc))
@@ -125,7 +148,6 @@ export class TypeHelper {
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
     private typeOfNodeDict: { [id: string]: { node: ts.Node, type: CType } } = {};
-    private instanceNodes: { [pos: number]: ts.Node } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private allNodes: ts.Node[]) { }
 
@@ -278,7 +300,9 @@ export class TypeHelper {
         }));
 
         // calls
-        addEquality(ts.isCallExpression, n => n, n => this.getDeclaration(n.expression));
+        addEquality(ts.isCallExpression, n => n.expression, n => this.getDeclaration(n));
+        addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this, n.expression)));
+        addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n)) : null));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], n => {
                 const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
@@ -287,14 +311,15 @@ export class TypeHelper {
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
 
-        addEquality(ts.isNewExpression, n => n, type(n => this.getInstanceType(n.expression)));
-        addEquality(isThisKeyword, n => n, n => this.createInstanceNode(n));
+        addEquality(ts.isNewExpression, n => n, type(n => FuncType.getInstanceType(this, n.expression)));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isNewExpression, n => n.arguments[i], n => {
                 const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
                 return func ? func.parameters[i] : null
             });
-
+        addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType(VoidType, [], this.getCType(n))));
+        addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this, findParentFunction(n))));
+    
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this, n)));
         addEquality(ts.isCallExpression, n => n, type(n => StandardCallHelper.getReturnType(this, n)));
         for (let i = 0; i < 10; i++)
@@ -308,7 +333,7 @@ export class TypeHelper {
 
         // statements
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
-        addEquality(ts.isFunctionDeclaration, n => n, type(VoidType));
+        addEquality(ts.isFunctionDeclaration, n => n, type(n => new FuncType(VoidType, n.parameters.map(p => this.getCType(p)))));
         addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.getCType(n.initializer.declarations[0]) || PointerVarType, 0, false)));
         addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
             const type = this.getCType(n.expression);
@@ -320,7 +345,8 @@ export class TypeHelper {
             return type instanceof ArrayType ? type.elementType : null
         }));
         addEquality(ts.isForInStatement, n => n.initializer, type(StringVarType));
-        addEquality(ts.isReturnStatement, n => n.expression, n => findParentFunction(n));
+        addEquality(ts.isReturnStatement, n => n.expression, type(n => FuncType.getReturnType(this, findParentFunction(n))));
+        addEquality(ts.isReturnStatement, n => findParentFunction(n), type(n => this.getCType(n.expression) ? new FuncType(this.getCType(n.expression)) : null));
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
 
         this.resolveTypes(typeEqualities);
@@ -401,22 +427,6 @@ export class TypeHelper {
         return s && <ts.NamedDeclaration>s.valueDeclaration;
     }
     
-    public getInstanceType(node: ts.Node): CType {
-        const decl = node ? this.getDeclaration(node) : null;
-        const scopeId = decl ? decl.pos : "main";
-        return this.getCType(this.instanceNodes[scopeId]);
-    }
-
-    private createInstanceNode(node: ts.Node): ts.Node {
-        const funcNode = findParentFunction(node);
-        const scopeId = funcNode ? funcNode.pos : "main";
-        if (!this.instanceNodes[scopeId]) {
-            const node = ts.createNode(ts.SyntaxKind.ThisType, -1, TypeHelper.syntheticNodesCounter++);
-            this.instanceNodes[scopeId] = node;
-        }
-        return this.instanceNodes[scopeId];
-    }
-
     private typesDict = {};
     private ensureNoTypeDuplicates(t) {
         if (!t)
@@ -569,6 +579,24 @@ export class TypeHelper {
                 return type2_result;
 
             return noChanges;
+        }
+        else if (type1 instanceof FuncType && type2 instanceof FuncType) {
+            const { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
+            const { type: instanceType, replaced: instanceTypeReplaced } = this.mergeTypes(type1.instanceType, type2.instanceType);
+            const paramCount = Math.max(type1.parameterTypes.length, type2.parameterTypes.length);
+            let paramTypesReplaced = type1.parameterTypes.length !== type2.parameterTypes.length;
+            let paramTypes = [];
+            for (let i = 0; i < paramCount; i++) {
+                const { type: pType, replaced: pTypeReplaced } = this.mergeTypes(type1.parameterTypes[i], type2.parameterTypes[i]);
+                paramTypes.push(pType)
+                if (pTypeReplaced)
+                    paramTypesReplaced = true;
+            }
+            
+            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType)), replaced: true };
+            else
+                return noChanges;
         }
         else
             return { type: UniversalVarType, replaced: true };
