@@ -115,10 +115,6 @@ export function findParentSourceFile(node: ts.Node): ts.SourceFile {
         parent = parent.parent;
     return parent;
 }
-export function getDeclaration(typechecker: ts.TypeChecker, n: ts.Node) {
-    let s = typechecker.getSymbolAtLocation(n);
-    return s && <ts.NamedDeclaration>s.valueDeclaration
-}
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
@@ -129,7 +125,7 @@ export class TypeHelper {
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
     private typeOfNodeDict: { [id: string]: { node: ts.Node, type: CType } } = {};
-    public instanceNodes: { [pos: number]: ts.Node } = {};
+    private instanceNodes: { [pos: number]: ts.Node } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private allNodes: ts.Node[]) { }
 
@@ -223,7 +219,7 @@ export class TypeHelper {
         };
 
         // expressions
-        addEquality(ts.isIdentifier, n => n, n => getDeclaration(this.typeChecker, n));
+        addEquality(ts.isIdentifier, n => n, n => this.getDeclaration(n));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
@@ -282,10 +278,10 @@ export class TypeHelper {
         }));
 
         // calls
-        addEquality(ts.isCallExpression, n => n, n => getDeclaration(this.typeChecker, n.expression));
+        addEquality(ts.isCallExpression, n => n, n => this.getDeclaration(n.expression));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], n => {
-                const func = <ts.FunctionDeclaration>getDeclaration(this.typeChecker, n.expression);
+                const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
                 return func ? func.parameters[i] : null
             });
         addEquality(ts.isParameter, n => n, n => n.name);
@@ -295,7 +291,7 @@ export class TypeHelper {
         addEquality(isThisKeyword, n => n, n => this.createInstanceNode(n));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isNewExpression, n => n.arguments[i], n => {
-                const func = <ts.FunctionDeclaration>getDeclaration(this.typeChecker, n.expression);
+                const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
                 return func ? func.parameters[i] : null
             });
 
@@ -400,20 +396,25 @@ export class TypeHelper {
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
     }
 
+    public getDeclaration(n: ts.Node) {
+        let s = this.typeChecker.getSymbolAtLocation(n);
+        return s && <ts.NamedDeclaration>s.valueDeclaration;
+    }
+    
     public getInstanceType(node: ts.Node): CType {
-        const decl = getDeclaration(this.typeChecker, node);
-        return decl ? this.getCType(this.instanceNodes[decl.pos]) : null;
+        const decl = node ? this.getDeclaration(node) : null;
+        const scopeId = decl ? decl.pos : "main";
+        return this.getCType(this.instanceNodes[scopeId]);
     }
 
     private createInstanceNode(node: ts.Node): ts.Node {
         const funcNode = findParentFunction(node);
-        if (!funcNode)
-            return null;
-        if (!this.instanceNodes[funcNode.pos]) {
+        const scopeId = funcNode ? funcNode.pos : "main";
+        if (!this.instanceNodes[scopeId]) {
             const node = ts.createNode(ts.SyntaxKind.ThisType, -1, TypeHelper.syntheticNodesCounter++);
-            this.instanceNodes[funcNode.pos] = node;
+            this.instanceNodes[scopeId] = node;
         }
-        return this.instanceNodes[funcNode.pos];
+        return this.instanceNodes[scopeId];
     }
 
     private typesDict = {};

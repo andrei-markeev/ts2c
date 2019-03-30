@@ -4,18 +4,27 @@ import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import { CVariable } from './variable';
+import { StructType } from '../types';
 
 @CodeTemplate(`
 {#if standardCall}
     {standardCall}
-{#else}
+{#elseif funcName}
     {funcName}({arguments {, }=> {this}})
+{#else}
+    /* Not supported yet: calling function that references 'this'. Use 'new'. */
 {/if}`, ts.SyntaxKind.CallExpression)
 export class CCallExpression {
-    public funcName: string;
-    public standardCall: CExpression;
+    public funcName: string = '';
+    public standardCall: CExpression = '';
     public arguments: CExpression[];
     constructor(scope: IScope, call: ts.CallExpression) {
+
+        // call of function that uses "this"
+        const instanceType = scope.root.typeHelper.getInstanceType(call.expression);
+        if (instanceType instanceof StructType)
+            return;
+
         this.funcName = call.expression.getText();
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
 

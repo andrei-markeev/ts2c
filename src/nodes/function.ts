@@ -52,7 +52,7 @@ export class CFunction implements IScope {
         this.parameters = node.parameters.map(p => {
             return new CVariable(this, (<ts.Identifier>p.name).text, p.name, { removeStorageSpecifier: true });
         });
-        const instanceType = root.typeHelper.instanceNodes[node.pos];
+        const instanceType = root.typeHelper.getInstanceType(node.name);
         if (instanceType)
             this.parameters.unshift(new CVariable(this, "this", instanceType, { removeStorageSpecifier: true }));
 

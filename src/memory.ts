@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, getDeclaration } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -27,7 +27,7 @@ export class MemoryManager {
 
     public scheduleNodeDisposals(nodes: ts.Node[]) {
         nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
-            const decl = getDeclaration(this.typeChecker, n);
+            const decl = this.typeHelper.getDeclaration(n);
             if (decl) {
                 this.references[decl.pos] = this.references[decl.pos] || [];
                 this.references[decl.pos].push(n);
@@ -203,7 +203,7 @@ export class MemoryManager {
 
             let refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
-                const decl = getDeclaration(this.typeChecker, node);
+                const decl = this.typeHelper.getDeclaration(node);
                 if (decl)
                     refs = this.references[decl.pos] || refs;
             }
@@ -256,7 +256,7 @@ export class MemoryManager {
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     } else {
-                        const decl = getDeclaration(this.typeChecker, call.expression);
+                        const decl = this.typeHelper.getDeclaration(call.expression);
                         if (!decl) {
                             let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
 
