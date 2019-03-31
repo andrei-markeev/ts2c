@@ -103,7 +103,7 @@ class HeaderFlags {
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.str_substring
-    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict
+    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
     || headerFlags.js_var_compute || headerFlags.js_var_from_str || headerFlags.js_var_eq}
     #include <string.h>
 {/if}
@@ -171,7 +171,7 @@ class HeaderFlags {
     } *
 {/if}
 
-{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_compute}
+{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_compute}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
         array->data = malloc((init_capacity) * sizeof(*array->data)); \\
@@ -191,7 +191,7 @@ class HeaderFlags {
 {#if headerFlags.array_pop}
 	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 {/if}
-{#if headerFlags.array_insert || headerFlags.dict}
+{#if headerFlags.array_insert || headerFlags.dict || headerFlags.js_var_dict}
     #define ARRAY_INSERT(array, pos, item) {\\
         ARRAY_PUSH(array, item); \\
         if (pos < array->size - 1) {\\
@@ -207,11 +207,14 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.dict || headerFlags.js_var_dict}
+{#if headerFlags.dict}
     #define DICT(T) struct { \\
         ARRAY(const char *) index; \\
         ARRAY(T) values; \\
     } *
+{/if}
+
+{#if headerFlags.dict || headerFlags.js_var_dict}
     #define DICT_CREATE(dict, init_capacity) { \\
         dict = malloc(sizeof(*dict)); \\
         ARRAY_CREATE(dict->index, init_capacity, 0); \\
@@ -242,15 +245,17 @@ class HeaderFlags {
     }
 
     int16_t tmp_dict_pos;
-    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])
+    #define DICT_GET(dict, prop, default) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? default : dict->values->data[tmp_dict_pos])
+
+    int16_t tmp_dict_pos2;
     #define DICT_SET(dict, prop, value) { \\
-        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\
-        if (tmp_dict_pos < 0) { \\
-            tmp_dict_pos = -tmp_dict_pos - 1; \\
-            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\
-            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\
+        tmp_dict_pos2 = dict_find_pos(dict->index->data, dict->index->size, prop); \\
+        if (tmp_dict_pos2 < 0) { \\
+            tmp_dict_pos2 = -tmp_dict_pos2 - 1; \\
+            ARRAY_INSERT(dict->index, tmp_dict_pos2, prop); \\
+            ARRAY_INSERT(dict->values, tmp_dict_pos2, value); \\
         } else \\
-            dict->values->data[tmp_dict_pos] = value; \\
+            dict->values->data[tmp_dict_pos2] = value; \\
     }
 
 {/if}

@@ -83,7 +83,7 @@ export class SymbolsHelper {
             "TRUE", "FALSE", "uint8_t", "int16_t", 
             "regex_indices_struct_t", "regex_match_struct_t", "regex_func_t",
             "ARRAY", "ARRAY_CREATE", "ARRAY_PUSH", "ARRAY_INSERT", "ARRAY_REMOVE", "ARRAY_POP",
-            "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos",
+            "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos", "tmp_dict_pos2",
             "STR_INT16_T_BUFLEN", "str_int16_t_cmp", "str_pos", "str_rpos", "str_len",
             "str_char_code_at", "str_substring", "str_slice", "str_int16_t_cat",
             "array_int16_t_cmp", "array_str_cmp", "parse_int16_t",

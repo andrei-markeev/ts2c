@@ -3,6 +3,7 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
 import {CExpression} from './expressions';
+import { CNull } from './literals';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
@@ -84,7 +85,7 @@ export class CElementAccess {
 {#elseif isStruct}
     {elementAccess}->{argumentExpression}
 {#elseif isDict}
-    DICT_GET({elementAccess}, {argumentExpression})
+    DICT_GET({elementAccess}, {argumentExpression}, {nullValue})
 {#else}
     /* Unsupported element access scenario: {elementAccess} {argumentExpression} */
 {/if}`)
@@ -96,6 +97,7 @@ export class CSimpleElementAccess {
     public isDict: boolean = false;
     public isString: boolean = false;
     public arrayCapacity: string;
+    public nullValue: CExpression = "0";
     constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression) {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
@@ -104,6 +106,8 @@ export class CSimpleElementAccess {
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
         this.isString = type === StringVarType;
+        if (argumentExpression != null && type instanceof DictType && type.elementType === UniversalVarType)
+            this.nullValue = new CNull(scope);
         if (this.isString && this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;
     }

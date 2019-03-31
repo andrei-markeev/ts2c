@@ -172,7 +172,7 @@ export class CBoolean {
 
 @CodeTemplate(`js_var_from(JS_VAR_NULL)`, ts.SyntaxKind.NullKeyword)
 export class CNull {
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope) {
         scope.root.headerFlags.js_var_from = true;
     }
 }

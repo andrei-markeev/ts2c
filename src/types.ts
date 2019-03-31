@@ -507,26 +507,26 @@ export class TypeHelper {
         else if (typeof type1 == "string" && typeof type2 == "string" && type1 == type2)
             return noChanges;
 
-        else if (type1 == VoidType)
+        else if (type1 === VoidType)
             return type2_result;
-        else if (type2 == VoidType)
+        else if (type2 === VoidType)
             return type1_result;
 
-        else if (type1 == PointerVarType)
+        else if (type1 === PointerVarType)
             return type2_result;
-        else if (type2 == PointerVarType)
+        else if (type2 === PointerVarType)
             return type1_result;
 
-        else if (type1 == UniversalVarType)
+        else if (type1 === UniversalVarType)
             return type1_result;
-        else if (type2 == UniversalVarType)
+        else if (type2 === UniversalVarType)
             return type2_result;
 
-        else if (type1 == StringVarType && type2 instanceof StructType) {
+        else if (type1 === StringVarType && type2 instanceof StructType) {
             if (Object.keys(type2.properties).length == 1 && (type2.properties["length"] == PointerVarType || type2.properties["length"] == NumberVarType))
                 return type1_result;
         }
-        else if (type1 instanceof StructType && type2 == StringVarType) {
+        else if (type1 instanceof StructType && type2 === StringVarType) {
             if (Object.keys(type1.properties).length == 1 && (type1.properties["length"] == PointerVarType || type1.properties["length"] == NumberVarType))
                 return type2_result;
         }
@@ -566,11 +566,11 @@ export class TypeHelper {
         else if (type1 instanceof StructType && type2 instanceof ArrayType) {
             return this.mergeArrayAndStruct(type2, type1);
         }
-        else if (type1 instanceof StructType && type2 instanceof DictType) {
-            return type2_result;
-        }
         else if (type1 instanceof DictType && type2 instanceof StructType) {
-            return type1_result;
+            return this.mergeDictAndStruct(type1, type2);
+        }
+        else if (type1 instanceof StructType && type2 instanceof DictType) {
+            return this.mergeDictAndStruct(type2, type1)
         }
         else if (type1 instanceof DictType && type2 instanceof DictType) {
             if (type1.elementType != PointerVarType && type2.elementType == PointerVarType)
@@ -622,6 +622,13 @@ export class TypeHelper {
             return { type: this.ensureNoTypeDuplicates(new ArrayType(UniversalVarType, arrayType.capacity, arrayType.isDynamicArray)), replaced: true };
         else
             return { type: arrayType, replaced: true };
+    }
+
+    private mergeDictAndStruct(dictType: DictType, structType: StructType) {
+        let elementType = dictType.elementType;
+        for (let k in structType.properties)
+            ({ type: elementType } = this.mergeTypes(elementType, structType.properties[k]));
+        return { type: this.ensureNoTypeDuplicates(new DictType(elementType)), replaced: true };
     }
 
 }

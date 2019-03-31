@@ -95,7 +95,9 @@ export class CVariableAllocation {
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
-        if (this.needAllocateDict)
+        if (varType instanceof DictType && varType.elementType == UniversalVarType)
+            scope.root.headerFlags.js_var_dict = true;
+        else if (this.needAllocateDict)
             scope.root.headerFlags.dict = true;
         if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;

@@ -3,8 +3,8 @@ import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
-import { CVariable } from './variable';
-import { FuncType } from '../types';
+import { CVariable, CVariableAllocation } from './variable';
+import { FuncType, DictType } from '../types';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -42,10 +42,7 @@ export class CCallExpression {
 
 @CodeTemplate(`
 {#statements}
-    {#if funcName}
-        {varName} = malloc(sizeof(*{varName}));
-        assert({varName} != NULL);
-    {/if}
+    {allocator}
 {/statements}
 {#if funcName}
     {funcName}({arguments {, }=> {this}})
@@ -55,7 +52,7 @@ export class CCallExpression {
 export class CNew {
     public funcName: CExpression = "";
     public arguments: CExpression[];
-    public varName: string;
+    public allocator: CVariableAllocation = null; 
     public nodeText: string;
     constructor(scope: IScope, node: ts.NewExpression) {
         if (ts.isIdentifier(node.expression)) {
@@ -65,12 +62,11 @@ export class CNew {
             this.funcName = CodeTemplateFactory.createForNode(scope, node.expression);
             this.arguments = node.arguments.map(arg => CodeTemplateFactory.createForNode(scope, arg));
             
-            this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            const varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
-                scope.variables.push(new CVariable(scope, this.varName, funcType.instanceType))
-            this.arguments.unshift(this.varName);
-
-            scope.root.headerFlags.malloc = true;
+                scope.variables.push(new CVariable(scope, varName, funcType.instanceType))
+            this.arguments.unshift(varName);
+            this.allocator = new CVariableAllocation(scope, varName, funcType.instanceType, node);
         }
 
         this.nodeText = node.getText();
