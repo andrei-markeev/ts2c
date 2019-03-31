@@ -196,8 +196,8 @@ class CPrintf {
         this.quoted = options.quotedString;
 
         if (this.isUniversalVar) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false)
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_need_dispose", false)
+            this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false);
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_need_dispose", false);
             if (!scope.variables.some(v => v.name == this.tempVarName))
                 scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
             if (!scope.variables.some(v => v.name == this.needDisposeVarName))

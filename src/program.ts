@@ -918,8 +918,10 @@ export class CProgram implements IScope {
         }
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
-        this.headerFlags.array_string_t = structs.filter(s => s.name == "array_string_t").length > 0;
-        this.userStructs = structs.filter(s => s.name !== "array_string_t").map(s => ({
+        this.headerFlags.array_string_t = this.headerFlags.array_string_t || structs.filter(s => s.name == "array_string_t").length > 0;
+        this.headerFlags.js_var_array = this.headerFlags.js_var_array || structs.filter(s => s.name == "array_js_var_t").length > 0;
+        this.headerFlags.js_var_dict = this.headerFlags.js_var_dict || structs.filter(s => s.name == "dict_js_var_t").length > 0;
+        this.userStructs = structs.filter(s => ["array_string_t", "array_js_var_t", "dict_js_var_t"].indexOf(s.name) == -1).map(s => ({
             name: s.name,
             properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
         }));

@@ -70,7 +70,7 @@ Project status
 
 __**Work in progress:**__ it works, but only about **50% of ES3** syntax is currently supported.
 
-Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `eval`, `this`, `new`, `function` inside expression, `Date`, `Math`, etc.
+Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `function` inside expression or passing functions by reference, `eval`, `Date`, `Math`, etc.
 
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
 

@@ -2,7 +2,7 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType, ArrayType, StructType, DictType} from '../types';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps} from '../types';
 import {CVariable, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
@@ -129,12 +129,11 @@ export class CBinaryExpression {
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
 
-        const isEqualityOp = operatorKind == ts.SyntaxKind.EqualsEqualsToken || operatorKind == ts.SyntaxKind.EqualsEqualsEqualsToken
-            || operatorKind == ts.SyntaxKind.ExclamationEqualsToken || operatorKind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
+        const isEqualityOp = equalityOps.indexOf(operatorKind) > -1;
         
-        if (leftType == BooleanVarType && isEqualityOp)
+        if (leftType == BooleanVarType && operandsToNumber(leftType, operatorKind, rightType))
             leftType = NumberVarType;
-        if (rightType == BooleanVarType && isEqualityOp)
+        if (rightType == BooleanVarType && operandsToNumber(leftType, operatorKind, rightType))
             rightType = NumberVarType;
 
         if (leftType == NumberVarType && rightType == NumberVarType) {
@@ -242,11 +241,11 @@ export class CBinaryExpression {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['js_var_eq|, FALSE', ' == FALSE'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == TRUE'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['js_var_eq|, FALSE', ' == TRUE'];
-            this.left = new CAsUniversalVar(scope, node.left, this.left, leftType);
-            this.right = new CAsUniversalVar(scope, node.right, this.right, rightType);
+            this.left = new CAsUniversalVar(scope, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, this.right, rightType);
             scope.root.headerFlags.js_var_eq = true;
         }
-        else if (!isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType)) {
+        else if (!isEqualityOp && (toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType))) {
 
             const js_var_operator_map = {
                 [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
@@ -257,8 +256,8 @@ export class CBinaryExpression {
             };
             
             this.computeOperation = js_var_operator_map[operatorKind];
-            this.left = new CAsUniversalVar(scope, node.left, this.left, leftType);
-            this.right = new CAsUniversalVar(scope, node.right, this.right, rightType);
+            this.left = new CAsUniversalVar(scope, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, this.right, rightType);
             scope.root.headerFlags.js_var_compute = true;
 
         } else if (leftType instanceof StructType || leftType instanceof ArrayType || leftType instanceof DictType
@@ -269,7 +268,7 @@ export class CBinaryExpression {
             operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
             operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
 
-            if (leftType != rightType) {
+            if (isEqualityOp && leftType != rightType) {
                 this.expression = "FALSE";
                 scope.root.headerFlags.bool = true;
             }

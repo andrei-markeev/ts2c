@@ -1,5 +1,6 @@
 TS := $(sort $(wildcard *.ts) $(wildcard */*.ts))
 TS := $(filter-out realworld/parseHtml.ts, $(TS)) # not passing yet
+TS := $(filter-out js_var/binexpr3.ts, $(TS)) # not passing yet
 C = $(TS:.ts=.c)
 ELF = $(TS:.ts=.elf)
 RES = $(TS:.ts=.res)

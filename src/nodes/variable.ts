@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, TypeHelper, UniversalVarType, StringVarType} from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, TypeHelper, UniversalVarType, StringVarType } from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import { CExpression } from './expressions';
@@ -237,6 +237,10 @@ export class CVariableDestructors {
     js_var_from_int16_t({expression})
 {#elseif isBoolean}
     js_var_from_uint8_t({expression})
+{#elseif isArray}
+    js_var_from_array({expression})
+{#elseif isDict}
+    js_var_from_dict({expression})
 {#else}
     /** converting {expression} to js_var is not supported yet */
 {/if}`)
@@ -245,20 +249,30 @@ export class CAsUniversalVar {
     public isString: boolean;
     public isNumber: boolean;
     public isBoolean: boolean;
+    public isArray: boolean;
+    public isDict: boolean;
     public expression: CExpression;
-    constructor (scope: IScope, node: ts.Node, expr: CExpression, type: CType) {
-        this.isUniversalVar = type == UniversalVarType;
-        this.isString = type == StringVarType;
-        this.isNumber = type == NumberVarType;
-        this.isBoolean = type == BooleanVarType;
-        this.expression = CodeTemplateFactory.templateToString(<any>expr);
+    constructor (scope: IScope, expr: ts.Node | CExpression, type?: CType) {
+        this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
+        type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
 
-        if (type == StringVarType)
+        this.isUniversalVar = type === UniversalVarType;
+        this.isString = type === StringVarType;
+        this.isNumber = type === NumberVarType;
+        this.isBoolean = type === BooleanVarType;
+        this.isArray = type instanceof ArrayType;
+        this.isDict = type instanceof StructType || type instanceof DictType;
+
+        if (type === StringVarType)
             scope.root.headerFlags.js_var_from_str = true;
-        if (type == NumberVarType)
+        if (type === NumberVarType)
             scope.root.headerFlags.js_var_from_int16_t = true;
-        if (type == BooleanVarType)
+        if (type === BooleanVarType)
             scope.root.headerFlags.js_var_from_uint8_t = true;
+        if (type instanceof ArrayType)
+            scope.root.headerFlags.js_var_array = true;
+        if (type instanceof StructType || type instanceof DictType)
+            scope.root.headerFlags.js_var_dict = true;
 
         scope.root.headerFlags.js_var = true;
     }

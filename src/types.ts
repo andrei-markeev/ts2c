@@ -27,9 +27,7 @@ export class ArrayType {
         while (elementTypeText.indexOf(BooleanVarType) > -1)
             elementTypeText = elementTypeText.replace(BooleanVarType, "bool");
         
-        elementTypeText = elementTypeText.replace(/^struct ([a-z0-9_]+)_t \*$/, (all, g1) => g1);
-
-        //elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, (all, g1) => "array_" + g1);
+        elementTypeText = elementTypeText.replace(/^struct ([a-z0-9_]+)_t \*$/, (all, g1) => g1).replace(/^struct js_var/, "js_var");
 
         return "array_" +
             elementTypeText
@@ -126,6 +124,59 @@ export class FuncType {
     constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
 }
 
+export const equalityOps = [
+    ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, 
+    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+];
+const relationalOps = [
+    ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
+    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken
+];
+const arithmeticOps = [
+    ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
+    ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
+    ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
+    ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
+    ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
+];
+const logicalOps = [
+    ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
+];
+
+export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+    return arithmeticOps.indexOf(op) > -1 || op == ts.SyntaxKind.PlusToken && leftType !== StringVarType && rightType !== StringVarType
+        || equalityOps.concat(relationalOps).indexOf(op) > -1 && (leftType !== StringVarType || rightType !== StringVarType);
+}
+export function operandsToString(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+    return op == ts.SyntaxKind.PlusToken && (leftType === StringVarType || rightType !== StringVarType);
+}
+export function operandsToBoolean(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+    return logicalOps.indexOf(op) > -1;
+}
+
+export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+    if (logicalOps.indexOf(op) > -1 || op === ts.SyntaxKind.EqualsToken)
+        return rightType;
+    if (relationalOps.indexOf(op) > -1 || equalityOps.indexOf(op) > -1)
+        return BooleanVarType;
+    if (arithmeticOps.indexOf(op) > -1)
+        return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
+    if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
+        return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType 
+            : leftType === StringVarType || rightType === StringVarType ? StringVarType
+            : NumberVarType;
+
+    console.log("WARNING: unexpected binary expression!");
+    return null;
+}
+
+export function toNumberCanBeNaN(t) {
+    return t !== null && t !== PointerVarType && t !== NumberVarType && t !== BooleanVarType && !(t instanceof ArrayType && !t.isDynamicArray && t.capacity == 1 && !toNumberCanBeNaN(t.elementType));
+}
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
     let parentFunc = node;
     while (parentFunc && !ts.isFunctionDeclaration(parentFunc))
@@ -246,14 +297,27 @@ export class TypeHelper {
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
         addEquality(isConvertToNumberExpression, n => n, type(n => this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
-        addEquality(ts.isBinaryExpression, n => n, type(n => {
-            const leftType = this.getCType(n.left);
-            const rightType = this.getCType(n.right);
-            const universalExpr = leftType === UniversalVarType || rightType === UniversalVarType;
-            const equality = n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsToken || n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsEqualsToken
-                || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsToken || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
-            return equality ? BooleanVarType : universalExpr ? UniversalVarType : null;
-        }))
+        addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
+        addEquality(ts.isBinaryExpression, n => n.left, type(n => {
+            const resultType = this.getCType(n);
+            const operandType = this.getCType(n.left);
+            if (resultType === UniversalVarType) {
+                return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
+                    : null;
+            } else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, n => n.right, type(n => {
+            const resultType = this.getCType(n);
+            const operandType = this.getCType(n.right);
+            if (resultType === UniversalVarType) {
+                return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
+                    : null;
+            } else
+                return null;
+        }));
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
         addEquality(ts.isParenthesizedExpression, n => n, n => n.expression);
         addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
@@ -279,6 +343,7 @@ export class TypeHelper {
             return type instanceof StructType ? type.properties[n.name.getText()]
                 : type instanceof ArrayType && n.name.getText() == "length" ? NumberVarType
                 : type == StringVarType && n.name.getText() == "length" ? NumberVarType
+                : type instanceof ArrayType || type instanceof DictType ? type.elementType
                 : null;
         }));
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
@@ -389,11 +454,17 @@ export class TypeHelper {
             }
         } while (changed);
 
-        /*
+        for (let k in this.typeOfNodeDict) {
+            const type = this.typeOfNodeDict[k].type;
+            if (type instanceof ArrayType && !type.isDynamicArray && type.capacity == 0)
+                type.isDynamicArray = true;
+        }
+
         this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
         
+        /*
         this.allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
             .forEach(n => console.log(

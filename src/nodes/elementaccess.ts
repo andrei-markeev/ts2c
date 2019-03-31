@@ -44,7 +44,7 @@ export class CElementAccess {
                 elementAccess = propAccess.expression.text;
             else
                 elementAccess = new CElementAccess(scope, propAccess.expression);
-            argumentExpression = propAccess.name.text;
+            argumentExpression = type instanceof DictType ? '"' + propAccess.name.text + '"' : propAccess.name.text;
         } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);

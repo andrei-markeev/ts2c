@@ -5,7 +5,6 @@ import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import { CAsUniversalVar } from './variable';
-import { CNew } from './call';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
@@ -113,7 +112,7 @@ export class CAssignment {
             this.arrayLiteralSize = arrLiteral.elements.length;
             this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
         } else if (argType == UniversalVarType) {
-            this.expression = new CAsUniversalVar(scope, right, CodeTemplateFactory.createForNode(scope, right), scope.root.typeHelper.getCType(right));
+            this.expression = new CAsUniversalVar(scope, right);
         } else
             this.expression = CodeTemplateFactory.createForNode(scope, right);
 

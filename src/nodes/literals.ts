@@ -64,7 +64,7 @@ class CArrayLiteralExpression {
                     scope.statements.push(assignment);
                 }
             }
-            this.expression = type.isDynamicArray ? "((void *)" + varName + ")" : varName;
+            this.expression = varName;
         }
         else
             this.expression = "/* Unsupported use of array literal expression */";
@@ -149,7 +149,7 @@ export class CString {
             this.value = s;
 
         if (typeof(nodeOrString) !== "string" && scope.root.typeHelper.getCType(nodeOrString) == UniversalVarType)
-            this.value = new CAsUniversalVar(scope, nodeOrString, this.value, StringVarType);
+            this.value = new CAsUniversalVar(scope, this.value, StringVarType);
     }
 }
 
@@ -160,7 +160,7 @@ export class CNumber {
     constructor(scope: IScope, node: ts.Node) {
         this.value = node.getText();
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
-            this.value = new CAsUniversalVar(scope, node, this.value, NumberVarType);
+            this.value = new CAsUniversalVar(scope, this.value, NumberVarType);
     }
 }
 
@@ -177,7 +177,7 @@ export class CBoolean {
         this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
-            this.value = new CAsUniversalVar(scope, node, this.value, BooleanVarType);
+            this.value = new CAsUniversalVar(scope, this.value, BooleanVarType);
     }
 }
 

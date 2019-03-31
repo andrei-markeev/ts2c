@@ -3,7 +3,6 @@ var y: string | number[] = [5];
 
 console.log(x);
 console.log(+y);
-console.log(+[]);
 
 x = y[x];
 if (x)

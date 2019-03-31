@@ -1,9 +1,9 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {StandardCallResolver, IResolver, IResolverMatchOptions} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType} from '../../types';
+import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType, UniversalVarType} from '../../types';
 import {IScope} from '../../program';
-import {CVariable} from '../../nodes/variable';
+import {CVariable, CAsUniversalVar} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
 import {CElementAccess} from '../../nodes/elementaccess';
 
@@ -60,9 +60,10 @@ class CArrayPush {
     public varAccess: CElementAccess = null;
     public pushValues: CPushValue[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
+        const propAccess = <ts.PropertyAccessExpression>call.expression;
+        const type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);
-        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
+        const args = call.arguments.map(a => type.elementType === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
         this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, a));
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
