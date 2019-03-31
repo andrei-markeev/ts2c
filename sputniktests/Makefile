@@ -1,4 +1,4 @@
-SPUTNIK = ../../sputniktests/Conformance
+SPUTNIK = /mnt/c/my/Projects/sputniktests/Conformance
 
 TS = $(shell find $(SPUTNIK) -type f -name '*.js' ! -name 'S12.10*.js' ! -name 'S12.12*.js' ! -name 'S12.13*.js' ! -name 'S12.14*.js')
 C = $(TS:.js=.c)

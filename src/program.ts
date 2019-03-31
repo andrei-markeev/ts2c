@@ -78,6 +78,7 @@ class HeaderFlags {
     array_pop: boolean = false;
     array_insert: boolean = false;
     array_remove: boolean = false;
+    array_string_t: boolean = false;
     array_int16_t_cmp: boolean = false;
     array_str_cmp: boolean = false;
     gc_main: boolean = false;
@@ -96,6 +97,7 @@ class HeaderFlags {
     parse_int16_t: boolean = false;
     regex: boolean = false;
     regex_match: boolean = false;
+    js_var_get: boolean;
 }
 
 
@@ -121,7 +123,7 @@ class HeaderFlags {
 {#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}
     #include <limits.h>
 {/if}
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_compute}
     #include <ctype.h>
 {/if}
 
@@ -419,7 +421,7 @@ class HeaderFlags {
 {/if}
 
 {#if headerFlags.js_var || headerFlags.str_to_int16_t}
-    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_DICT};
+    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
     struct js_var {
         enum js_var_type type;
         int16_t number;
@@ -427,11 +429,19 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_compute}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
         struct js_var *data;
+    };
+{/if}
+
+{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_get}
+    struct array_string_t {
+        int16_t size;
+        int16_t capacity;
+        const char ** data;
     };
 {/if}
 
@@ -442,7 +452,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_from}
+{#if headerFlags.js_var_from || headerFlags.js_var_get}
     struct js_var js_var_from(enum js_var_type type) {
         struct js_var v;
         v.type = type;
@@ -476,6 +486,15 @@ class HeaderFlags {
         struct js_var v;
         v.type = JS_VAR_STRING;
         v.data = (void *)s;
+        return v;
+    }
+{/if}
+
+{#if headerFlags.js_var_array}
+    struct js_var js_var_from_array(struct array_js_var_t *arr) {
+        struct js_var v;
+        v.type = JS_VAR_ARRAY;
+        v.data = (void *)arr;
         return v;
     }
 {/if}
@@ -525,7 +544,9 @@ class HeaderFlags {
     const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
+        int16_t i;
         *need_dispose = 0;
+
         if (v.type == JS_VAR_INT16) {
             buf = malloc(STR_INT16_T_BUFLEN);
             assert(buf != NULL);
@@ -536,6 +557,25 @@ class HeaderFlags {
             return v.number ? "true" : "false";
         else if (v.type == JS_VAR_STRING)
             return (const char *)v.data;
+        else if (v.type == JS_VAR_ARRAY) {
+            struct array_js_var_t * arr = (struct array_js_var_t *)v.data;
+            uint8_t dispose_elem = 0;
+            buf = malloc(1);
+            assert(buf != NULL);
+            *need_dispose = 1;
+            buf[0] = 0;
+            for (i = 0; i < arr->size; i++) {
+                const char * elem = js_var_to_str(arr->data[i], &dispose_elem);
+                buf = realloc(buf, strlen(buf) + strlen(elem) + 1 + (i != 0 ? 1 : 0));
+                assert(buf != NULL);
+                if (i != 0)
+                    strcat(buf, ",");
+                strcat(buf, elem);
+                if (dispose_elem)
+                    free((void *)elem);
+            }
+            return buf;
+        }
         else if (v.type == JS_VAR_DICT)
             return "[object Object]";
         else if (v.type == JS_VAR_NAN)
@@ -563,7 +603,15 @@ class HeaderFlags {
             result.number = v.number;
         else if (v.type == JS_VAR_STRING)
             return str_to_int16_t((const char *)v.data);
-        else if (v.type != JS_VAR_NULL)
+        else if (v.type == JS_VAR_ARRAY) {
+            struct array_js_var_t * arr = (struct array_js_var_t *)v.data;
+            if (arr->size == 0)
+                result.number = 0;
+            else if (arr->size > 1)
+                result.type = JS_VAR_NAN;
+            else
+                result = js_var_to_number(arr->data[0]);
+        } else if (v.type != JS_VAR_NULL)
             result.type = JS_VAR_NAN;
 
         return result;
@@ -616,39 +664,61 @@ class HeaderFlags {
 
 {/if}
 
-{#if headerFlags.gc_main}
-    static ARRAY(void *) gc_main;
+{#if headerFlags.js_var_get}
+    struct js_var js_var_get(struct js_var v, struct js_var arg) {
+        struct js_var tmp;
+        const char *key;
+        uint8_t need_dispose = 0;
+
+        if (v.type == JS_VAR_ARRAY) {
+            tmp = js_var_to_number(arg);
+            if (tmp.type == JS_VAR_NAN)
+                return js_var_from(JS_VAR_UNDEFINED);
+            else
+                return ((struct array_js_var_t *)v.data)->data[tmp.number];
+        } else if (v.type == JS_VAR_DICT) {
+            key = js_var_to_str(arg, &need_dispose);
+            tmp = DICT_GET(((struct dict_js_var_t *)v.data), key, js_var_from(JS_VAR_UNDEFINED));
+            if (need_dispose)
+                free((void *)key);
+            return tmp;
+        } else
+            return js_var_from(JS_VAR_UNDEFINED);
+    }
 {/if}
 
 {#if headerFlags.js_var_eq}
-uint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)
-{
-    if (left.type == right.type) {
-        if (left.type == JS_VAR_NULL || left.type == JS_VAR_UNDEFINED)
-            return TRUE;
-        else if (left.type == JS_VAR_NAN)
+    uint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)
+    {
+        if (left.type == right.type) {
+            if (left.type == JS_VAR_NULL || left.type == JS_VAR_UNDEFINED)
+                return TRUE;
+            else if (left.type == JS_VAR_NAN)
+                return FALSE;
+            else if (left.type == JS_VAR_INT16 || left.type == JS_VAR_BOOL)
+                return left.number == right.number ? TRUE : FALSE;
+            else if (left.type == JS_VAR_STRING)
+                return !strcmp((const char *)left.data, (const char *)right.data) ? TRUE : FALSE;
+            else
+                return left.data == right.data;
+        } else if (!strict) {
+            if ((left.type == JS_VAR_NULL && right.type == JS_VAR_UNDEFINED) || (left.type == JS_VAR_UNDEFINED && right.type == JS_VAR_NULL))
+                return TRUE;
+            else if ((left.type == JS_VAR_INT16 && right.type == JS_VAR_STRING) || (left.type == JS_VAR_STRING && right.type == JS_VAR_INT16))
+                return js_var_eq(js_var_to_number(left), js_var_to_number(right), strict);
+            else if (left.type == JS_VAR_BOOL)
+                return js_var_eq(js_var_to_number(left), right, strict);
+            else if (right.type == JS_VAR_BOOL)
+                return js_var_eq(left, js_var_to_number(right), strict);
+            else
+                return FALSE;
+        } else
             return FALSE;
-        else if (left.type == JS_VAR_INT16 || left.type == JS_VAR_BOOL)
-            return left.number == right.number ? TRUE : FALSE;
-        else if (left.type == JS_VAR_STRING)
-            return !strcmp((const char *)left.data, (const char *)right.data) ? TRUE : FALSE;
-        else
-            return left.data == right.data;
-    } else if (!strict) {
-        if ((left.type == JS_VAR_NULL && right.type == JS_VAR_UNDEFINED) || (left.type == JS_VAR_UNDEFINED && right.type == JS_VAR_NULL))
-            return TRUE;
-        else if ((left.type == JS_VAR_INT16 && right.type == JS_VAR_STRING) || (left.type == JS_VAR_STRING && right.type == JS_VAR_INT16))
-            return js_var_eq(js_var_to_number(left), js_var_to_number(right), strict);
-        else if (left.type == JS_VAR_BOOL)
-            return js_var_eq(js_var_to_number(left), right, strict);
-        else if (right.type == JS_VAR_BOOL)
-            return js_var_eq(left, js_var_to_number(right), strict);
-        else
-            return FALSE;
-    } else
-        return FALSE;
-}
+    }
+{/if}
 
+{#if headerFlags.gc_main}
+    static ARRAY(void *) gc_main;
 {/if}
 
 {#if headerFlags.js_var_compute}
@@ -848,15 +918,8 @@ export class CProgram implements IScope {
         }
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
-        const hasStringArray = structs.filter(s => s.name == "array_string_t").length > 0;
-        if (this.headerFlags.js_var_dict && !hasStringArray)
-            structs.push({ name: "array_string_t", properties: [
-                { name: "size", type: NumberVarType },
-                { name: "capacity", type: NumberVarType },
-                { name: "data", type: "const char **" }
-            ] });
-
-        this.userStructs = structs.map(s => ({
+        this.headerFlags.array_string_t = structs.filter(s => s.name == "array_string_t").length > 0;
+        this.userStructs = structs.filter(s => s.name !== "array_string_t").map(s => ({
             name: s.name,
             properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
         }));

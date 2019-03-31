@@ -95,6 +95,8 @@ export class CVariableAllocation {
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
+        if (varType instanceof ArrayType && varType.elementType == UniversalVarType)
+            scope.root.headerFlags.js_var_array = true;
         if (varType instanceof DictType && varType.elementType == UniversalVarType)
             scope.root.headerFlags.js_var_dict = true;
         else if (this.needAllocateDict)
@@ -172,14 +174,6 @@ export class CTempVarReplacement {
         free({gcDictsVarName}->data);
         free({gcDictsVarName});
     {/if}
-    {#if gcUniversalVarName}
-        for (gc_i = 0; gc_i < {gcUniversalVarName}->size; gc_i++) {
-            free({gcUniversalVarName}->data[gc_i]->data);
-            free({gcUniversalVarName}->data[gc_i]);
-        }
-        free({gcUniversalVarName}->data);
-        free({gcUniversalVarName});
-    {/if}
     {#if gcVarName}
         for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
             free({gcVarName}->data[gc_i]);
@@ -193,7 +187,6 @@ export class CVariableDestructors {
     public gcArraysVarName: string = null;
     public gcArraysCVarName: string = null;
     public gcDictsVarName: string = null;
-    public gcUniversalVarName: string = null;
     public destructors: string[];
     public arrayDestructors: string[] = [];
     constructor(scope: IScope, node: ts.Node) {
@@ -206,8 +199,6 @@ export class CVariableDestructors {
                 this.gcDictsVarName = gc;
             else if (gc.indexOf("_arrays") > -1)
                 this.gcArraysVarName = gc;
-            else if (gc.indexOf("_js_vars") > -1)
-                this.gcUniversalVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -296,6 +287,8 @@ export class CVariable {
             scope.root.headerFlags.int16_t = true;
         if (type == BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+        if (type instanceof ArrayType && type.elementType == UniversalVarType)
+            scope.root.headerFlags.js_var_dict = true;
         if (type instanceof DictType && type.elementType == UniversalVarType)
             scope.root.headerFlags.js_var_dict = true;
 

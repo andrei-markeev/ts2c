@@ -7,12 +7,23 @@ import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 import { CExpression } from './expressions';
 
-@CodeTemplate(`{expression}`, ts.SyntaxKind.ArrayLiteralExpression)
+@CodeTemplate(`
+{#if universalWrapper}
+    js_var_from_array({expression})
+{#else}
+    {expression}
+{/if}`, ts.SyntaxKind.ArrayLiteralExpression)
 class CArrayLiteralExpression {
     public expression: string;
+    public universalWrapper: boolean = false;
     constructor(scope: IScope, node: ts.ArrayLiteralExpression) {
         let arrSize = node.elements.length;
         let type = scope.root.typeHelper.getCType(node);
+        if (type === UniversalVarType) {
+            type = new ArrayType(UniversalVarType, 0, true);
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_array = true;
+        }
         if (type instanceof ArrayType) {
             let varName: string;
             let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
@@ -179,7 +190,7 @@ export class CNull {
 
 @CodeTemplate(`js_var_from(JS_VAR_UNDEFINED)`, ts.SyntaxKind.UndefinedKeyword)
 export class CUndefined {
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope) {
         scope.root.headerFlags.js_var_from = true;
     }
 }

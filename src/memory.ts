@@ -38,12 +38,15 @@ export class MemoryManager {
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
-                        if (type && type instanceof ArrayType && type.isDynamicArray)
-                            this.scheduleNodeDisposal(node);
+                        if (type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType)
+                            this.scheduleNodeDisposal(node, type !== UniversalVarType);
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
-                    this.scheduleNodeDisposal(node);
+                    {
+                        let type = this.typeHelper.getCType(node);
+                        this.scheduleNodeDisposal(node, type !== UniversalVarType);
+                    }
                     break;
                 case ts.SyntaxKind.BinaryExpression:
                     {
@@ -336,8 +339,8 @@ export class MemoryManager {
             node: heapNode,
             simple: isSimple,
             arrayWithContents: arrayWithContents,
-            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray,
-            dict: type && type instanceof DictType,
+            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType && ts.isArrayLiteralExpression(heapNode),
+            dict: type && type instanceof DictType || type === UniversalVarType && ts.isObjectLiteralExpression(heapNode),
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp

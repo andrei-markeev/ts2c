@@ -3,7 +3,7 @@ import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
 import {CExpression} from './expressions';
-import { CNull } from './literals';
+import { CUndefined } from './literals';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
@@ -86,6 +86,8 @@ export class CElementAccess {
     {elementAccess}->{argumentExpression}
 {#elseif isDict}
     DICT_GET({elementAccess}, {argumentExpression}, {nullValue})
+{#elseif isUniversalAccess}
+    js_var_get({elementAccess}, {argumentExpression})
 {#else}
     /* Unsupported element access scenario: {elementAccess} {argumentExpression} */
 {/if}`)
@@ -98,6 +100,7 @@ export class CSimpleElementAccess {
     public isString: boolean = false;
     public arrayCapacity: string;
     public nullValue: CExpression = "0";
+    public isUniversalAccess: boolean;
     constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression) {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
@@ -105,9 +108,13 @@ export class CSimpleElementAccess {
         this.arrayCapacity = type instanceof ArrayType && !type.isDynamicArray && type.capacity + "";
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
+        if (type === UniversalVarType && argumentExpression != null) {
+            this.isUniversalAccess = true;
+            scope.root.headerFlags.js_var_get = true;
+        }
         this.isString = type === StringVarType;
         if (argumentExpression != null && type instanceof DictType && type.elementType === UniversalVarType)
-            this.nullValue = new CNull(scope);
+            this.nullValue = new CUndefined(scope);
         if (this.isString && this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;
     }
