@@ -50,6 +50,8 @@ export class ArrayType {
 
         if (this.isDynamicArray)
             return "struct " + structName + " *";
+        else if (elementTypeText.indexOf('{var}') > -1)
+            return elementTypeText + "[" + this.capacity + "]";
         else
             return "static " + elementTypeText + " {var}[" + this.capacity + "]";
     }
@@ -293,6 +295,11 @@ export class TypeHelper {
 
         // expressions
         addEquality(ts.isIdentifier, n => n, n => this.getDeclaration(n));
+        for (let i = 0; i < 10; i++)
+            addEquality(ts.isArrayLiteralExpression, n => n, type(n => {
+                const elemType = this.getCType(n.elements[i]);
+                return elemType ? new ArrayType(elemType, 0, false) : null
+            }));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);

@@ -100,7 +100,7 @@ export class CSimpleElementAccess {
     public isString: boolean = false;
     public arrayCapacity: string;
     public nullValue: CExpression = "0";
-    public isUniversalAccess: boolean;
+    public isUniversalAccess: boolean = false;
     constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression) {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
