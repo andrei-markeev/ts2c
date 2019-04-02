@@ -7,8 +7,7 @@ var types_1 = require("./types");
 var standard_1 = require("./standard");
 var match_1 = require("./standard/string/match");
 var MemoryManager = /** @class */ (function () {
-    function MemoryManager(typeChecker, typeHelper, symbolsHelper) {
-        this.typeChecker = typeChecker;
+    function MemoryManager(typeHelper, symbolsHelper) {
         this.typeHelper = typeHelper;
         this.symbolsHelper = symbolsHelper;
         this.scopes = {};
@@ -21,7 +20,7 @@ var MemoryManager = /** @class */ (function () {
     MemoryManager.prototype.scheduleNodeDisposals = function (nodes) {
         var _this = this;
         nodes.filter(function (n) { return ts.isIdentifier(n); }).forEach(function (n) {
-            var decl = types_1.getDeclaration(_this.typeChecker, n);
+            var decl = _this.typeHelper.getDeclaration(n);
             if (decl) {
                 _this.references[decl.pos] = _this.references[decl.pos] || [];
                 _this.references[decl.pos].push(n);
@@ -33,12 +32,15 @@ var MemoryManager = /** @class */ (function () {
                 case ts.SyntaxKind.ArrayLiteralExpression:
                     {
                         var type = this.typeHelper.getCType(node);
-                        if (type && type instanceof types_1.ArrayType && type.isDynamicArray)
-                            this.scheduleNodeDisposal(node);
+                        if (type && type instanceof types_1.ArrayType && type.isDynamicArray || type === types_1.UniversalVarType)
+                            this.scheduleNodeDisposal(node, type !== types_1.UniversalVarType);
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
-                    this.scheduleNodeDisposal(node);
+                    {
+                        var type = this.typeHelper.getCType(node);
+                        this.scheduleNodeDisposal(node, type !== types_1.UniversalVarType);
+                    }
                     break;
                 case ts.SyntaxKind.BinaryExpression:
                     {
@@ -182,7 +184,7 @@ var MemoryManager = /** @class */ (function () {
                 continue;
             var refs = [node];
             if (node.kind == ts.SyntaxKind.Identifier) {
-                var decl = types_1.getDeclaration(this.typeChecker, node);
+                var decl = this.typeHelper.getDeclaration(node);
                 if (decl)
                     refs = this.references[decl.pos] || refs;
             }
@@ -233,7 +235,7 @@ var MemoryManager = /** @class */ (function () {
                         this.addIfFoundInAssignment(heapNode, call, queue);
                     }
                     else {
-                        var decl = types_1.getDeclaration(this.typeChecker, call.expression);
+                        var decl = this.typeHelper.getDeclaration(call.expression);
                         if (!decl) {
                             var isStandardCall = standard_1.StandardCallHelper.isStandardCall(this.typeHelper, call);
                             if (isStandardCall) {
@@ -310,8 +312,8 @@ var MemoryManager = /** @class */ (function () {
             node: heapNode,
             simple: isSimple,
             arrayWithContents: arrayWithContents,
-            array: !arrayWithContents && type && type instanceof types_1.ArrayType && type.isDynamicArray,
-            dict: type && type instanceof types_1.DictType,
+            array: !arrayWithContents && type && type instanceof types_1.ArrayType && type.isDynamicArray || type === types_1.UniversalVarType && ts.isArrayLiteralExpression(heapNode),
+            dict: type && type instanceof types_1.DictType || type === types_1.UniversalVarType && ts.isObjectLiteralExpression(heapNode),
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp
@@ -465,7 +467,7 @@ var CAssignment = /** @class */ (function () {
             this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment_1(scope, argAccessor, "" + i, argType, e); });
         }
         else if (argType == types_1.UniversalVarType) {
-            this.expression = new variable_1.CAsUniversalVar(scope, right, template_1.CodeTemplateFactory.createForNode(scope, right), scope.root.typeHelper.getCType(right));
+            this.expression = new variable_1.CAsUniversalVar(scope, right);
         }
         else
             this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
@@ -502,6 +504,15 @@ var template_1 = require("../template");
 var variable_1 = require("./variable");
 var CCallExpression = /** @class */ (function () {
     function CCallExpression(scope, call) {
+        this.funcName = '';
+        this.standardCall = '';
+        // call of function that uses "this"
+        var decl = scope.root.typeHelper.getDeclaration(call.expression);
+        if (decl) {
+            var funcType = scope.root.typeHelper.getCType(decl);
+            if (funcType.instanceType != null)
+                return;
+        }
         this.funcName = call.expression.getText();
         this.standardCall = standard_1.StandardCallHelper.createTemplate(scope, call);
         if (this.standardCall)
@@ -511,7 +522,7 @@ var CCallExpression = /** @class */ (function () {
         });
     }
     CCallExpression = __decorate([
-        template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#else}\n    {funcName}({arguments {, }=> {this}})\n{/if}", ts.SyntaxKind.CallExpression)
+        template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#elseif funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Not supported yet: calling function that references 'this'. Use 'new'. */\n{/if}", ts.SyntaxKind.CallExpression)
     ], CCallExpression);
     return CCallExpression;
 }());
@@ -519,19 +530,22 @@ exports.CCallExpression = CCallExpression;
 var CNew = /** @class */ (function () {
     function CNew(scope, node) {
         this.funcName = "";
+        this.allocator = null;
         if (ts.isIdentifier(node.expression)) {
+            var decl = scope.root.typeHelper.getDeclaration(node.expression);
+            var funcType = scope.root.typeHelper.getCType(decl);
             this.funcName = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
             this.arguments = node.arguments.map(function (arg) { return template_1.CodeTemplateFactory.createForNode(scope, arg); });
-            this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            var varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
-                scope.variables.push(new variable_1.CVariable(scope, this.varName, scope.root.typeHelper.getInstanceType(node.expression)));
-            this.arguments.unshift(this.varName);
-            scope.root.headerFlags.malloc = true;
+                scope.variables.push(new variable_1.CVariable(scope, varName, funcType.instanceType));
+            this.arguments.unshift(varName);
+            this.allocator = new variable_1.CVariableAllocation(scope, varName, funcType.instanceType, node);
         }
         this.nodeText = node.getText();
     }
     CNew = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if funcName}\n        {varName} = malloc(sizeof(*{varName}));\n        assert({varName} != NULL);\n    {/if}\n{/statements}\n{#if funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Unsupported 'new' expression {nodeText} */\n{/if}", ts.SyntaxKind.NewExpression)
+        template_1.CodeTemplate("\n{#statements}\n    {allocator}\n{/statements}\n{#if funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Unsupported 'new' expression {nodeText} */\n{/if}", ts.SyntaxKind.NewExpression)
     ], CNew);
     return CNew;
 }());
@@ -551,6 +565,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var template_1 = require("../template");
 var types_1 = require("../types");
+var literals_1 = require("./literals");
 var CElementAccess = /** @class */ (function () {
     function CElementAccess(scope, node) {
         var type = null;
@@ -586,7 +601,7 @@ var CElementAccess = /** @class */ (function () {
                 elementAccess = propAccess.expression.text;
             else
                 elementAccess = new CElementAccess_1(scope, propAccess.expression);
-            argumentExpression = propAccess.name.text;
+            argumentExpression = type instanceof types_1.DictType ? '"' + propAccess.name.text + '"' : propAccess.name.text;
         }
         else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             var elemAccess = node;
@@ -628,25 +643,33 @@ var CSimpleElementAccess = /** @class */ (function () {
         this.isStruct = false;
         this.isDict = false;
         this.isString = false;
+        this.nullValue = "0";
+        this.isUniversalAccess = false;
         this.isSimpleVar = typeof type === 'string' && type != types_1.UniversalVarType && type != types_1.PointerVarType;
         this.isDynamicArray = type instanceof types_1.ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof types_1.ArrayType && !type.isDynamicArray;
         this.arrayCapacity = type instanceof types_1.ArrayType && !type.isDynamicArray && type.capacity + "";
         this.isDict = type instanceof types_1.DictType;
         this.isStruct = type instanceof types_1.StructType;
+        if (type === types_1.UniversalVarType && argumentExpression != null) {
+            this.isUniversalAccess = true;
+            scope.root.headerFlags.js_var_get = true;
+        }
         this.isString = type === types_1.StringVarType;
+        if (argumentExpression != null && type instanceof types_1.DictType && type.elementType === types_1.UniversalVarType)
+            this.nullValue = new literals_1.CUndefined(scope);
         if (this.isString && this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;
     }
     CSimpleElementAccess = __decorate([
-        template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
+        template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression}, {nullValue})\n{#elseif isUniversalAccess}\n    js_var_get({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
     ], CSimpleElementAccess);
     return CSimpleElementAccess;
 }());
 exports.CSimpleElementAccess = CSimpleElementAccess;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../template":41,"../types":43}],5:[function(require,module,exports){
+},{"../template":41,"../types":43,"./literals":7}],5:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -725,11 +748,10 @@ var CBinaryExpression = /** @class */ (function () {
         }
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
-        var isEqualityOp = operatorKind == ts.SyntaxKind.EqualsEqualsToken || operatorKind == ts.SyntaxKind.EqualsEqualsEqualsToken
-            || operatorKind == ts.SyntaxKind.ExclamationEqualsToken || operatorKind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
-        if (leftType == types_1.BooleanVarType && isEqualityOp)
+        var isEqualityOp = types_1.equalityOps.indexOf(operatorKind) > -1;
+        if (leftType == types_1.BooleanVarType && types_1.operandsToNumber(leftType, operatorKind, rightType))
             leftType = types_1.NumberVarType;
-        if (rightType == types_1.BooleanVarType && isEqualityOp)
+        if (rightType == types_1.BooleanVarType && types_1.operandsToNumber(leftType, operatorKind, rightType))
             rightType = types_1.NumberVarType;
         if (leftType == types_1.NumberVarType && rightType == types_1.NumberVarType) {
             operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
@@ -826,11 +848,11 @@ var CBinaryExpression = /** @class */ (function () {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['js_var_eq|, FALSE', ' == FALSE'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == TRUE'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['js_var_eq|, FALSE', ' == TRUE'];
-            this.left = new variable_1.CAsUniversalVar(scope, node.left, this.left, leftType);
-            this.right = new variable_1.CAsUniversalVar(scope, node.right, this.right, rightType);
+            this.left = new variable_1.CAsUniversalVar(scope, this.left, leftType);
+            this.right = new variable_1.CAsUniversalVar(scope, this.right, rightType);
             scope.root.headerFlags.js_var_eq = true;
         }
-        else if (!isEqualityOp && (leftType == types_1.UniversalVarType || rightType == types_1.UniversalVarType)) {
+        else if (!isEqualityOp && (types_1.toNumberCanBeNaN(leftType) || types_1.toNumberCanBeNaN(rightType))) {
             var js_var_operator_map = (_a = {},
                 _a[ts.SyntaxKind.AsteriskToken] = "JS_VAR_ASTERISK",
                 _a[ts.SyntaxKind.SlashToken] = "JS_VAR_SLASH",
@@ -839,8 +861,8 @@ var CBinaryExpression = /** @class */ (function () {
                 _a[ts.SyntaxKind.MinusToken] = "JS_VAR_MINUS",
                 _a);
             this.computeOperation = js_var_operator_map[operatorKind];
-            this.left = new variable_1.CAsUniversalVar(scope, node.left, this.left, leftType);
-            this.right = new variable_1.CAsUniversalVar(scope, node.right, this.right, rightType);
+            this.left = new variable_1.CAsUniversalVar(scope, this.left, leftType);
+            this.right = new variable_1.CAsUniversalVar(scope, this.right, rightType);
             scope.root.headerFlags.js_var_compute = true;
         }
         else if (leftType instanceof types_1.StructType || leftType instanceof types_1.ArrayType || leftType instanceof types_1.DictType
@@ -849,7 +871,7 @@ var CBinaryExpression = /** @class */ (function () {
             operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
             operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
             operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
-            if (leftType != rightType) {
+            if (isEqualityOp && leftType != rightType) {
                 this.expression = "FALSE";
                 scope.root.headerFlags.bool = true;
             }
@@ -877,32 +899,51 @@ exports.CBinaryExpression = CBinaryExpression;
 var CUnaryExpression = /** @class */ (function () {
     function CUnaryExpression(scope, node) {
         this.call = null;
-        this.callPostfix = "";
+        this.expression = null;
         var operatorMap = {};
         var type = scope.root.typeHelper.getCType(node.operand);
         this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
         this.nodeText = node.getText();
         operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
-        if (type == types_1.NumberVarType) {
+        if (type == types_1.NumberVarType || type == types_1.BooleanVarType) {
             operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
             operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
             operatorMap[ts.SyntaxKind.MinusToken] = '-';
             operatorMap[ts.SyntaxKind.PlusToken] = '+';
             operatorMap[ts.SyntaxKind.TildeToken] = '~';
         }
-        if (type != types_1.NumberVarType && type != types_1.UniversalVarType && node.operator === ts.SyntaxKind.PlusToken) {
-            this.call = "str_to_int16_t";
-            scope.root.headerFlags.str_to_int16_t = true;
-        }
-        else if (type == types_1.UniversalVarType && node.operator == ts.SyntaxKind.PlusToken) {
-            this.call = "js_var_to_number";
-            scope.root.headerFlags.js_var_to_number = true;
+        if (node.operator === ts.SyntaxKind.PlusToken) {
+            if (type == types_1.StringVarType) {
+                this.call = "str_to_int16_t";
+                scope.root.headerFlags.str_to_int16_t = true;
+            }
+            else if (type == types_1.UniversalVarType) {
+                this.call = "js_var_to_number";
+                scope.root.headerFlags.js_var_to_number = true;
+            }
+            else if (type instanceof types_1.StructType) {
+                this.call = "js_var_from";
+                this.operand = "JS_VAR_NAN";
+                scope.root.headerFlags.js_var_from = true;
+            }
+            else if (type instanceof types_1.ArrayType && !type.isDynamicArray && type.capacity == 0) {
+                this.expression = "js_var_from_int16_t(0)";
+                scope.root.headerFlags.js_var_from_int16_t = true;
+            }
+            else if (type instanceof types_1.ArrayType && !type.isDynamicArray && type.capacity > 1) {
+                this.expression = "js_var_from(JS_VAR_NAN)";
+                scope.root.headerFlags.js_var_from = true;
+            }
+            else if (type instanceof types_1.DictType) {
+                this.expression = "js_var_from(JS_VAR_NAN)";
+                scope.root.headerFlags.js_var_from = true;
+            }
         }
         this.operator = operatorMap[node.operator];
     }
     CUnaryExpression = __decorate([
-        template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif call}\n    {call}({operand})\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
+        template_1.CodeTemplate("\n{#if isPostfix && operator}\n    {operand}{operator}\n{#elseif !isPostfix && operator}\n    {operator}{operand}\n{#elseif call}\n    {call}({operand})\n{#elseif expression}\n    {expression}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
     ], CUnaryExpression);
     return CUnaryExpression;
 }());
@@ -991,7 +1032,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var template_1 = require("../template");
 var variable_1 = require("./variable");
-var anonymousNameCounter = 0;
 var CFunctionPrototype = /** @class */ (function () {
     function CFunctionPrototype(scope, node) {
         this.parameters = [];
@@ -1015,13 +1055,13 @@ var CFunction = /** @class */ (function () {
         this.statements = [];
         this.parent = root;
         this.name = node.name.getText();
-        this.funcDecl = new variable_1.CVariable(root, this.name, node, { removeStorageSpecifier: true });
+        var funcType = root.typeHelper.getCType(node);
+        this.funcDecl = new variable_1.CVariable(root, this.name, funcType.returnType, { removeStorageSpecifier: true });
         this.parameters = node.parameters.map(function (p) {
             return new variable_1.CVariable(_this, p.name.text, p.name, { removeStorageSpecifier: true });
         });
-        var instanceType = root.typeHelper.instanceNodes[node.pos];
-        if (instanceType)
-            this.parameters.unshift(new variable_1.CVariable(this, "this", instanceType, { removeStorageSpecifier: true }));
+        if (funcType.instanceType)
+            this.parameters.unshift(new variable_1.CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         this.variables = [];
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
         var _loop_1 = function (gcVarName) {
@@ -1077,8 +1117,14 @@ var assignment_1 = require("./assignment");
 var regexfunc_1 = require("./regexfunc");
 var CArrayLiteralExpression = /** @class */ (function () {
     function CArrayLiteralExpression(scope, node) {
+        this.universalWrapper = false;
         var arrSize = node.elements.length;
         var type = scope.root.typeHelper.getCType(node);
+        if (type === types_1.UniversalVarType) {
+            type = new types_1.ArrayType(types_1.UniversalVarType, 0, true);
+            this.universalWrapper = true;
+            scope.root.headerFlags.js_var_array = true;
+        }
         if (type instanceof types_1.ArrayType) {
             var varName = void 0;
             var canUseInitializerList = node.elements.every(function (e) { return e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral; });
@@ -1117,13 +1163,13 @@ var CArrayLiteralExpression = /** @class */ (function () {
                     scope.statements.push(assignment);
                 }
             }
-            this.expression = type.isDynamicArray ? "((void *)" + varName + ")" : varName;
+            this.expression = varName;
         }
         else
             this.expression = "/* Unsupported use of array literal expression */";
     }
     CArrayLiteralExpression = __decorate([
-        template_1.CodeTemplate("{expression}", ts.SyntaxKind.ArrayLiteralExpression)
+        template_1.CodeTemplate("\n{#if universalWrapper}\n    js_var_from_array({expression})\n{#else}\n    {expression}\n{/if}", ts.SyntaxKind.ArrayLiteralExpression)
     ], CArrayLiteralExpression);
     return CArrayLiteralExpression;
 }());
@@ -1189,7 +1235,7 @@ var CString = /** @class */ (function () {
         else
             this.value = s;
         if (typeof (nodeOrString) !== "string" && scope.root.typeHelper.getCType(nodeOrString) == types_1.UniversalVarType)
-            this.value = new variable_1.CAsUniversalVar(scope, nodeOrString, this.value, types_1.StringVarType);
+            this.value = new variable_1.CAsUniversalVar(scope, this.value, types_1.StringVarType);
     }
     CString = __decorate([
         template_1.CodeTemplate("{value}", ts.SyntaxKind.StringLiteral)
@@ -1202,7 +1248,7 @@ var CNumber = /** @class */ (function () {
         this.universalWrapper = false;
         this.value = node.getText();
         if (scope.root.typeHelper.getCType(node) == types_1.UniversalVarType)
-            this.value = new variable_1.CAsUniversalVar(scope, node, this.value, types_1.NumberVarType);
+            this.value = new variable_1.CAsUniversalVar(scope, this.value, types_1.NumberVarType);
     }
     CNumber = __decorate([
         template_1.CodeTemplate("{value}", ts.SyntaxKind.NumericLiteral)
@@ -1216,7 +1262,7 @@ var CBoolean = /** @class */ (function () {
         this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
         if (scope.root.typeHelper.getCType(node) == types_1.UniversalVarType)
-            this.value = new variable_1.CAsUniversalVar(scope, node, this.value, types_1.BooleanVarType);
+            this.value = new variable_1.CAsUniversalVar(scope, this.value, types_1.BooleanVarType);
     }
     CBoolean = __decorate([
         template_1.CodeTemplate("\n{#if universalWrapper}\n    js_var_from_uint8_t({value})\n{#else}\n    {value}\n{/if}", [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
@@ -1225,7 +1271,7 @@ var CBoolean = /** @class */ (function () {
 }());
 exports.CBoolean = CBoolean;
 var CNull = /** @class */ (function () {
-    function CNull(scope, node) {
+    function CNull(scope) {
         scope.root.headerFlags.js_var_from = true;
     }
     CNull = __decorate([
@@ -1235,7 +1281,7 @@ var CNull = /** @class */ (function () {
 }());
 exports.CNull = CNull;
 var CUndefined = /** @class */ (function () {
-    function CUndefined(scope, node) {
+    function CUndefined(scope) {
         scope.root.headerFlags.js_var_from = true;
     }
     CUndefined = __decorate([
@@ -1765,7 +1811,11 @@ var CVariableAllocation = /** @class */ (function () {
             scope.root.headerFlags.malloc = true;
         if (this.gcVarName || this.needAllocateArray)
             scope.root.headerFlags.array = true;
-        if (this.needAllocateDict)
+        if (varType instanceof types_1.ArrayType && varType.elementType == types_1.UniversalVarType)
+            scope.root.headerFlags.js_var_array = true;
+        if (varType instanceof types_1.DictType && varType.elementType == types_1.UniversalVarType)
+            scope.root.headerFlags.js_var_dict = true;
+        else if (this.needAllocateDict)
             scope.root.headerFlags.dict = true;
         if (this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
@@ -1803,7 +1853,6 @@ var CVariableDestructors = /** @class */ (function () {
         this.gcArraysVarName = null;
         this.gcArraysCVarName = null;
         this.gcDictsVarName = null;
-        this.gcUniversalVarName = null;
         this.arrayDestructors = [];
         var gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (var _i = 0, gcVarNames_1 = gcVarNames; _i < gcVarNames_1.length; _i++) {
@@ -1814,8 +1863,6 @@ var CVariableDestructors = /** @class */ (function () {
                 this.gcDictsVarName = gc;
             else if (gc.indexOf("_arrays") > -1)
                 this.gcArraysVarName = gc;
-            else if (gc.indexOf("_js_vars") > -1)
-                this.gcUniversalVarName = gc;
             else
                 this.gcVarName = gc;
         }
@@ -1847,28 +1894,35 @@ var CVariableDestructors = /** @class */ (function () {
         });
     }
     CVariableDestructors = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}\n    {destructors => free({this});\n}\n    {#if gcArraysCVarName}\n        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {\n            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)\n                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n\n            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);\n            free({gcArraysCVarName}->data[gc_i]);\n        }\n        free({gcArraysCVarName}->data);\n        free({gcArraysCVarName});\n    {/if}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcUniversalVarName}\n        for (gc_i = 0; gc_i < {gcUniversalVarName}->size; gc_i++) {\n            free({gcUniversalVarName}->data[gc_i]->data);\n            free({gcUniversalVarName}->data[gc_i]);\n        }\n        free({gcUniversalVarName}->data);\n        free({gcUniversalVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
+        template_1.CodeTemplate("\n{#statements}\n    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}\n    {destructors => free({this});\n}\n    {#if gcArraysCVarName}\n        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {\n            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)\n                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n\n            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);\n            free({gcArraysCVarName}->data[gc_i]);\n        }\n        free({gcArraysCVarName}->data);\n        free({gcArraysCVarName});\n    {/if}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
     ], CVariableDestructors);
     return CVariableDestructors;
 }());
 exports.CVariableDestructors = CVariableDestructors;
 var CAsUniversalVar = /** @class */ (function () {
-    function CAsUniversalVar(scope, node, expr, type) {
-        this.isUniversalVar = type == types_1.UniversalVarType;
-        this.isString = type == types_1.StringVarType;
-        this.isNumber = type == types_1.NumberVarType;
-        this.isBoolean = type == types_1.BooleanVarType;
-        this.expression = template_1.CodeTemplateFactory.templateToString(expr);
-        if (type == types_1.StringVarType)
+    function CAsUniversalVar(scope, expr, type) {
+        this.expression = typeguards_1.isNode(expr) ? template_1.CodeTemplateFactory.createForNode(scope, expr) : expr;
+        type = type || typeguards_1.isNode(expr) && scope.root.typeHelper.getCType(expr);
+        this.isUniversalVar = type === types_1.UniversalVarType;
+        this.isString = type === types_1.StringVarType;
+        this.isNumber = type === types_1.NumberVarType;
+        this.isBoolean = type === types_1.BooleanVarType;
+        this.isArray = type instanceof types_1.ArrayType;
+        this.isDict = type instanceof types_1.StructType || type instanceof types_1.DictType;
+        if (type === types_1.StringVarType)
             scope.root.headerFlags.js_var_from_str = true;
-        if (type == types_1.NumberVarType)
+        if (type === types_1.NumberVarType)
             scope.root.headerFlags.js_var_from_int16_t = true;
-        if (type == types_1.BooleanVarType)
+        if (type === types_1.BooleanVarType)
             scope.root.headerFlags.js_var_from_uint8_t = true;
+        if (type instanceof types_1.ArrayType)
+            scope.root.headerFlags.js_var_array = true;
+        if (type instanceof types_1.StructType || type instanceof types_1.DictType)
+            scope.root.headerFlags.js_var_dict = true;
         scope.root.headerFlags.js_var = true;
     }
     CAsUniversalVar = __decorate([
-        template_1.CodeTemplate("\n{#if isUniversalVar}\n    {expression}\n{#elseif isString}\n    js_var_from_str({expression})\n{#elseif isNumber}\n    js_var_from_int16_t({expression})\n{#elseif isBoolean}\n    js_var_from_uint8_t({expression})\n{#else}\n    /** converting {expression} to js_var is not supported yet */\n{/if}")
+        template_1.CodeTemplate("\n{#if isUniversalVar}\n    {expression}\n{#elseif isString}\n    js_var_from_str({expression})\n{#elseif isNumber}\n    js_var_from_int16_t({expression})\n{#elseif isBoolean}\n    js_var_from_uint8_t({expression})\n{#elseif isArray}\n    js_var_from_array({expression})\n{#elseif isDict}\n    js_var_from_dict({expression})\n{#else}\n    /** converting {expression} to js_var is not supported yet */\n{/if}")
     ], CAsUniversalVar);
     return CAsUniversalVar;
 }());
@@ -1885,6 +1939,8 @@ var CVariable = /** @class */ (function () {
             scope.root.headerFlags.int16_t = true;
         if (type == types_1.BooleanVarType)
             scope.root.headerFlags.uint8_t = true;
+        if (type instanceof types_1.ArrayType && type.elementType == types_1.UniversalVarType)
+            scope.root.headerFlags.js_var_dict = true;
         if (type instanceof types_1.DictType && type.elementType == types_1.UniversalVarType)
             scope.root.headerFlags.js_var_dict = true;
         // root scope, make variables file-scoped by default
@@ -1999,6 +2055,7 @@ var HeaderFlags = /** @class */ (function () {
         this.array_pop = false;
         this.array_insert = false;
         this.array_remove = false;
+        this.array_string_t = false;
         this.array_int16_t_cmp = false;
         this.array_str_cmp = false;
         this.gc_main = false;
@@ -2063,7 +2120,7 @@ var CProgram = /** @class */ (function () {
         }
         this.typeHelper = new types_1.TypeHelper(tsTypeChecker, nodes);
         this.symbolsHelper = new symbols_1.SymbolsHelper(tsTypeChecker, this.typeHelper);
-        this.memoryManager = new memory_1.MemoryManager(tsTypeChecker, this.typeHelper, this.symbolsHelper);
+        this.memoryManager = new memory_1.MemoryManager(this.typeHelper, this.symbolsHelper);
         this.typeHelper.inferTypes();
         this.memoryManager.scheduleNodeDisposals(nodes);
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
@@ -2092,14 +2149,10 @@ var CProgram = /** @class */ (function () {
             }
         }
         var structs = this.symbolsHelper.getStructsAndFunctionPrototypes()[0];
-        var hasStringArray = structs.filter(function (s) { return s.name == "array_string_t"; }).length > 0;
-        if (this.headerFlags.js_var_dict && !hasStringArray)
-            structs.push({ name: "array_string_t", properties: [
-                    { name: "size", type: types_1.NumberVarType },
-                    { name: "capacity", type: types_1.NumberVarType },
-                    { name: "data", type: "const char **" }
-                ] });
-        this.userStructs = structs.map(function (s) { return ({
+        this.headerFlags.array_string_t = this.headerFlags.array_string_t || structs.filter(function (s) { return s.name == "array_string_t"; }).length > 0;
+        this.headerFlags.js_var_array = this.headerFlags.js_var_array || structs.filter(function (s) { return s.name == "array_js_var_t"; }).length > 0;
+        this.headerFlags.js_var_dict = this.headerFlags.js_var_dict || structs.filter(function (s) { return s.name == "dict_js_var_t"; }).length > 0;
+        this.userStructs = structs.filter(function (s) { return ["array_string_t", "array_js_var_t", "dict_js_var_t"].indexOf(s.name) == -1; }).map(function (s) { return ({
             name: s.name,
             properties: s.properties.map(function (p) { return new variable_1.CVariable(_this, p.name, p.type, { removeStorageSpecifier: true }); })
         }); });
@@ -2107,7 +2160,7 @@ var CProgram = /** @class */ (function () {
         this.destructors = new variable_1.CVariableDestructors(this, null);
     }
     CProgram = __decorate([
-        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.str_substring\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict\n    || headerFlags.js_var_compute || headerFlags.js_var_from_str || headerFlags.js_var_eq}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf || headerFlags.parse_int16_t}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #include <limits.h>\n{/if}\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_compute}\n    #include <ctype.h>\n{/if}\n\n{#if includes.length}\n    {includes => #include <{this}>\n}\n{/if}\n\n{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove }\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||\n     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||\n     headerFlags.regex || headerFlags.str_to_int16_t }\n    typedef short int16_t;\n{/if}\n{#if headerFlags.uint16_t}\n    typedef unsigned short uint16_t;\n{/if}\n{#if headerFlags.regex}\n    struct regex_indices_struct_t {\n        int16_t index;\n        int16_t end;\n    };\n    struct regex_match_struct_t {\n        int16_t index;\n        int16_t end;\n        struct regex_indices_struct_t *matches;\n        int16_t matches_count;\n    };\n    typedef struct regex_match_struct_t regex_func_t(const char*, int16_t);\n    struct regex_struct_t {\n        const char * str;\n        regex_func_t * func;\n    };\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_compute}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_compute}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict || headerFlags.js_var_dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? 0 : dict->values->data[tmp_dict_pos])\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos < 0) { \\\n            tmp_dict_pos = -tmp_dict_pos - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len || headerFlags.str_substring || headerFlags.str_slice}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_char_code_at}\n    int16_t str_char_code_at(const char * str, int16_t pos) {\n        int16_t i, res = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            if (pos == 0) {\n                res += (unsigned char)*str++;\n                if (i > 1) {\n                    res <<= 6; res -= 0x3080;\n                    res += (unsigned char)*str++;\n                }\n                return res;\n            }\n            str += i;\n            pos -= i == 4 ? 2 : 1;\n        }\n        return -1;\n    }\n{/if}\n{#if headerFlags.str_substring || headerFlags.str_slice}\n    const char * str_substring(const char * str, int16_t start, int16_t end) {\n        int16_t i, tmp, pos, len = str_len(str), byte_start = -1;\n        char *p, *buf;\n        start = start < 0 ? 0 : (start > len ? len : start);\n        end = end < 0 ? 0 : (end > len ? len : end);\n        if (end < start) {\n            tmp = start;\n            start = end;\n            end = tmp;\n        }\n        i = 0;\n        pos = 0;\n        p = (char *)str;\n        while (*p) {\n            if (start == pos)\n                byte_start = p - str;\n            if (end == pos)\n                break;\n            i = 1;\n            if ((*p & 0xE0) == 0xC0) i=2;\n            else if ((*p & 0xF0) == 0xE0) i=3;\n            else if ((*p & 0xF8) == 0xF0) i=4;\n            p += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        len = byte_start == -1 ? 0 : p - str - byte_start;\n        buf = malloc(len + 1);\n        assert(buf != NULL);\n        memcpy(buf, str + byte_start, len);\n        buf[len] = '\\0';\n        return buf;\n    }\n{/if}\n{#if headerFlags.str_slice}\n    const char * str_slice(const char * str, int16_t start, int16_t end) {\n        int16_t len = str_len(str);\n        start = start < 0 ? len + start : start;\n        end = end < 0 ? len + end : end;\n        if (end - start < 0)\n            end = start;\n        return str_substring(str, start, end);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int16_t*)a - *(int16_t*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n{#if headerFlags.parse_int16_t}\n    int16_t parse_int16_t(const char * str) {\n        int r;\n        sscanf(str, \"%d\", &r);\n        return (int16_t) r;\n    }\n{/if}\n\n{#if headerFlags.js_var || headerFlags.str_to_int16_t}\n    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_DICT};\n    struct js_var {\n        enum js_var_type type;\n        int16_t number;\n        void *data;\n    };\n{/if}\n\n{#if headerFlags.js_var_array || headerFlags.js_var_dict}\n    struct array_js_var_t {\n        int16_t size;\n        int16_t capacity;\n        struct js_var *data;\n    };\n{/if}\n\n{#if headerFlags.js_var_dict}\n    struct dict_js_var_t {\n        struct array_string_t *index;\n        struct array_js_var_t *values;\n    };\n{/if}\n\n{#if headerFlags.js_var_from}\n    struct js_var js_var_from(enum js_var_type type) {\n        struct js_var v;\n        v.type = type;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_uint8_t}\n    struct js_var js_var_from_uint8_t(uint8_t b) {\n        struct js_var v;\n        v.type = JS_VAR_BOOL;\n        v.number = b;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_int16_t}\n    struct js_var js_var_from_int16_t(int16_t n) {\n        struct js_var v;\n        v.type = JS_VAR_INT16;\n        v.number = n;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_str}\n    struct js_var js_var_from_str(const char *s) {\n        struct js_var v;\n        v.type = JS_VAR_STRING;\n        v.data = (void *)s;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_dict}\n    struct js_var js_var_from_dict(struct dict_js_var_t *dict) {\n        struct js_var v;\n        v.type = JS_VAR_DICT;\n        v.data = (void *)dict;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}\n    struct js_var str_to_int16_t(const char * str) {\n        struct js_var v;\n        const char *p = str;\n        int r;\n\n        v.data = NULL;\n\n        while (*p && isspace(*p))\n            p++;\n\n        if (*p == 0)\n            str = \"0\";\n\n        if (*p == '-' && *(p+1))\n            p++;\n\n        while (*p) {\n            if (!isdigit(*p)) {\n                v.type = JS_VAR_NAN;\n                return v;\n            }\n            p++;\n        }\n\n        sscanf(str, \"%d\", &r);\n        v.type = JS_VAR_INT16;\n        v.number = (int16_t)r;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_to_str || headerFlags.js_var_compute}\n    const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)\n    {\n        char *buf;\n        *need_dispose = 0;\n        if (v.type == JS_VAR_INT16) {\n            buf = malloc(STR_INT16_T_BUFLEN);\n            assert(buf != NULL);\n            *need_dispose = 1;\n            sprintf(buf, \"%d\", v.number);\n            return buf;\n        } else if (v.type == JS_VAR_BOOL)\n            return v.number ? \"true\" : \"false\";\n        else if (v.type == JS_VAR_STRING)\n            return (const char *)v.data;\n        else if (v.type == JS_VAR_DICT)\n            return \"[object Object]\";\n        else if (v.type == JS_VAR_NAN)\n            return \"NaN\";\n        else if (v.type == JS_VAR_NULL)\n            return \"null\";\n        else if (v.type == JS_VAR_UNDEFINED)\n            return \"undefined\";\n\n        return NULL;\n    }\n{/if}\n\n{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}\n\n    struct js_var js_var_to_number(struct js_var v)\n    {\n        struct js_var result;\n        result.type = JS_VAR_INT16;\n        result.number = 0;\n\n        if (v.type == JS_VAR_INT16)\n            result.number = v.number;\n        else if (v.type == JS_VAR_BOOL)\n            result.number = v.number;\n        else if (v.type == JS_VAR_STRING)\n            return str_to_int16_t((const char *)v.data);\n        else if (v.type != JS_VAR_NULL)\n            result.type = JS_VAR_NAN;\n\n        return result;\n    }\n\n{/if}\n\n{#if headerFlags.js_var_to_bool}\n\n    uint8_t js_var_to_bool(struct js_var v)\n    {\n        if (v.type == JS_VAR_INT16)\n            return v.number != 0;\n        else if (v.type == JS_VAR_BOOL)\n            return v.number;\n        else if (v.type == JS_VAR_STRING)\n            return *((const char *)v.data) != 0;\n        else if (v.type == JS_VAR_NULL || v.type == JS_VAR_UNDEFINED || v.type == JS_VAR_NAN)\n            return FALSE;\n        else\n            return TRUE;\n    }\n\n{/if}\n\n{#if headerFlags.js_var_to_undefined}\n    struct js_var js_var_to_undefined(void *value) {\n        struct js_var v;\n        v.type = JS_VAR_UNDEFINED;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_typeof}\n\n    const char * js_var_typeof(struct js_var v)\n    {\n        if (v.type == JS_VAR_INT16 || v.type == JS_VAR_NAN)\n            return \"number\";\n        else if (v.type == JS_VAR_BOOL)\n            return \"boolean\";\n        else if (v.type == JS_VAR_STRING)\n            return \"string\";\n        else if (v.type == JS_VAR_UNDEFINED)\n            return \"undefined\";\n        else\n            return \"object\";\n    }\n\n{/if}\n\n{#if headerFlags.gc_main}\n    static ARRAY(void *) gc_main;\n{/if}\n\n{#if headerFlags.js_var_eq}\nuint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)\n{\n    if (left.type == right.type) {\n        if (left.type == JS_VAR_NULL || left.type == JS_VAR_UNDEFINED)\n            return TRUE;\n        else if (left.type == JS_VAR_NAN)\n            return FALSE;\n        else if (left.type == JS_VAR_INT16 || left.type == JS_VAR_BOOL)\n            return left.number == right.number ? TRUE : FALSE;\n        else if (left.type == JS_VAR_STRING)\n            return !strcmp((const char *)left.data, (const char *)right.data) ? TRUE : FALSE;\n        else\n            return left.data == right.data;\n    } else if (!strict) {\n        if ((left.type == JS_VAR_NULL && right.type == JS_VAR_UNDEFINED) || (left.type == JS_VAR_UNDEFINED && right.type == JS_VAR_NULL))\n            return TRUE;\n        else if ((left.type == JS_VAR_INT16 && right.type == JS_VAR_STRING) || (left.type == JS_VAR_STRING && right.type == JS_VAR_INT16))\n            return js_var_eq(js_var_to_number(left), js_var_to_number(right), strict);\n        else if (left.type == JS_VAR_BOOL)\n            return js_var_eq(js_var_to_number(left), right, strict);\n        else if (right.type == JS_VAR_BOOL)\n            return js_var_eq(left, js_var_to_number(right), strict);\n        else\n            return FALSE;\n    } else\n        return FALSE;\n}\n\n{/if}\n\n{#if headerFlags.js_var_compute}\n\n    enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};\n    struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)\n    {\n        struct js_var result, left_to_number, right_to_number;\n        const char *left_as_string, *right_as_string;\n        uint8_t need_dispose_left, need_dispose_right;\n        result.data = NULL;\n\n        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING))\n        {\n            left_as_string = js_var_to_str(left, &need_dispose_left);\n            right_as_string = js_var_to_str(right, &need_dispose_right);\n            \n            result.type = JS_VAR_STRING;\n            result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);\n            assert(result.data != NULL);\n            ARRAY_PUSH(gc_main, result.data);\n\n            strcpy(result.data, left_as_string);\n            strcat(result.data, right_as_string);\n\n            if (need_dispose_left)\n                free((void *)left_as_string);\n            if (need_dispose_right)\n                free((void *)right_as_string);\n            return result;\n        }\n\n        left_to_number = js_var_to_number(left);\n        right_to_number = js_var_to_number(right);\n\n        if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {\n            result.type = JS_VAR_NAN;\n            return result;\n        }\n        \n        result.type = JS_VAR_INT16;\n        switch (op) {\n            case JS_VAR_PLUS:\n                result.number = left_to_number.number + right_to_number.number;\n                break;\n            case JS_VAR_MINUS:\n                result.number = left_to_number.number - right_to_number.number;\n                break;\n            case JS_VAR_ASTERISK:\n                result.number = left_to_number.number * right_to_number.number;\n                break;\n            case JS_VAR_SLASH:\n                result.number = left_to_number.number / right_to_number.number;\n                break;\n            case JS_VAR_PERCENT:\n                result.number = left_to_number.number % right_to_number.number;\n                break;\n        }\n        return result;\n    }\n\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{#if headerFlags.regex}\n    void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {\n        int16_t i;\n        for (i = 0; i < groupN; i++) {\n            match_info->matches[i].index = -1;\n            match_info->matches[i].end = -1;\n        }\n    }\n{/if}\n\n{#if headerFlags.regex_match}\n    struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {\n        struct regex_match_struct_t match_info;\n        struct array_string_t *match_array = NULL;\n        int16_t i;\n\n        match_info = regex.func(s, TRUE);\n        if (match_info.index != -1) {\n            ARRAY_CREATE(match_array, match_info.matches_count + 1, match_info.matches_count + 1);\n            match_array->data[0] = str_substring(s, match_info.index, match_info.end);\n            for (i = 0;i < match_info.matches_count; i++) {\n                if (match_info.matches[i].index != -1 && match_info.matches[i].end != -1)\n                    match_array->data[i + 1] = str_substring(s, match_info.matches[i].index, match_info.matches[i].end);\n                else\n                    match_array->data[i + 1] = str_substring(s, 0, 0);\n            }\n        }\n        if (match_info.matches_count)\n            free(match_info.matches);\n\n        return match_array;\n    }\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.js_var_compute}\n    int16_t gc_i;\n{/if}\n{#if headerFlags.gc_iterator2}\n    int16_t gc_j;\n{/if}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}\n")
+        template_1.CodeTemplate("\n{#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat\n    || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp\n    || headerFlags.str_substring\n    || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict\n    || headerFlags.js_var_compute || headerFlags.js_var_from_str || headerFlags.js_var_eq}\n    #include <string.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <stdlib.h>\n{/if}\n{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice\n    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}\n    #include <assert.h>\n{/if}\n{#if headerFlags.printf || headerFlags.parse_int16_t}\n    #include <stdio.h>\n{/if}\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #include <limits.h>\n{/if}\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_compute}\n    #include <ctype.h>\n{/if}\n\n{#if includes.length}\n    {includes => #include <{this}>\n}\n{/if}\n\n{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove }\n    #define TRUE 1\n    #define FALSE 0\n{/if}\n{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t}\n    typedef unsigned char uint8_t;\n{/if}\n{#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||\n     headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||\n     headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||\n     headerFlags.regex || headerFlags.str_to_int16_t }\n    typedef short int16_t;\n{/if}\n{#if headerFlags.uint16_t}\n    typedef unsigned short uint16_t;\n{/if}\n{#if headerFlags.regex}\n    struct regex_indices_struct_t {\n        int16_t index;\n        int16_t end;\n    };\n    struct regex_match_struct_t {\n        int16_t index;\n        int16_t end;\n        struct regex_indices_struct_t *matches;\n        int16_t matches_count;\n    };\n    typedef struct regex_match_struct_t regex_func_t(const char*, int16_t);\n    struct regex_struct_t {\n        const char * str;\n        regex_func_t * func;\n    };\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_compute}\n    #define ARRAY(T) struct {\\\n        int16_t size;\\\n        int16_t capacity;\\\n        T *data;\\\n    } *\n{/if}\n\n{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_compute}\n    #define ARRAY_CREATE(array, init_capacity, init_size) {\\\n        array = malloc(sizeof(*array)); \\\n        array->data = malloc((init_capacity) * sizeof(*array->data)); \\\n        assert(array->data != NULL); \\\n        array->capacity = init_capacity; \\\n        array->size = init_size; \\\n    }\n    #define ARRAY_PUSH(array, item) {\\\n        if (array->size == array->capacity) {  \\\n            array->capacity *= 2;  \\\n            array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \\\n            assert(array->data != NULL); \\\n        }  \\\n        array->data[array->size++] = item; \\\n    }\n{/if}\n{#if headerFlags.array_pop}\n\t#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)\n{/if}\n{#if headerFlags.array_insert || headerFlags.dict || headerFlags.js_var_dict}\n    #define ARRAY_INSERT(array, pos, item) {\\\n        ARRAY_PUSH(array, item); \\\n        if (pos < array->size - 1) {\\\n            memmove(&(array->data[(pos) + 1]), &(array->data[pos]), (array->size - (pos) - 1) * sizeof(*array->data)); \\\n            array->data[pos] = item; \\\n        } \\\n    }\n{/if}\n{#if headerFlags.array_remove}\n    #define ARRAY_REMOVE(array, pos, num) {\\\n        memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \\\n        array->size -= num; \\\n    }\n{/if}\n\n{#if headerFlags.dict}\n    #define DICT(T) struct { \\\n        ARRAY(const char *) index; \\\n        ARRAY(T) values; \\\n    } *\n{/if}\n\n{#if headerFlags.dict || headerFlags.js_var_dict}\n    #define DICT_CREATE(dict, init_capacity) { \\\n        dict = malloc(sizeof(*dict)); \\\n        ARRAY_CREATE(dict->index, init_capacity, 0); \\\n        ARRAY_CREATE(dict->values, init_capacity, 0); \\\n    }\n\n    int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {\n        int16_t low = 0;\n        int16_t high = keys_size - 1;\n\n        if (keys_size == 0 || key == NULL)\n            return -1;\n\n        while (low <= high)\n        {\n            int mid = (low + high) / 2;\n            int res = strcmp(keys[mid], key);\n\n            if (res == 0)\n                return mid;\n            else if (res < 0)\n                low = mid + 1;\n            else\n                high = mid - 1;\n        }\n\n        return -1 - low;\n    }\n\n    int16_t tmp_dict_pos;\n    #define DICT_GET(dict, prop, default) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? default : dict->values->data[tmp_dict_pos])\n\n    int16_t tmp_dict_pos2;\n    #define DICT_SET(dict, prop, value) { \\\n        tmp_dict_pos2 = dict_find_pos(dict->index->data, dict->index->size, prop); \\\n        if (tmp_dict_pos2 < 0) { \\\n            tmp_dict_pos2 = -tmp_dict_pos2 - 1; \\\n            ARRAY_INSERT(dict->index, tmp_dict_pos2, prop); \\\n            ARRAY_INSERT(dict->values, tmp_dict_pos2, value); \\\n        } else \\\n            dict->values->data[tmp_dict_pos2] = value; \\\n    }\n\n{/if}\n\n{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}\n    #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)\n{/if}\n{#if headerFlags.str_int16_t_cmp}\n    int str_int16_t_cmp(const char * str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        return strcmp(str, numstr);\n    }\n{/if}\n{#if headerFlags.str_pos}\n    int16_t str_pos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        if (found == 0)\n            return -1;\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_rpos}\n    int16_t str_rpos(const char * str, const char *search) {\n        int16_t i;\n        const char * found = strstr(str, search);\n        int16_t pos = 0;\n        const char * end = str + (strlen(str) - strlen(search));\n        if (found == 0)\n            return -1;\n        found = 0;\n        while (end > str && found == 0)\n            found = strstr(end--, search);\n        while (*str && str < found) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        return pos;\n    }\n{/if}\n{#if headerFlags.str_len || headerFlags.str_substring || headerFlags.str_slice}\n    int16_t str_len(const char * str) {\n        int16_t len = 0;\n        int16_t i = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            str += i;\n            len += i == 4 ? 2 : 1;\n        }\n        return len;\n    }\n{/if}\n{#if headerFlags.str_char_code_at}\n    int16_t str_char_code_at(const char * str, int16_t pos) {\n        int16_t i, res = 0;\n        while (*str) {\n            i = 1;\n            if ((*str & 0xE0) == 0xC0) i=2;\n            else if ((*str & 0xF0) == 0xE0) i=3;\n            else if ((*str & 0xF8) == 0xF0) i=4;\n            if (pos == 0) {\n                res += (unsigned char)*str++;\n                if (i > 1) {\n                    res <<= 6; res -= 0x3080;\n                    res += (unsigned char)*str++;\n                }\n                return res;\n            }\n            str += i;\n            pos -= i == 4 ? 2 : 1;\n        }\n        return -1;\n    }\n{/if}\n{#if headerFlags.str_substring || headerFlags.str_slice}\n    const char * str_substring(const char * str, int16_t start, int16_t end) {\n        int16_t i, tmp, pos, len = str_len(str), byte_start = -1;\n        char *p, *buf;\n        start = start < 0 ? 0 : (start > len ? len : start);\n        end = end < 0 ? 0 : (end > len ? len : end);\n        if (end < start) {\n            tmp = start;\n            start = end;\n            end = tmp;\n        }\n        i = 0;\n        pos = 0;\n        p = (char *)str;\n        while (*p) {\n            if (start == pos)\n                byte_start = p - str;\n            if (end == pos)\n                break;\n            i = 1;\n            if ((*p & 0xE0) == 0xC0) i=2;\n            else if ((*p & 0xF0) == 0xE0) i=3;\n            else if ((*p & 0xF8) == 0xF0) i=4;\n            p += i;\n            pos += i == 4 ? 2 : 1;\n        }\n        len = byte_start == -1 ? 0 : p - str - byte_start;\n        buf = malloc(len + 1);\n        assert(buf != NULL);\n        memcpy(buf, str + byte_start, len);\n        buf[len] = '\\0';\n        return buf;\n    }\n{/if}\n{#if headerFlags.str_slice}\n    const char * str_slice(const char * str, int16_t start, int16_t end) {\n        int16_t len = str_len(str);\n        start = start < 0 ? len + start : start;\n        end = end < 0 ? len + end : end;\n        if (end - start < 0)\n            end = start;\n        return str_substring(str, start, end);\n    }\n{/if}\n{#if headerFlags.str_int16_t_cat}\n    void str_int16_t_cat(char *str, int16_t num) {\n        char numstr[STR_INT16_T_BUFLEN];\n        sprintf(numstr, \"%d\", num);\n        strcat(str, numstr);\n    }\n{/if}\n\n{#if headerFlags.array_int16_t_cmp}\n    int array_int16_t_cmp(const void* a, const void* b) {\n        return ( *(int16_t*)a - *(int16_t*)b );\n    }\n{/if}\n{#if headerFlags.array_str_cmp}\n    int array_str_cmp(const void* a, const void* b) { \n        return strcmp(*(const char **)a, *(const char **)b);\n    }\n{/if}\n\n{#if headerFlags.parse_int16_t}\n    int16_t parse_int16_t(const char * str) {\n        int r;\n        sscanf(str, \"%d\", &r);\n        return (int16_t) r;\n    }\n{/if}\n\n{#if headerFlags.js_var || headerFlags.str_to_int16_t}\n    enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};\n    struct js_var {\n        enum js_var_type type;\n        int16_t number;\n        void *data;\n    };\n{/if}\n\n{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_compute}\n    struct array_js_var_t {\n        int16_t size;\n        int16_t capacity;\n        struct js_var *data;\n    };\n{/if}\n\n{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_get}\n    struct array_string_t {\n        int16_t size;\n        int16_t capacity;\n        const char ** data;\n    };\n{/if}\n\n{#if headerFlags.js_var_dict}\n    struct dict_js_var_t {\n        struct array_string_t *index;\n        struct array_js_var_t *values;\n    };\n{/if}\n\n{#if headerFlags.js_var_from || headerFlags.js_var_get}\n    struct js_var js_var_from(enum js_var_type type) {\n        struct js_var v;\n        v.type = type;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_uint8_t}\n    struct js_var js_var_from_uint8_t(uint8_t b) {\n        struct js_var v;\n        v.type = JS_VAR_BOOL;\n        v.number = b;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_int16_t}\n    struct js_var js_var_from_int16_t(int16_t n) {\n        struct js_var v;\n        v.type = JS_VAR_INT16;\n        v.number = n;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_from_str}\n    struct js_var js_var_from_str(const char *s) {\n        struct js_var v;\n        v.type = JS_VAR_STRING;\n        v.data = (void *)s;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_array}\n    struct js_var js_var_from_array(struct array_js_var_t *arr) {\n        struct js_var v;\n        v.type = JS_VAR_ARRAY;\n        v.data = (void *)arr;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_dict}\n    struct js_var js_var_from_dict(struct dict_js_var_t *dict) {\n        struct js_var v;\n        v.type = JS_VAR_DICT;\n        v.data = (void *)dict;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}\n    struct js_var str_to_int16_t(const char * str) {\n        struct js_var v;\n        const char *p = str;\n        int r;\n\n        v.data = NULL;\n\n        while (*p && isspace(*p))\n            p++;\n\n        if (*p == 0)\n            str = \"0\";\n\n        if (*p == '-' && *(p+1))\n            p++;\n\n        while (*p) {\n            if (!isdigit(*p)) {\n                v.type = JS_VAR_NAN;\n                return v;\n            }\n            p++;\n        }\n\n        sscanf(str, \"%d\", &r);\n        v.type = JS_VAR_INT16;\n        v.number = (int16_t)r;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_to_str || headerFlags.js_var_compute}\n    const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)\n    {\n        char *buf;\n        int16_t i;\n        *need_dispose = 0;\n\n        if (v.type == JS_VAR_INT16) {\n            buf = malloc(STR_INT16_T_BUFLEN);\n            assert(buf != NULL);\n            *need_dispose = 1;\n            sprintf(buf, \"%d\", v.number);\n            return buf;\n        } else if (v.type == JS_VAR_BOOL)\n            return v.number ? \"true\" : \"false\";\n        else if (v.type == JS_VAR_STRING)\n            return (const char *)v.data;\n        else if (v.type == JS_VAR_ARRAY) {\n            struct array_js_var_t * arr = (struct array_js_var_t *)v.data;\n            uint8_t dispose_elem = 0;\n            buf = malloc(1);\n            assert(buf != NULL);\n            *need_dispose = 1;\n            buf[0] = 0;\n            for (i = 0; i < arr->size; i++) {\n                const char * elem = js_var_to_str(arr->data[i], &dispose_elem);\n                buf = realloc(buf, strlen(buf) + strlen(elem) + 1 + (i != 0 ? 1 : 0));\n                assert(buf != NULL);\n                if (i != 0)\n                    strcat(buf, \",\");\n                strcat(buf, elem);\n                if (dispose_elem)\n                    free((void *)elem);\n            }\n            return buf;\n        }\n        else if (v.type == JS_VAR_DICT)\n            return \"[object Object]\";\n        else if (v.type == JS_VAR_NAN)\n            return \"NaN\";\n        else if (v.type == JS_VAR_NULL)\n            return \"null\";\n        else if (v.type == JS_VAR_UNDEFINED)\n            return \"undefined\";\n\n        return NULL;\n    }\n{/if}\n\n{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}\n\n    struct js_var js_var_to_number(struct js_var v)\n    {\n        struct js_var result;\n        result.type = JS_VAR_INT16;\n        result.number = 0;\n\n        if (v.type == JS_VAR_INT16)\n            result.number = v.number;\n        else if (v.type == JS_VAR_BOOL)\n            result.number = v.number;\n        else if (v.type == JS_VAR_STRING)\n            return str_to_int16_t((const char *)v.data);\n        else if (v.type == JS_VAR_ARRAY) {\n            struct array_js_var_t * arr = (struct array_js_var_t *)v.data;\n            if (arr->size == 0)\n                result.number = 0;\n            else if (arr->size > 1)\n                result.type = JS_VAR_NAN;\n            else\n                result = js_var_to_number(arr->data[0]);\n        } else if (v.type != JS_VAR_NULL)\n            result.type = JS_VAR_NAN;\n\n        return result;\n    }\n\n{/if}\n\n{#if headerFlags.js_var_to_bool}\n\n    uint8_t js_var_to_bool(struct js_var v)\n    {\n        if (v.type == JS_VAR_INT16)\n            return v.number != 0;\n        else if (v.type == JS_VAR_BOOL)\n            return v.number;\n        else if (v.type == JS_VAR_STRING)\n            return *((const char *)v.data) != 0;\n        else if (v.type == JS_VAR_NULL || v.type == JS_VAR_UNDEFINED || v.type == JS_VAR_NAN)\n            return FALSE;\n        else\n            return TRUE;\n    }\n\n{/if}\n\n{#if headerFlags.js_var_to_undefined}\n    struct js_var js_var_to_undefined(void *value) {\n        struct js_var v;\n        v.type = JS_VAR_UNDEFINED;\n        v.data = NULL;\n        return v;\n    }\n{/if}\n\n{#if headerFlags.js_var_typeof}\n\n    const char * js_var_typeof(struct js_var v)\n    {\n        if (v.type == JS_VAR_INT16 || v.type == JS_VAR_NAN)\n            return \"number\";\n        else if (v.type == JS_VAR_BOOL)\n            return \"boolean\";\n        else if (v.type == JS_VAR_STRING)\n            return \"string\";\n        else if (v.type == JS_VAR_UNDEFINED)\n            return \"undefined\";\n        else\n            return \"object\";\n    }\n\n{/if}\n\n{#if headerFlags.js_var_get}\n    struct js_var js_var_get(struct js_var v, struct js_var arg) {\n        struct js_var tmp;\n        const char *key;\n        uint8_t need_dispose = 0;\n\n        if (v.type == JS_VAR_ARRAY) {\n            tmp = js_var_to_number(arg);\n            if (tmp.type == JS_VAR_NAN)\n                return js_var_from(JS_VAR_UNDEFINED);\n            else\n                return ((struct array_js_var_t *)v.data)->data[tmp.number];\n        } else if (v.type == JS_VAR_DICT) {\n            key = js_var_to_str(arg, &need_dispose);\n            tmp = DICT_GET(((struct dict_js_var_t *)v.data), key, js_var_from(JS_VAR_UNDEFINED));\n            if (need_dispose)\n                free((void *)key);\n            return tmp;\n        } else\n            return js_var_from(JS_VAR_UNDEFINED);\n    }\n{/if}\n\n{#if headerFlags.js_var_eq}\n    uint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)\n    {\n        if (left.type == right.type) {\n            if (left.type == JS_VAR_NULL || left.type == JS_VAR_UNDEFINED)\n                return TRUE;\n            else if (left.type == JS_VAR_NAN)\n                return FALSE;\n            else if (left.type == JS_VAR_INT16 || left.type == JS_VAR_BOOL)\n                return left.number == right.number ? TRUE : FALSE;\n            else if (left.type == JS_VAR_STRING)\n                return !strcmp((const char *)left.data, (const char *)right.data) ? TRUE : FALSE;\n            else\n                return left.data == right.data;\n        } else if (!strict) {\n            if ((left.type == JS_VAR_NULL && right.type == JS_VAR_UNDEFINED) || (left.type == JS_VAR_UNDEFINED && right.type == JS_VAR_NULL))\n                return TRUE;\n            else if ((left.type == JS_VAR_INT16 && right.type == JS_VAR_STRING) || (left.type == JS_VAR_STRING && right.type == JS_VAR_INT16))\n                return js_var_eq(js_var_to_number(left), js_var_to_number(right), strict);\n            else if (left.type == JS_VAR_BOOL)\n                return js_var_eq(js_var_to_number(left), right, strict);\n            else if (right.type == JS_VAR_BOOL)\n                return js_var_eq(left, js_var_to_number(right), strict);\n            else\n                return FALSE;\n        } else\n            return FALSE;\n    }\n{/if}\n\n{#if headerFlags.gc_main}\n    static ARRAY(void *) gc_main;\n{/if}\n\n{#if headerFlags.js_var_compute}\n\n    enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};\n    struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)\n    {\n        struct js_var result, left_to_number, right_to_number;\n        const char *left_as_string, *right_as_string;\n        uint8_t need_dispose_left, need_dispose_right;\n        result.data = NULL;\n\n        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING))\n        {\n            left_as_string = js_var_to_str(left, &need_dispose_left);\n            right_as_string = js_var_to_str(right, &need_dispose_right);\n            \n            result.type = JS_VAR_STRING;\n            result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);\n            assert(result.data != NULL);\n            ARRAY_PUSH(gc_main, result.data);\n\n            strcpy(result.data, left_as_string);\n            strcat(result.data, right_as_string);\n\n            if (need_dispose_left)\n                free((void *)left_as_string);\n            if (need_dispose_right)\n                free((void *)right_as_string);\n            return result;\n        }\n\n        left_to_number = js_var_to_number(left);\n        right_to_number = js_var_to_number(right);\n\n        if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {\n            result.type = JS_VAR_NAN;\n            return result;\n        }\n        \n        result.type = JS_VAR_INT16;\n        switch (op) {\n            case JS_VAR_PLUS:\n                result.number = left_to_number.number + right_to_number.number;\n                break;\n            case JS_VAR_MINUS:\n                result.number = left_to_number.number - right_to_number.number;\n                break;\n            case JS_VAR_ASTERISK:\n                result.number = left_to_number.number * right_to_number.number;\n                break;\n            case JS_VAR_SLASH:\n                result.number = left_to_number.number / right_to_number.number;\n                break;\n            case JS_VAR_PERCENT:\n                result.number = left_to_number.number % right_to_number.number;\n                break;\n        }\n        return result;\n    }\n\n{/if}\n\n{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}\n\n{#if headerFlags.regex}\n    void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {\n        int16_t i;\n        for (i = 0; i < groupN; i++) {\n            match_info->matches[i].index = -1;\n            match_info->matches[i].end = -1;\n        }\n    }\n{/if}\n\n{#if headerFlags.regex_match}\n    struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {\n        struct regex_match_struct_t match_info;\n        struct array_string_t *match_array = NULL;\n        int16_t i;\n\n        match_info = regex.func(s, TRUE);\n        if (match_info.index != -1) {\n            ARRAY_CREATE(match_array, match_info.matches_count + 1, match_info.matches_count + 1);\n            match_array->data[0] = str_substring(s, match_info.index, match_info.end);\n            for (i = 0;i < match_info.matches_count; i++) {\n                if (match_info.matches[i].index != -1 && match_info.matches[i].end != -1)\n                    match_array->data[i + 1] = str_substring(s, match_info.matches[i].index, match_info.matches[i].end);\n                else\n                    match_array->data[i + 1] = str_substring(s, 0, 0);\n            }\n        }\n        if (match_info.matches_count)\n            free(match_info.matches);\n\n        return match_array;\n    }\n{/if}\n\n{#if headerFlags.gc_iterator || headerFlags.js_var_compute}\n    int16_t gc_i;\n{/if}\n{#if headerFlags.gc_iterator2}\n    int16_t gc_j;\n{/if}\n\n{variables => {this};\n}\n\n{functionPrototypes => {this}\n}\n\n{functions => {this}\n}\n\nint main(void) {\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n    return 0;\n}\n")
     ], CProgram);
     return CProgram;
 }());
@@ -3136,8 +3189,9 @@ var CArrayPush = /** @class */ (function () {
         this.varAccess = null;
         this.pushValues = [];
         var propAccess = call.expression;
+        var type = scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
+        var args = call.arguments.map(function (a) { return type.elementType === types_1.UniversalVarType ? new variable_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
         this.pushValues = args.map(function (a) { return new CPushValue(scope, _this.varAccess, a); });
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
@@ -4783,7 +4837,7 @@ var SymbolsHelper = /** @class */ (function () {
                 "TRUE", "FALSE", "uint8_t", "int16_t",
                 "regex_indices_struct_t", "regex_match_struct_t", "regex_func_t",
                 "ARRAY", "ARRAY_CREATE", "ARRAY_PUSH", "ARRAY_INSERT", "ARRAY_REMOVE", "ARRAY_POP",
-                "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos",
+                "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos", "tmp_dict_pos2",
                 "STR_INT16_T_BUFLEN", "str_int16_t_cmp", "str_pos", "str_rpos", "str_len",
                 "str_char_code_at", "str_substring", "str_slice", "str_int16_t_cat",
                 "array_int16_t_cmp", "array_str_cmp", "parse_int16_t",
@@ -5239,8 +5293,7 @@ var ArrayType = /** @class */ (function () {
             elementTypeText = elementTypeText.replace(exports.PointerVarType, "pointer");
         while (elementTypeText.indexOf(exports.BooleanVarType) > -1)
             elementTypeText = elementTypeText.replace(exports.BooleanVarType, "bool");
-        elementTypeText = elementTypeText.replace(/^struct ([a-z0-9_]+)_t \*$/, function (all, g1) { return g1; });
-        //elementTypeText = elementTypeText.replace(/^struct array_(.*)_t \*$/, (all, g1) => "array_" + g1);
+        elementTypeText = elementTypeText.replace(/^struct ([a-z0-9_]+)_t \*$/, function (all, g1) { return g1; }).replace(/^struct js_var/, "js_var");
         return "array_" +
             elementTypeText
                 .replace(/^static /, '').replace('{var}', '').replace(/[\[\]]/g, '')
@@ -5258,6 +5311,8 @@ var ArrayType = /** @class */ (function () {
         var structName = ArrayType.getArrayStructName(elementTypeText);
         if (this.isDynamicArray)
             return "struct " + structName + " *";
+        else if (elementTypeText.indexOf('{var}') > -1)
+            return elementTypeText + "[" + this.capacity + "]";
         else
             return "static " + elementTypeText + " {var}[" + this.capacity + "]";
     };
@@ -5309,6 +5364,90 @@ var DictType = /** @class */ (function () {
     return DictType;
 }());
 exports.DictType = DictType;
+var FuncType = /** @class */ (function () {
+    function FuncType(returnType, parameterTypes, instanceType) {
+        if (parameterTypes === void 0) { parameterTypes = []; }
+        if (instanceType === void 0) { instanceType = null; }
+        this.returnType = returnType;
+        this.parameterTypes = parameterTypes;
+        this.instanceType = instanceType;
+    }
+    FuncType.getReturnType = function (typeHelper, node) {
+        var decl = typeHelper.getDeclaration(node);
+        var type = typeHelper.getCType(decl);
+        return type && type instanceof FuncType ? type.returnType : null;
+    };
+    FuncType.getInstanceType = function (typeHelper, node) {
+        var decl = typeHelper.getDeclaration(node);
+        var type = typeHelper.getCType(decl);
+        return type && type instanceof FuncType ? type.instanceType : null;
+    };
+    FuncType.prototype.getText = function () {
+        return typeof (this.returnType) === "string" ? this.returnType : this.returnType.getText();
+    };
+    FuncType.prototype.getBodyText = function () {
+        var paramTypes = [].concat(this.parameterTypes);
+        if (this.instanceType)
+            paramTypes.unshift(this.instanceType);
+        return getTypeBodyText(this.returnType) + "(" + paramTypes.map(function (pt) { return pt ? getTypeBodyText(pt) : exports.PointerVarType; }).join(", ") + ")";
+    };
+    return FuncType;
+}());
+exports.FuncType = FuncType;
+exports.equalityOps = [
+    ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+];
+var relationalOps = [
+    ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
+    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken
+];
+var arithmeticOps = [
+    ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
+    ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
+    ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
+    ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
+    ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
+];
+var logicalOps = [
+    ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
+];
+function operandsToNumber(leftType, op, rightType) {
+    return arithmeticOps.indexOf(op) > -1 || op == ts.SyntaxKind.PlusToken && leftType !== exports.StringVarType && rightType !== exports.StringVarType
+        || exports.equalityOps.concat(relationalOps).indexOf(op) > -1 && (leftType !== exports.StringVarType || rightType !== exports.StringVarType);
+}
+exports.operandsToNumber = operandsToNumber;
+function operandsToString(leftType, op, rightType) {
+    return op == ts.SyntaxKind.PlusToken && (leftType === exports.StringVarType || rightType !== exports.StringVarType);
+}
+exports.operandsToString = operandsToString;
+function operandsToBoolean(leftType, op, rightType) {
+    return logicalOps.indexOf(op) > -1;
+}
+exports.operandsToBoolean = operandsToBoolean;
+function getBinExprResultType(leftType, op, rightType) {
+    if (logicalOps.indexOf(op) > -1 || op === ts.SyntaxKind.EqualsToken)
+        return rightType;
+    if (relationalOps.indexOf(op) > -1 || exports.equalityOps.indexOf(op) > -1)
+        return exports.BooleanVarType;
+    if (arithmeticOps.indexOf(op) > -1)
+        return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? exports.UniversalVarType : exports.NumberVarType;
+    if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
+        return leftType === exports.UniversalVarType || rightType === exports.UniversalVarType ? exports.UniversalVarType
+            : leftType === exports.StringVarType || rightType === exports.StringVarType ? exports.StringVarType
+                : exports.NumberVarType;
+    console.log("WARNING: unexpected binary expression!");
+    return null;
+}
+exports.getBinExprResultType = getBinExprResultType;
+function toNumberCanBeNaN(t) {
+    return t !== null && t !== exports.PointerVarType && t !== exports.NumberVarType && t !== exports.BooleanVarType && !(t instanceof ArrayType && !t.isDynamicArray && t.capacity == 1 && !toNumberCanBeNaN(t.elementType));
+}
+exports.toNumberCanBeNaN = toNumberCanBeNaN;
 function findParentFunction(node) {
     var parentFunc = node;
     while (parentFunc && !ts.isFunctionDeclaration(parentFunc))
@@ -5323,11 +5462,6 @@ function findParentSourceFile(node) {
     return parent;
 }
 exports.findParentSourceFile = findParentSourceFile;
-function getDeclaration(typechecker, n) {
-    var s = typechecker.getSymbolAtLocation(n);
-    return s && s.valueDeclaration;
-}
-exports.getDeclaration = getDeclaration;
 var TypeHelper = /** @class */ (function () {
     function TypeHelper(typeChecker, allNodes) {
         this.typeChecker = typeChecker;
@@ -5335,7 +5469,6 @@ var TypeHelper = /** @class */ (function () {
         this.arrayLiteralsTypes = {};
         this.objectLiteralsTypes = {};
         this.typeOfNodeDict = {};
-        this.instanceNodes = {};
         this.typesDict = {};
     }
     /** Get C type of TypeScript node */
@@ -5422,18 +5555,42 @@ var TypeHelper = /** @class */ (function () {
                 typeEqualities.push([typeGuard, node1, node2]);
         };
         // expressions
-        addEquality(ts.isIdentifier, function (n) { return n; }, function (n) { return getDeclaration(_this.typeChecker, n); });
+        addEquality(ts.isIdentifier, function (n) { return n; }, function (n) { return _this.getDeclaration(n); });
+        var _loop_1 = function (i_1) {
+            addEquality(ts.isArrayLiteralExpression, function (n) { return n; }, type(function (n) {
+                var elemType = _this.getCType(n.elements[i_1]);
+                return elemType ? new ArrayType(elemType, 0, false) : null;
+            }));
+        };
+        for (var i_1 = 0; i_1 < 10; i_1++) {
+            _loop_1(i_1);
+        }
         addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, function (n) { return n.right; });
         addEquality(ts.isConditionalExpression, function (n) { return n.whenTrue; }, function (n) { return n.whenFalse; });
         addEquality(ts.isConditionalExpression, function (n) { return n; }, function (n) { return n.whenTrue; });
         addEquality(typeguards_1.isConvertToNumberExpression, function (n) { return n; }, type(function (n) { return _this.getCType(n.operand) == exports.NumberVarType ? exports.NumberVarType : exports.UniversalVarType; }));
-        addEquality(ts.isBinaryExpression, function (n) { return n; }, type(function (n) {
-            var leftType = _this.getCType(n.left);
-            var rightType = _this.getCType(n.right);
-            var universalExpr = leftType === exports.UniversalVarType || rightType === exports.UniversalVarType;
-            var equality = n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsToken || n.operatorToken.kind == ts.SyntaxKind.EqualsEqualsEqualsToken
-                || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsToken || n.operatorToken.kind == ts.SyntaxKind.ExclamationEqualsEqualsToken;
-            return equality ? exports.BooleanVarType : universalExpr ? exports.UniversalVarType : null;
+        addEquality(ts.isBinaryExpression, function (n) { return n; }, type(function (n) { return getBinExprResultType(_this.getCType(n.left), n.operatorToken.kind, _this.getCType(n.right)); }));
+        addEquality(ts.isBinaryExpression, function (n) { return n.left; }, type(function (n) {
+            var resultType = _this.getCType(n);
+            var operandType = _this.getCType(n.left);
+            if (resultType === exports.UniversalVarType) {
+                return operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
+                        : null;
+            }
+            else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, function (n) { return n.right; }, type(function (n) {
+            var resultType = _this.getCType(n);
+            var operandType = _this.getCType(n.right);
+            if (resultType === exports.UniversalVarType) {
+                return operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
+                        : null;
+            }
+            else
+                return null;
         }));
         addEquality(typeguards_1.isNullOrUndefinedOrNaN, function (n) { return n; }, type(exports.UniversalVarType));
         addEquality(ts.isParenthesizedExpression, function (n) { return n; }, function (n) { return n.expression; });
@@ -5459,7 +5616,8 @@ var TypeHelper = /** @class */ (function () {
             return type instanceof StructType ? type.properties[n.name.getText()]
                 : type instanceof ArrayType && n.name.getText() == "length" ? exports.NumberVarType
                     : type == exports.StringVarType && n.name.getText() == "length" ? exports.NumberVarType
-                        : null;
+                        : type instanceof ArrayType || type instanceof DictType ? type.elementType
+                            : null;
         }));
         addEquality(typeguards_1.isFieldElementAccess, function (n) { return n.expression; }, type(function (n) {
             var type = _this.getCType(n.argumentExpression);
@@ -5479,36 +5637,39 @@ var TypeHelper = /** @class */ (function () {
                             : null;
         }));
         // calls
-        addEquality(ts.isCallExpression, function (n) { return n; }, function (n) { return getDeclaration(_this.typeChecker, n.expression); });
-        var _loop_1 = function (i_1) {
-            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_1]; }, function (n) {
-                var func = getDeclaration(_this.typeChecker, n.expression);
-                return func ? func.parameters[i_1] : null;
-            });
-        };
-        for (var i_1 = 0; i_1 < 10; i_1++) {
-            _loop_1(i_1);
-        }
-        addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.name; });
-        addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.initializer; });
-        addEquality(ts.isNewExpression, function (n) { return n; }, type(function (n) { return _this.getInstanceType(n.expression); }));
-        addEquality(typeguards_1.isThisKeyword, function (n) { return n; }, function (n) { return _this.createInstanceNode(n); });
+        addEquality(ts.isCallExpression, function (n) { return n.expression; }, function (n) { return _this.getDeclaration(n); });
+        addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return FuncType.getReturnType(_this, n.expression); }));
+        addEquality(ts.isCallExpression, function (n) { return n.expression; }, type(function (n) { return _this.getCType(n) ? new FuncType(_this.getCType(n)) : null; }));
         var _loop_2 = function (i_2) {
-            addEquality(ts.isNewExpression, function (n) { return n.arguments[i_2]; }, function (n) {
-                var func = getDeclaration(_this.typeChecker, n.expression);
+            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_2]; }, function (n) {
+                var func = _this.getDeclaration(n.expression);
                 return func ? func.parameters[i_2] : null;
             });
         };
         for (var i_2 = 0; i_2 < 10; i_2++) {
             _loop_2(i_2);
         }
-        addEquality(typeguards_1.isMethodCall, function (n) { return n.expression.expression; }, type(function (n) { return standard_1.StandardCallHelper.getObjectType(_this, n); }));
-        addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return standard_1.StandardCallHelper.getReturnType(_this, n); }));
+        addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.name; });
+        addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.initializer; });
+        addEquality(ts.isNewExpression, function (n) { return n; }, type(function (n) { return FuncType.getInstanceType(_this, n.expression); }));
         var _loop_3 = function (i_3) {
-            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_3]; }, type(function (n) { return typeguards_1.isLiteral(n.arguments[i_3]) ? null : standard_1.StandardCallHelper.getArgumentTypes(_this, n)[i_3]; }));
+            addEquality(ts.isNewExpression, function (n) { return n.arguments[i_3]; }, function (n) {
+                var func = _this.getDeclaration(n.expression);
+                return func ? func.parameters[i_3] : null;
+            });
         };
         for (var i_3 = 0; i_3 < 10; i_3++) {
             _loop_3(i_3);
+        }
+        addEquality(typeguards_1.isThisKeyword, function (n) { return findParentFunction(n); }, type(function (n) { return new FuncType(exports.VoidType, [], _this.getCType(n)); }));
+        addEquality(typeguards_1.isThisKeyword, function (n) { return n; }, type(function (n) { return FuncType.getInstanceType(_this, findParentFunction(n)); }));
+        addEquality(typeguards_1.isMethodCall, function (n) { return n.expression.expression; }, type(function (n) { return standard_1.StandardCallHelper.getObjectType(_this, n); }));
+        addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return standard_1.StandardCallHelper.getReturnType(_this, n); }));
+        var _loop_4 = function (i_4) {
+            addEquality(ts.isCallExpression, function (n) { return n.arguments[i_4]; }, type(function (n) { return typeguards_1.isLiteral(n.arguments[i_4]) ? null : standard_1.StandardCallHelper.getArgumentTypes(_this, n)[i_4]; }));
+        };
+        for (var i_4 = 0; i_4 < 10; i_4++) {
+            _loop_4(i_4);
         }
         // crutch for callback argument type in foreach
         addEquality(typeguards_1.isFunctionArgInMethodCall, function (n) { return n.parameters[0]; }, type(function (n) {
@@ -5517,7 +5678,7 @@ var TypeHelper = /** @class */ (function () {
         }));
         // statements
         addEquality(ts.isVariableDeclaration, function (n) { return n; }, function (n) { return n.initializer; });
-        addEquality(ts.isFunctionDeclaration, function (n) { return n; }, type(exports.VoidType));
+        addEquality(ts.isFunctionDeclaration, function (n) { return n; }, type(function (n) { return new FuncType(exports.VoidType, n.parameters.map(function (p) { return _this.getCType(p); })); }));
         addEquality(typeguards_1.isForOfWithSimpleInitializer, function (n) { return n.expression; }, type(function (n) { return new ArrayType(_this.getCType(n.initializer.declarations[0]) || exports.PointerVarType, 0, false); }));
         addEquality(typeguards_1.isForOfWithSimpleInitializer, function (n) { return n.initializer.declarations[0]; }, type(function (n) {
             var type = _this.getCType(n.expression);
@@ -5529,7 +5690,8 @@ var TypeHelper = /** @class */ (function () {
             return type instanceof ArrayType ? type.elementType : null;
         }));
         addEquality(ts.isForInStatement, function (n) { return n.initializer; }, type(exports.StringVarType));
-        addEquality(ts.isReturnStatement, function (n) { return n.expression; }, function (n) { return findParentFunction(n); });
+        addEquality(ts.isReturnStatement, function (n) { return n.expression; }, type(function (n) { return FuncType.getReturnType(_this, findParentFunction(n)); }));
+        addEquality(ts.isReturnStatement, function (n) { return findParentFunction(n); }, type(function (n) { return _this.getCType(n.expression) ? new FuncType(_this.getCType(n.expression)) : null; }));
         addEquality(ts.isCaseClause, function (n) { return n.expression; }, function (n) { return n.parent.parent.expression; });
         this.resolveTypes(typeEqualities);
     };
@@ -5567,11 +5729,15 @@ var TypeHelper = /** @class */ (function () {
                 }
             }
         } while (changed);
-        /*
+        for (var k in this.typeOfNodeDict) {
+            var type = this.typeOfNodeDict[k].type;
+            if (type instanceof ArrayType && !type.isDynamicArray && type.capacity == 0)
+                type.isDynamicArray = true;
+        }
         this.allNodes
-            .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
-            .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
-        
+            .filter(function (n) { return !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList; })
+            .forEach(function (n) { return console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(_this.getCType(n))); });
+        /*
         this.allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
             .forEach(n => console.log(
@@ -5594,19 +5760,9 @@ var TypeHelper = /** @class */ (function () {
         if (n && t)
             this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
     };
-    TypeHelper.prototype.getInstanceType = function (node) {
-        var decl = getDeclaration(this.typeChecker, node);
-        return decl ? this.getCType(this.instanceNodes[decl.pos]) : null;
-    };
-    TypeHelper.prototype.createInstanceNode = function (node) {
-        var funcNode = findParentFunction(node);
-        if (!funcNode)
-            return null;
-        if (!this.instanceNodes[funcNode.pos]) {
-            var node_1 = ts.createNode(ts.SyntaxKind.ThisType, -1, TypeHelper.syntheticNodesCounter++);
-            this.instanceNodes[funcNode.pos] = node_1;
-        }
-        return this.instanceNodes[funcNode.pos];
+    TypeHelper.prototype.getDeclaration = function (n) {
+        var s = this.typeChecker.getSymbolAtLocation(n);
+        return s && s.valueDeclaration;
     };
     TypeHelper.prototype.ensureNoTypeDuplicates = function (t) {
         if (!t)
@@ -5677,23 +5833,23 @@ var TypeHelper = /** @class */ (function () {
             return noChanges;
         else if (typeof type1 == "string" && typeof type2 == "string" && type1 == type2)
             return noChanges;
-        else if (type1 == exports.VoidType)
+        else if (type1 === exports.VoidType)
             return type2_result;
-        else if (type2 == exports.VoidType)
+        else if (type2 === exports.VoidType)
             return type1_result;
-        else if (type1 == exports.PointerVarType)
+        else if (type1 === exports.PointerVarType)
             return type2_result;
-        else if (type2 == exports.PointerVarType)
+        else if (type2 === exports.PointerVarType)
             return type1_result;
-        else if (type1 == exports.UniversalVarType)
+        else if (type1 === exports.UniversalVarType)
             return type1_result;
-        else if (type2 == exports.UniversalVarType)
+        else if (type2 === exports.UniversalVarType)
             return type2_result;
-        else if (type1 == exports.StringVarType && type2 instanceof StructType) {
+        else if (type1 === exports.StringVarType && type2 instanceof StructType) {
             if (Object.keys(type2.properties).length == 1 && (type2.properties["length"] == exports.PointerVarType || type2.properties["length"] == exports.NumberVarType))
                 return type1_result;
         }
-        else if (type1 instanceof StructType && type2 == exports.StringVarType) {
+        else if (type1 instanceof StructType && type2 === exports.StringVarType) {
             if (Object.keys(type1.properties).length == 1 && (type1.properties["length"] == exports.PointerVarType || type1.properties["length"] == exports.NumberVarType))
                 return type2_result;
         }
@@ -5733,11 +5889,11 @@ var TypeHelper = /** @class */ (function () {
         else if (type1 instanceof StructType && type2 instanceof ArrayType) {
             return this.mergeArrayAndStruct(type2, type1);
         }
-        else if (type1 instanceof StructType && type2 instanceof DictType) {
-            return type2_result;
-        }
         else if (type1 instanceof DictType && type2 instanceof StructType) {
-            return type1_result;
+            return this.mergeDictAndStruct(type1, type2);
+        }
+        else if (type1 instanceof StructType && type2 instanceof DictType) {
+            return this.mergeDictAndStruct(type2, type1);
         }
         else if (type1 instanceof DictType && type2 instanceof DictType) {
             if (type1.elementType != exports.PointerVarType && type2.elementType == exports.PointerVarType)
@@ -5745,6 +5901,23 @@ var TypeHelper = /** @class */ (function () {
             if (type2.elementType != exports.PointerVarType && type1.elementType == exports.PointerVarType)
                 return type2_result;
             return noChanges;
+        }
+        else if (type1 instanceof FuncType && type2 instanceof FuncType) {
+            var _a = this.mergeTypes(type1.returnType, type2.returnType), returnType = _a.type, returnTypeReplaced = _a.replaced;
+            var _b = this.mergeTypes(type1.instanceType, type2.instanceType), instanceType = _b.type, instanceTypeReplaced = _b.replaced;
+            var paramCount = Math.max(type1.parameterTypes.length, type2.parameterTypes.length);
+            var paramTypesReplaced = type1.parameterTypes.length !== type2.parameterTypes.length;
+            var paramTypes = [];
+            for (var i_5 = 0; i_5 < paramCount; i_5++) {
+                var _c = this.mergeTypes(type1.parameterTypes[i_5], type2.parameterTypes[i_5]), pType = _c.type, pTypeReplaced = _c.replaced;
+                paramTypes.push(pType);
+                if (pTypeReplaced)
+                    paramTypesReplaced = true;
+            }
+            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType)), replaced: true };
+            else
+                return noChanges;
         }
         else
             return { type: exports.UniversalVarType, replaced: true };
@@ -5770,6 +5943,12 @@ var TypeHelper = /** @class */ (function () {
             return { type: this.ensureNoTypeDuplicates(new ArrayType(exports.UniversalVarType, arrayType.capacity, arrayType.isDynamicArray)), replaced: true };
         else
             return { type: arrayType, replaced: true };
+    };
+    TypeHelper.prototype.mergeDictAndStruct = function (dictType, structType) {
+        var elementType = dictType.elementType;
+        for (var k in structType.properties)
+            (elementType = this.mergeTypes(elementType, structType.properties[k]).type);
+        return { type: this.ensureNoTypeDuplicates(new DictType(elementType)), replaced: true };
     };
     TypeHelper.syntheticNodesCounter = 0;
     return TypeHelper;
