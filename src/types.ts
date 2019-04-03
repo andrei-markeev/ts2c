@@ -165,6 +165,8 @@ export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightTy
         return rightType;
     if (relationalOps.indexOf(op) > -1 || equalityOps.indexOf(op) > -1)
         return BooleanVarType;
+    if (leftType == null || rightType == null)
+        return null;
     if (arithmeticOps.indexOf(op) > -1)
         return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
     if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
