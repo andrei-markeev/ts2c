@@ -4,6 +4,7 @@ import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
 import {CExpression} from './expressions';
 import { CUndefined } from './literals';
+import { CAsUniversalVar } from './variable';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
@@ -12,7 +13,7 @@ export class CElementAccess {
     constructor(scope: IScope, node: ts.Node) {
         let type: CType = null;
         let elementAccess: CElementAccess | string = null;
-        let argumentExpression: string = null
+        let argumentExpression: CExpression = null
 
         if (ts.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
@@ -44,15 +45,27 @@ export class CElementAccess {
                 elementAccess = propAccess.expression.text;
             else
                 elementAccess = new CElementAccess(scope, propAccess.expression);
-            argumentExpression = type instanceof DictType ? '"' + propAccess.name.text + '"' : propAccess.name.text;
+
+            if (type === UniversalVarType) {
+                argumentExpression = 'js_var_from_str("' + propAccess.name.text + '")';
+                scope.root.headerFlags.js_var_from_str = true;
+            } else if (type instanceof DictType)
+                argumentExpression = '"' + propAccess.name.text + '"';
+            else
+                argumentExpression = propAccess.name.text;
+
         } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             let elemAccess = <ts.ElementAccessExpression>node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);
+
             if (ts.isIdentifier(elemAccess.expression))
                 elementAccess = elemAccess.expression.text;
             else
                 elementAccess = new CElementAccess(scope, elemAccess.expression);
-            if (type instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
+
+            if (type === UniversalVarType)
+                argumentExpression = new CAsUniversalVar(scope, elemAccess.argumentExpression);
+            else if (type instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
                 let ident = elemAccess.argumentExpression.getText().slice(1, -1);
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     argumentExpression = ident;

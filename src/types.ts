@@ -150,11 +150,12 @@ const logicalOps = [
 ];
 
 export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    return arithmeticOps.indexOf(op) > -1 || op == ts.SyntaxKind.PlusToken && leftType !== StringVarType && rightType !== StringVarType
+    return arithmeticOps.indexOf(op) > -1
+        || op == ts.SyntaxKind.PlusToken && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
         || equalityOps.concat(relationalOps).indexOf(op) > -1 && (leftType !== StringVarType || rightType !== StringVarType);
 }
 export function operandsToString(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    return op == ts.SyntaxKind.PlusToken && (leftType === StringVarType || rightType !== StringVarType);
+    return op == ts.SyntaxKind.PlusToken && (toPrimitive(leftType) === StringVarType || toPrimitive(rightType === StringVarType));
 }
 export function operandsToBoolean(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     return logicalOps.indexOf(op) > -1;
@@ -171,8 +172,9 @@ export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightTy
         return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
     if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
         return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType 
-            : leftType === StringVarType || rightType === StringVarType ? StringVarType
-            : NumberVarType;
+            : toPrimitive(leftType) === StringVarType || toPrimitive(rightType) === StringVarType ? StringVarType
+            : toPrimitive(leftType) === NumberVarType && toPrimitive(rightType) == NumberVarType ? NumberVarType
+            : null;
 
     console.log("WARNING: unexpected binary expression!");
     return null;
@@ -181,6 +183,11 @@ export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightTy
 export function toNumberCanBeNaN(t) {
     return t !== null && t !== PointerVarType && t !== NumberVarType && t !== BooleanVarType && !(t instanceof ArrayType && !t.isDynamicArray && t.capacity == 1 && !toNumberCanBeNaN(t.elementType));
 }
+
+export function toPrimitive(t) {
+    return t === null || t === PointerVarType || t === NumberVarType ? t : StringVarType;
+}
+
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
     let parentFunc = node;
     while (parentFunc && !ts.isFunctionDeclaration(parentFunc))
@@ -351,8 +358,10 @@ export class TypeHelper {
             const type = this.getCType(n.expression);
             return type instanceof StructType ? type.properties[n.name.getText()]
                 : type instanceof ArrayType && n.name.getText() == "length" ? NumberVarType
-                : type == StringVarType && n.name.getText() == "length" ? NumberVarType
+                : type === StringVarType && n.name.getText() == "length" ? NumberVarType
                 : type instanceof ArrayType || type instanceof DictType ? type.elementType
+                : type === UniversalVarType && n.name.getText() == "length" ? NumberVarType
+                : type === UniversalVarType ? UniversalVarType
                 : null;
         }));
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
@@ -368,8 +377,10 @@ export class TypeHelper {
             const type = this.getCType(n.expression);
             return ts.isStringLiteral(n.argumentExpression) && type instanceof StructType ? type.properties[n.argumentExpression.getText().slice(1, -1)]
                 : ts.isStringLiteral(n.argumentExpression) && type instanceof ArrayType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
-                : ts.isStringLiteral(n.argumentExpression) && type == StringVarType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
+                : ts.isStringLiteral(n.argumentExpression) && type === StringVarType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
+                : ts.isStringLiteral(n.argumentExpression) && type === UniversalVarType && n.argumentExpression.getText().slice(1, -1) == "length" ? NumberVarType
                 : type instanceof ArrayType || type instanceof DictType ? type.elementType
+                : type === UniversalVarType ? UniversalVarType
                 : null
         }));
 
@@ -378,10 +389,10 @@ export class TypeHelper {
         addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this, n.expression)));
         addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n)) : null));
         for (let i = 0; i < 10; i++)
-            addEquality(ts.isCallExpression, n => n.arguments[i], n => {
+            addEquality(ts.isCallExpression, n => {
                 const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
                 return func ? func.parameters[i] : null
-            });
+            }, type(n => this.getCType(n.arguments[i])));
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
 

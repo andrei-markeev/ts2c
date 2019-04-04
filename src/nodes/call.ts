@@ -3,8 +3,8 @@ import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
-import { CVariable, CVariableAllocation } from './variable';
-import { FuncType, DictType } from '../types';
+import { CVariable, CVariableAllocation, CAsUniversalVar } from './variable';
+import { FuncType, UniversalVarType } from '../types';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -22,11 +22,9 @@ export class CCallExpression {
 
         // call of function that uses "this"
         const decl = scope.root.typeHelper.getDeclaration(call.expression);
-        if (decl) {
-            const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
-            if (funcType.instanceType != null)
-                return;
-        }
+        const funcType = decl && scope.root.typeHelper.getCType(decl) as FuncType;
+        if (funcType && funcType.instanceType != null)
+            return;
 
         this.funcName = call.expression.getText();
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
@@ -34,9 +32,7 @@ export class CCallExpression {
         if (this.standardCall)
             return;
 
-        this.arguments = call.arguments.map(a => {
-            return CodeTemplateFactory.createForNode(scope, a);
-        });
+        this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
     }
 }
 

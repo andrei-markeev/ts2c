@@ -731,7 +731,9 @@ class HeaderFlags {
         uint8_t need_dispose_left, need_dispose_right;
         result.data = NULL;
 
-        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING))
+        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING 
+            || left.type == JS_VAR_ARRAY || right.type == JS_VAR_ARRAY
+            || left.type == JS_VAR_DICT || right.type == JS_VAR_DICT))
         {
             left_as_string = js_var_to_str(left, &need_dispose_left);
             right_as_string = js_var_to_str(right, &need_dispose_right);
