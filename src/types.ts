@@ -664,12 +664,11 @@ export class TypeHelper {
             return this.mergeDictAndStruct(type2, type1)
         }
         else if (type1 instanceof DictType && type2 instanceof DictType) {
-            if (type1.elementType != PointerVarType && type2.elementType == PointerVarType)
-                return type1_result;
-            if (type2.elementType != PointerVarType && type1.elementType == PointerVarType)
-                return type2_result;
-
-            return noChanges;
+            const { type: elemType, replaced } = this.mergeTypes(type1.elementType, type2.elementType);
+            if (replaced)
+                return { type: this.ensureNoTypeDuplicates(new DictType(elemType)), replaced: true };
+            else
+                return noChanges;
         }
         else if (type1 instanceof FuncType && type2 instanceof FuncType) {
             const { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
