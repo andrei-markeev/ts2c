@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, toPrimitive } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -54,17 +54,17 @@ export class MemoryManager {
                         const leftType = this.typeHelper.getCType(binExpr.left);
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
-                        const ignoreOps = [ ts.SyntaxKind.EqualsToken,
-                            ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
-                            ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken ];
-            
-                        if (ignoreOps.indexOf(binExpr.operatorToken.kind) == -1 && (leftType == UniversalVarType || rightType == UniversalVarType))
-                            this.needsGCMainForJsVar = true;
-
                         const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
-                        const isInConsoleLog = ts.isCallExpression(binExpr.parent) && binExpr.parent.expression.getText() == "console.log";
-                        if (plusOperator && !isInConsoleLog && (leftType == StringVarType || rightType == StringVarType))
-                            this.scheduleNodeDisposal(binExpr, false);
+            
+                        if (plusOperator) {
+                            if (leftType == UniversalVarType || rightType == UniversalVarType)
+                                this.needsGCMainForJsVar = true;
+                            else {
+                                const isInConsoleLog = ts.isCallExpression(binExpr.parent) && binExpr.parent.expression.getText() == "console.log";
+                                if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
+                                    this.scheduleNodeDisposal(binExpr, false);
+                            }
+                        }
                             
                     }
                     break;

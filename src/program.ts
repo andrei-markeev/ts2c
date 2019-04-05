@@ -72,7 +72,8 @@ class HeaderFlags {
     js_var_to_undefined: boolean = false;
     js_var_to_bool: boolean = false;
     js_var_typeof: boolean = false;
-    js_var_eq: boolean;
+    js_var_eq: boolean = false;
+    js_var_plus: boolean = false;
     js_var_compute: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
@@ -106,24 +107,24 @@ class HeaderFlags {
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.str_substring
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
-    || headerFlags.js_var_compute || headerFlags.js_var_from_str || headerFlags.js_var_eq}
+    || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str}
     #include <stdlib.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_compute || headerFlags.js_var_from_str}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf || headerFlags.parse_int16_t}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus}
     #include <limits.h>
 {/if}
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute}
     #include <ctype.h>
 {/if}
 
@@ -165,7 +166,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_compute}
+{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_plus}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -173,7 +174,7 @@ class HeaderFlags {
     } *
 {/if}
 
-{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_compute}
+{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_plus}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
         array->data = malloc((init_capacity) * sizeof(*array->data)); \\
@@ -262,7 +263,7 @@ class HeaderFlags {
 
 {/if}
 
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_compute || headerFlags.js_var_to_str}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}
@@ -429,7 +430,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_compute}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
@@ -508,7 +509,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute}
     struct js_var str_to_int16_t(const char * str) {
         struct js_var v;
         const char *p = str;
@@ -540,7 +541,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_str || headerFlags.js_var_compute}
+{#if headerFlags.js_var_to_str || headerFlags.js_var_plus}
     const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
@@ -589,7 +590,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_compute}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute}
 
     struct js_var js_var_to_number(struct js_var v)
     {
@@ -721,19 +722,18 @@ class HeaderFlags {
     static ARRAY(void *) gc_main;
 {/if}
 
-{#if headerFlags.js_var_compute}
+{#if headerFlags.js_var_plus}
 
-    enum js_var_op {JS_VAR_PLUS, JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
-    struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)
+    struct js_var js_var_plus(struct js_var left, struct js_var right)
     {
         struct js_var result, left_to_number, right_to_number;
         const char *left_as_string, *right_as_string;
         uint8_t need_dispose_left, need_dispose_right;
         result.data = NULL;
 
-        if (op == JS_VAR_PLUS && (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING 
+        if (left.type == JS_VAR_STRING || right.type == JS_VAR_STRING 
             || left.type == JS_VAR_ARRAY || right.type == JS_VAR_ARRAY
-            || left.type == JS_VAR_DICT || right.type == JS_VAR_DICT))
+            || left.type == JS_VAR_DICT || right.type == JS_VAR_DICT)
         {
             left_as_string = js_var_to_str(left, &need_dispose_left);
             right_as_string = js_var_to_str(right, &need_dispose_right);
@@ -760,12 +760,32 @@ class HeaderFlags {
             result.type = JS_VAR_NAN;
             return result;
         }
+
+        result.type = JS_VAR_INT16;
+        result.number = left_to_number.number + right_to_number.number;
+        return result;
+    }
+
+{/if}
+
+{#if headerFlags.js_var_compute}
+
+    enum js_var_op {JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
+    struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)
+    {
+        struct js_var result, left_to_number, right_to_number;
+        result.data = NULL;
+
+        left_to_number = js_var_to_number(left);
+        right_to_number = js_var_to_number(right);
+
+        if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {
+            result.type = JS_VAR_NAN;
+            return result;
+        }
         
         result.type = JS_VAR_INT16;
         switch (op) {
-            case JS_VAR_PLUS:
-                result.number = left_to_number.number + right_to_number.number;
-                break;
             case JS_VAR_MINUS:
                 result.number = left_to_number.number - right_to_number.number;
                 break;
@@ -820,7 +840,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.js_var_compute}
+{#if headerFlags.gc_iterator || headerFlags.js_var_plus}
     int16_t gc_i;
 {/if}
 {#if headerFlags.gc_iterator2}

@@ -1,4 +1,4 @@
-import { AssignmentHelper } from './assignment';
+import { AssignmentHelper, CAssignment } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
@@ -6,6 +6,7 @@ import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, Boo
 import {CVariable, CAsUniversalVar} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
+import { CArraySize, CSimpleElementAccess } from './elementaccess';
 
 export interface CExpression { }
 
@@ -37,30 +38,6 @@ export class CCondition {
 }
 
 @CodeTemplate(`
-{#statements}
-    {#if replacedWithVar && strPlusStr}
-        {replacementVarName} = malloc(strlen({left}) + strlen({right}) + 1);
-        assert({replacementVarName} != NULL);
-        strcpy({replacementVarName}, {left});
-        strcat({replacementVarName}, {right});
-    {#elseif replacedWithVar && strPlusNumber}
-        {replacementVarName} = malloc(strlen({left}) + STR_INT16_T_BUFLEN + 1);
-        assert({replacementVarName} != NULL);
-        {replacementVarName}[0] = '\\0';
-        strcat({replacementVarName}, {left});
-        str_int16_t_cat({replacementVarName}, {right});
-    {#elseif replacedWithVar && numberPlusStr}
-        {replacementVarName} = malloc(strlen({right}) + STR_INT16_T_BUFLEN + 1);
-        assert({replacementVarName} != NULL);
-        {replacementVarName}[0] = '\\0';
-        str_int16_t_cat({replacementVarName}, {left});
-        strcat({replacementVarName}, {right});
-    {/if}
-    {#if replacedWithVar && gcVarName}
-        ARRAY_PUSH({gcVarName}, {replacementVarName});
-    {/if}
-
-{/statements}
 {#if expression}
     {expression}
 {#elseif operator}
@@ -83,13 +60,6 @@ export class CBinaryExpression {
     public call: string;
     public callCondition: string;
     public callAddArgs: string = "";
-    public replacedWithVar: boolean = false;
-    public replacedWithVarAssignment: boolean = false;
-    public replacementVarName: string = null;
-    public gcVarName: string = null;
-    public strPlusStr: boolean = false;
-    public strPlusNumber: boolean = false;
-    public numberPlusStr: boolean = false;
     public computeOperation: string = null;
     public expression: CExpression = null;
     public left: CExpression;
@@ -107,6 +77,15 @@ export class CBinaryExpression {
             this.expression = CodeTemplateFactory.createForNode(scope, node.right);
             return;
         }
+        if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
+            this.expression = new CPlusExpression(scope, node);
+            return;
+        }
+        if (node.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken) {
+            const left = CodeTemplateFactory.createForNode(scope, node.left);
+            const right = new CPlusExpression(scope, node);
+            this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(<any>right) + ")";
+        }
 
         let leftType = scope.root.typeHelper.getCType(node.left);
         this.left = CodeTemplateFactory.createForNode(scope, node.left);
@@ -117,15 +96,6 @@ export class CBinaryExpression {
         let operatorMap: { [token: number]: string } = {};
         let callReplaceMap: { [token: number]: [string, string] } = {};
         
-        if (leftType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
-            leftType = StringVarType;
-            this.left = new CRegexAsString(this.left);
-        }
-        if (rightType == RegexVarType && operatorKind == ts.SyntaxKind.PlusToken) {
-            rightType = StringVarType;
-            this.right = new CRegexAsString(this.right);
-        }
-
         operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
         operatorMap[ts.SyntaxKind.BarBarToken] = '||';
 
@@ -189,17 +159,6 @@ export class CBinaryExpression {
             if (callReplaceMap[operatorKind])
                 scope.root.headerFlags.strings = true;
 
-            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.PlusEqualsToken) {
-                let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-                scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
-                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-                this.replacedWithVar = true;
-                this.replacedWithVarAssignment = operatorKind === ts.SyntaxKind.PlusEqualsToken;
-                this.replacementVarName = tempVarName;
-                this.strPlusStr = true;
-                scope.root.headerFlags.strings = true;
-                scope.root.headerFlags.malloc = true;
-            }
         }
         else if (leftType == NumberVarType && rightType == StringVarType
             || leftType == StringVarType && rightType == NumberVarType) {
@@ -219,22 +178,6 @@ export class CBinaryExpression {
                 }
             }
 
-            if (operatorKind == ts.SyntaxKind.PlusToken || operatorKind == ts.SyntaxKind.PlusEqualsToken) {
-                let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-                scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
-                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-                this.replacedWithVar = true;
-                this.replacedWithVarAssignment = operatorKind === ts.SyntaxKind.PlusEqualsToken;
-                this.replacementVarName = tempVarName;
-                if (leftType == NumberVarType)
-                    this.numberPlusStr = true;
-                else
-                    this.strPlusNumber = true;
-                scope.root.headerFlags.strings = true;
-                scope.root.headerFlags.malloc = true;
-                scope.root.headerFlags.str_int16_t_cat = true;
-            }
-
         }
         else if (isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType)) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == FALSE'];
@@ -251,7 +194,6 @@ export class CBinaryExpression {
                 [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
                 [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
                 [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
-                [ts.SyntaxKind.PlusToken]: "JS_VAR_PLUS",
                 [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
             };
             
@@ -282,10 +224,164 @@ export class CBinaryExpression {
                 [this.call, this.callAddArgs] = this.call.split('|');
         }
         this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+    }
+}
 
-        if (this.gcVarName) {
-            scope.root.headerFlags.gc_iterator = true;
-            scope.root.headerFlags.array = true;
+
+@CodeTemplate(`
+{#statements}
+    {#if replacedWithVar}
+        {replacementVarName} = malloc({strlen_left} + {strlen_right} + 1);
+        assert({replacementVarName} != NULL);
+        {replacementVarName}[0] = '\\0';
+        {strcat_left}
+        {strcat_right}
+    {/if}
+    {#if replacedWithVar && gcVarName}
+        ARRAY_PUSH({gcVarName}, {replacementVarName});
+    {/if}
+
+{/statements}
+{#if addNumbers}
+    {left} + {right}
+{#elseif replacedWithVar}
+    {replacementVarName}
+{#elseif isUniversalVar}
+    js_var_plus({left}, {right})
+{/if}`)
+class CPlusExpression {
+    public addNumbers: boolean = false;
+    public isUniversalVar: boolean = false;
+    public replacedWithVar: boolean = false;
+    public replacementVarName: string = null;
+    public gcVarName: string = null;
+    public left: CExpression;
+    public right: CExpression;
+    public strcat_left: CExpression;
+    public strcat_right: CExpression;
+    public strlen_left: CExpression;
+    public strlen_right: CExpression;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        this.left = CodeTemplateFactory.createForNode(scope, node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        this.right = CodeTemplateFactory.createForNode(scope, node.right);
+
+        if (leftType == RegexVarType) {
+            leftType = StringVarType;
+            this.left = new CRegexAsString(this.left);
+        }
+        if (rightType == RegexVarType) {
+            rightType = StringVarType;
+            this.right = new CRegexAsString(this.right);
+        }
+
+        if ((leftType === NumberVarType || leftType === BooleanVarType) && (rightType === NumberVarType || rightType === BooleanVarType)) {
+            this.addNumbers = true;
+        }
+        else if (leftType === UniversalVarType || rightType === UniversalVarType) {
+            this.isUniversalVar = true;
+            this.left = new CAsUniversalVar(scope, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, this.right, rightType);
+            scope.root.headerFlags.js_var_plus = true;
+        }
+        else {
+            let tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            scope.func.variables.push(new CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
+            this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+            this.replacedWithVar = true;
+            this.replacementVarName = tempVarName;
+
+            this.strlen_left = new CArgStrLen(this.left, leftType);
+            this.strlen_right = new CArgStrLen(this.right, rightType);
+
+            this.strcat_left = new CArgStrCat(scope, node.left, tempVarName, this.left, leftType);
+            this.strcat_right = new CArgStrCat(scope, node.right, tempVarName, this.right, rightType);
+
+            scope.root.headerFlags.strings = true;
+            scope.root.headerFlags.malloc = true;
+            scope.root.headerFlags.str_int16_t_cat = true;
+
+            if (this.gcVarName) {
+                scope.root.headerFlags.gc_iterator = true;
+                scope.root.headerFlags.array = true;
+            }
+        }
+
+    }
+}
+
+@CodeTemplate(`
+{#if isNumber}
+    STR_INT16_T_BUFLEN
+{#elseif isString}
+    strlen({arg})
+{#elseif isBoolean}
+    (5-{arg})
+{#elseif isStaticNumberArray}
+    (STR_INT16_T_BUFLEN + 1) * {capacity}
+{#elseif isDynamicNumberArray}
+    (STR_INT16_T_BUFLEN + 1) * {arg}->size
+{#elseif isArray}
+    /* determining string length of array {arg} is not supported yet */
+{#else}
+    15
+{/if}`)
+class CArgStrLen {
+    public isNumber: boolean;
+    public isString: boolean;
+    public isBoolean: boolean;
+    public isArray: boolean;
+    public isStaticNumberArray: boolean;
+    public isDynamicNumberArray: boolean;
+    public capacity: string;
+    constructor(public arg: CExpression, public type: CType) {
+        this.isNumber = type === NumberVarType;
+        this.isString = type === StringVarType;
+        this.isBoolean = type === BooleanVarType;
+        this.isArray = type instanceof ArrayType;
+        this.isStaticNumberArray = type instanceof ArrayType && !type.isDynamicArray && type.elementType === NumberVarType;
+        this.isDynamicNumberArray = type instanceof ArrayType && type.isDynamicArray && type.elementType === NumberVarType;
+        this.capacity = type instanceof ArrayType && type.capacity + "";
+    }
+}
+
+@CodeTemplate(`
+{#if isNumber}
+    str_int16_t_cat({buf}, {arg});
+{#elseif isString}
+    strcat({buf}, {arg});
+{#elseif isBoolean}
+    strcat({buf}, {arg} ? "true" : "false");
+{#elseif isArray}
+    for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
+        if ({iteratorVarName} != 0)
+            strcat({buf}, ",");
+        {arrayElementCat}
+    }
+{#else}
+    strcat({buf}, "[object Object]");
+{/if}
+`)
+class CArgStrCat {
+    public isNumber: boolean;
+    public isString: boolean;
+    public isBoolean: boolean;
+    public isArray: boolean = false;
+    public iteratorVarName: string;
+    public arrayElementCat: CArgStrCat;
+    public arraySize: CArraySize;
+    constructor(scope: IScope, node: ts.Node, public buf: CExpression, public arg: CExpression, public type: CType) {
+        this.isNumber = type === NumberVarType;
+        this.isString = type === StringVarType;
+        this.isBoolean = type === BooleanVarType;
+        if (type instanceof ArrayType) {
+            this.isArray = true;
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.func.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            const arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
+            this.arrayElementCat = new CArgStrCat(scope, node, buf, arrayElement, type.elementType);
+            this.arraySize = new CArraySize(scope, arg, type);
         }
     }
 }

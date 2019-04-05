@@ -185,7 +185,7 @@ export function toNumberCanBeNaN(t) {
 }
 
 export function toPrimitive(t) {
-    return t === null || t === PointerVarType || t === NumberVarType ? t : StringVarType;
+    return t === null || t === PointerVarType ? t : t === NumberVarType || t === BooleanVarType ? NumberVarType : StringVarType;
 }
 
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {

@@ -114,7 +114,7 @@ export class CSimpleElementAccess {
     public arrayCapacity: string;
     public nullValue: CExpression = "0";
     public isUniversalAccess: boolean = false;
-    constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression) {
+    constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | CExpression | string, public argumentExpression: CExpression) {
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
@@ -132,4 +132,17 @@ export class CSimpleElementAccess {
             scope.root.headerFlags.str_len = true;
     }
     
+}
+
+@CodeTemplate(`
+{#if type.isDynamicArray}
+    {varAccess}->size
+{#else}
+    {arrayCapacity}
+{/if}`)
+export class CArraySize {
+    public arrayCapacity: string;
+    constructor(scope: IScope, public varAccess: CExpression, public type: ArrayType) {
+        this.arrayCapacity = type.capacity+"";
+    }
 }

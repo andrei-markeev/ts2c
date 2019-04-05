@@ -6,7 +6,7 @@ import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
 import {CString} from '../../nodes/literals';
-import {CElementAccess} from '../../nodes/elementaccess';
+import {CElementAccess, CArraySize, CSimpleElementAccess} from '../../nodes/elementaccess';
 
 @StandardCallResolver
 class ArrayConcatResolver implements IResolver {
@@ -45,7 +45,7 @@ class ArrayConcatResolver implements IResolver {
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
             if ({iteratorVarName} > 0)
                 strcat((char *){tempVarName}, {separator});
-            {catFuncName}((char *){tempVarName}, {arrayElement}[{iteratorVarName}]);
+            {catFuncName}((char *){tempVarName}, {arrayElement});
         }
     {/if}
 {/statements}
@@ -59,7 +59,7 @@ class CArrayJoin {
     public separator: CExpression;
     public varAccess: CElementAccess = null;
     public arraySize: CArraySize;
-    public arrayElement: CArrayElement;
+    public arrayElement: CSimpleElementAccess;
     public calculatedStringLength: CCalculateStringSize;
     public catFuncName: string;
     constructor(scope: IScope, call: ts.CallExpression) {
@@ -71,13 +71,13 @@ class CArrayJoin {
             let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
             this.varAccess = new CElementAccess(scope, propAccess.expression);
             this.arraySize = new CArraySize(scope, this.varAccess, type);
-            this.arrayElement = new CArrayElement(scope, this.varAccess, type);
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
+            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            this.arrayElement = new CSimpleElementAccess(scope, type, this.varAccess, this.iteratorVarName);
             this.catFuncName = type.elementType == NumberVarType ? "str_int16_t_cat" : "strcat";
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);
             if (call.arguments.length > 0 && propAccess.name.getText() == "join")
                 this.separator = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
@@ -95,34 +95,11 @@ class CArrayJoin {
 }
 
 @CodeTemplate(`
-{#if type.isDynamicArray}
-    {varAccess}->size
-{#else}
-    {arrayCapacity}
-{/if}`)
-class CArraySize {
-    public arrayCapacity: string;
-    constructor(scope: IScope, public varAccess: CElementAccess, public type: ArrayType) {
-        this.arrayCapacity = type.capacity+"";
-    }
-}
-
-@CodeTemplate(`
-{#if type.isDynamicArray}
-    {varAccess}->data
-{#else}
-    {varAccess}
-{/if}`)
-class CArrayElement {
-    constructor(scope: IScope, public varAccess: CElementAccess, public type: ArrayType) { }
-}
-
-@CodeTemplate(`
 {#statements}
     {#if arrayOfStrings}
         {lengthVarName} = 0;
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
-            {lengthVarName} += strlen({arrayElement}[{iteratorVarName}]);
+            {lengthVarName} += strlen({arrayElement});
     {/if}
 {/statements}
 {#if type.isDynamicArray && arrayOfStrings}
@@ -142,13 +119,13 @@ class CCalculateStringSize {
     public arrayOfNumbers: boolean;
     public arrayCapacity: string;
     public arraySize: CArraySize;
-    public arrayElement: CArrayElement;
+    public arrayElement: CSimpleElementAccess;
     constructor(scope: IScope, public varAccess: CElementAccess, public iteratorVarName: string, public type: ArrayType, node: ts.Node) {
         this.arrayOfStrings = type.elementType == StringVarType;
         this.arrayOfNumbers = type.elementType == NumberVarType;
         this.arrayCapacity = type.capacity+"";
         this.arraySize = new CArraySize(scope, this.varAccess, type);
-        this.arrayElement = new CArrayElement(scope, this.varAccess, type);
+        this.arrayElement = new CSimpleElementAccess(scope, type, varAccess, iteratorVarName);
         if (this.arrayOfStrings) {
             this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
             scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
