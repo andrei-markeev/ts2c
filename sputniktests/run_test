@@ -35,7 +35,7 @@ async function runTest(testFile) {
     if (res.err)
         return `${ERROR} cannot compile ${testFile_c}`;
 
-    res = await execAsync(`./${testFile_elf}`);
+    res = await execAsync(`${testFile_elf.indexOf('/') === 0 ? testFile_elf : "./" + testFile_elf}`);
     if (res.err)
         return `${ERROR} cannot execute ${testFile_elf}`;
     if (res.stdout)

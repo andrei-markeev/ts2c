@@ -10,6 +10,10 @@ RES = $(TS:.js=.res)
 	./run_test $< >> results.txt
 
 all: init $(C)
+	printf "Sputnik tests passed: "
+	grep ^PASS sputniktests/results.txt | wc -l | tr -d '\\n'
+	printf "/"
+	cat sputniktests/results.txt | wc -l
 
 init:
 	> results.txt

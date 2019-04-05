@@ -51,7 +51,8 @@ export class CVariableDeclaration {
             }
         }
 
-        scope.variables.push(new CVariable(scope, name, type));
+        if (!scope.variables.some(v => v.name === name))
+            scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
     }
