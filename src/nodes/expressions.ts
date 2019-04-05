@@ -314,11 +314,11 @@ class CPlusExpression {
 @CodeTemplate(`
 {#statements}
     {#if isArrayOfString}
-        {lengthVarName} = 0;
+        {lengthVarName} = {arraySize};
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
             {lengthVarName} += strlen({arrayElement});
     {#elseif isArrayOfUniversalVar}
-        {lengthVarName} = 0;
+        {lengthVarName} = {arraySize};
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
             {lengthVarName} += strlen({tmpVarName} = js_var_to_str({arrayElement}, &{needDisposeVarName}));
             if ({needDisposeVarName})
@@ -378,9 +378,8 @@ class CArgStrLen {
             this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             this.arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
-            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len", false);
-            if (!scope.variables.some(v => v.name == this.lengthVarName))
-                scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
+            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
+            scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
 
             scope.root.headerFlags.strings = true;
         }
