@@ -292,8 +292,8 @@ class CPlusExpression {
             this.replacedWithVar = true;
             this.replacementVarName = tempVarName;
 
-            this.strlen_left = new CArgStrLen(this.left, leftType);
-            this.strlen_right = new CArgStrLen(this.right, rightType);
+            this.strlen_left = new CArgStrLen(scope, node.left, this.left, leftType);
+            this.strlen_right = new CArgStrLen(scope, node.right, this.right, rightType);
 
             this.strcat_left = new CArgStrCat(scope, node.left, tempVarName, this.left, leftType);
             this.strcat_right = new CArgStrCat(scope, node.right, tempVarName, this.right, rightType);
@@ -312,17 +312,35 @@ class CPlusExpression {
 }
 
 @CodeTemplate(`
+{#statements}
+    {#if isArrayOfString}
+        {lengthVarName} = 0;
+        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
+            {lengthVarName} += strlen({arrayElement});
+    {#elseif isArrayOfUniversalVar}
+        {lengthVarName} = 0;
+        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
+            {lengthVarName} += strlen({tmpVarName} = js_var_to_str({arrayElement}, &{needDisposeVarName}));
+            if ({needDisposeVarName})
+                free((void *){tmpVarName});
+        }
+    {/if}
+{/statements}
 {#if isNumber}
     STR_INT16_T_BUFLEN
 {#elseif isString}
     strlen({arg})
 {#elseif isBoolean}
     (5-{arg})
-{#elseif isStaticNumberArray}
-    (STR_INT16_T_BUFLEN + 1) * {capacity}
-{#elseif isDynamicNumberArray}
-    (STR_INT16_T_BUFLEN + 1) * {arg}->size
-{#elseif isArray}
+{#elseif isArrayOfNumber}
+    (STR_INT16_T_BUFLEN + 1) * {arraySize}
+{#elseif isArrayOfBoolean}
+    6 * {arraySize}
+{#elseif isArrayOfObj}
+    16 * {arraySize}
+{#elseif isArrayOfString || isArrayOfUniversalVar}
+    {lengthVarName}
+{#elseif isArrayOfArray}
     /* determining string length of array {arg} is not supported yet */
 {#else}
     15
@@ -332,17 +350,51 @@ class CArgStrLen {
     public isString: boolean;
     public isBoolean: boolean;
     public isArray: boolean;
-    public isStaticNumberArray: boolean;
-    public isDynamicNumberArray: boolean;
-    public capacity: string;
-    constructor(public arg: CExpression, public type: CType) {
+    public isArrayOfString: boolean;
+    public isArrayOfNumber: boolean;
+    public isArrayOfBoolean: boolean;
+    public isArrayOfUniversalVar: boolean;
+    public isArrayOfArray: boolean;
+    public isArrayOfObj: boolean;
+    public arraySize: CArraySize;
+    public arrayElement: CSimpleElementAccess;
+    public tmpVarName: string;
+    public needDisposeVarName: string;
+    public lengthVarName: string;
+    public iteratorVarName: string;
+    constructor(scope: IScope, node: ts.Node, public arg: CExpression, public type: CType) {
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;
-        this.isArray = type instanceof ArrayType;
-        this.isStaticNumberArray = type instanceof ArrayType && !type.isDynamicArray && type.elementType === NumberVarType;
-        this.isDynamicNumberArray = type instanceof ArrayType && type.isDynamicArray && type.elementType === NumberVarType;
-        this.capacity = type instanceof ArrayType && type.capacity + "";
+        this.isArrayOfString = type instanceof ArrayType && type.elementType === StringVarType;
+        this.isArrayOfNumber = type instanceof ArrayType && type.elementType === NumberVarType;
+        this.isArrayOfBoolean = type instanceof ArrayType && type.elementType === BooleanVarType;
+        this.isArrayOfUniversalVar = type instanceof ArrayType && type.elementType === UniversalVarType;
+        this.isArrayOfArray = type instanceof ArrayType && type.elementType instanceof Array;
+        this.isArrayOfObj = type instanceof ArrayType && (type.elementType instanceof DictType || type.elementType instanceof StructType);
+        this.arraySize = type instanceof ArrayType && new CArraySize(scope, arg, type);
+
+        if (this.isArrayOfString || this.isArrayOfUniversalVar) {
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            this.arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
+            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len", false);
+            if (!scope.variables.some(v => v.name == this.lengthVarName))
+                scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
+
+            scope.root.headerFlags.strings = true;
+        }
+
+        if (this.isArrayOfUniversalVar) {
+            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
+            if (!scope.variables.some(v => v.name == this.tmpVarName))
+                scope.variables.push(new CVariable(scope, this.tmpVarName, StringVarType));
+            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
+                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
+
+            scope.root.headerFlags.js_var_to_str = true;
+        }
     }
 }
 
@@ -353,6 +405,10 @@ class CArgStrLen {
     strcat({buf}, {arg});
 {#elseif isBoolean}
     strcat({buf}, {arg} ? "true" : "false");
+{#elseif isUniversalVar}
+    strcat({buf}, ({tmpVarName} = js_var_to_str({arg}, &{needDisposeVarName})));
+    if ({needDisposeVarName})
+        free((void *){tmpVarName});
 {#elseif isArray}
     for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
         if ({iteratorVarName} != 0)
@@ -367,6 +423,9 @@ class CArgStrCat {
     public isNumber: boolean;
     public isString: boolean;
     public isBoolean: boolean;
+    public isUniversalVar: boolean;
+    public tmpVarName: string;
+    public needDisposeVarName: string;
     public isArray: boolean = false;
     public iteratorVarName: string;
     public arrayElementCat: CArgStrCat;
@@ -375,10 +434,21 @@ class CArgStrCat {
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;
+        this.isUniversalVar = type === UniversalVarType;
+        if (this.isUniversalVar) {
+            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
+            if (!scope.variables.some(v => v.name == this.tmpVarName))
+                scope.variables.push(new CVariable(scope, this.tmpVarName, StringVarType));
+            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
+                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
+
+            scope.root.headerFlags.js_var_to_str = true;
+        }
         if (type instanceof ArrayType) {
             this.isArray = true;
             this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.func.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
             const arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
             this.arrayElementCat = new CArgStrCat(scope, node, buf, arrayElement, type.elementType);
             this.arraySize = new CArraySize(scope, arg, type);
