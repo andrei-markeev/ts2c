@@ -44,10 +44,6 @@ export class CCondition {
     {left} {operator} {right}
 {#elseif replacedWithCall}
     {call}({left}, {right}{callAddArgs}){callCondition}
-{#elseif replacedWithVarAssignment}
-    ({left} = {replacementVarName})
-{#elseif replacedWithVar}
-    {replacementVarName}
 {#elseif computeOperation}
     js_var_compute({left}, {computeOperation}, {right})
 {#else}
