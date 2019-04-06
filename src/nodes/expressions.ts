@@ -1,12 +1,12 @@
-import { AssignmentHelper, CAssignment } from './assignment';
+import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, CType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps} from '../types';
-import {CVariable, CAsUniversalVar} from './variable';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps, arithmeticOps} from '../types';
+import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
-import { CArraySize, CSimpleElementAccess } from './elementaccess';
+import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar } from './typeconvert';
 
 export interface CExpression { }
 
@@ -44,8 +44,6 @@ export class CCondition {
     {left} {operator} {right}
 {#elseif replacedWithCall}
     {call}({left}, {right}{callAddArgs}){callCondition}
-{#elseif computeOperation}
-    js_var_compute({left}, {computeOperation}, {right})
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`, ts.SyntaxKind.BinaryExpression)
@@ -56,7 +54,6 @@ export class CBinaryExpression {
     public call: string;
     public callCondition: string;
     public callAddArgs: string = "";
-    public computeOperation: string = null;
     public expression: CExpression = null;
     public left: CExpression;
     public right: CExpression;
@@ -81,6 +78,10 @@ export class CBinaryExpression {
             const left = CodeTemplateFactory.createForNode(scope, node.left);
             const right = new CPlusExpression(scope, node);
             this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(<any>right) + ")";
+        }
+        if (arithmeticOps.indexOf(node.operatorToken.kind) > -1) {
+            this.expression = new CArithmeticExpression(scope, node);
+            return;
         }
 
         let leftType = scope.root.typeHelper.getCType(node.left);
@@ -111,40 +112,6 @@ export class CBinaryExpression {
             operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
             operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
             operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
-
-            operatorMap[ts.SyntaxKind.AsteriskToken] = '*';
-            operatorMap[ts.SyntaxKind.SlashToken] = '/';
-            operatorMap[ts.SyntaxKind.PercentToken] = '%';
-            operatorMap[ts.SyntaxKind.PlusToken] = '+';
-            operatorMap[ts.SyntaxKind.MinusToken] = '-';
-            operatorMap[ts.SyntaxKind.AmpersandToken] = '&';
-            operatorMap[ts.SyntaxKind.BarToken] = '|';
-            operatorMap[ts.SyntaxKind.CaretToken] = '^';
-            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanToken] = '>>';
-            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken] = '>>';
-            operatorMap[ts.SyntaxKind.LessThanLessThanToken] = '<<';
-
-            operatorMap[ts.SyntaxKind.AsteriskEqualsToken] = '*=';
-            operatorMap[ts.SyntaxKind.SlashEqualsToken] = '/=';
-            operatorMap[ts.SyntaxKind.PercentEqualsToken] = '%=';
-            operatorMap[ts.SyntaxKind.PlusEqualsToken] = '+=';
-            operatorMap[ts.SyntaxKind.MinusEqualsToken] = '-=';
-            operatorMap[ts.SyntaxKind.AmpersandEqualsToken] = '&=';
-            operatorMap[ts.SyntaxKind.BarEqualsToken] = '|=';
-            operatorMap[ts.SyntaxKind.CaretEqualsToken] = '^=';
-            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanEqualsToken] = '>>=';
-            operatorMap[ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken] = '>>';
-            operatorMap[ts.SyntaxKind.LessThanLessThanEqualsToken] = '<<=';
-
-            if (operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
-                || operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
-            {
-                const leftAsString = CodeTemplateFactory.templateToString(this.left as any);
-                this.left = "((uint16_t)" + leftAsString + ")";
-                if (operatorKind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
-                    this.left = leftAsString + " = " + this.left;
-                scope.root.headerFlags.uint16_t = true;
-            }
         }
         else if (leftType == StringVarType && rightType == StringVarType) {
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
@@ -159,9 +126,7 @@ export class CBinaryExpression {
         else if (leftType == NumberVarType && rightType == StringVarType
             || leftType == StringVarType && rightType == NumberVarType) {
 
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['str_int16_t_cmp', ' != 0'];
             callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
             callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
 
             if (callReplaceMap[operatorKind]) {
@@ -183,20 +148,6 @@ export class CBinaryExpression {
             this.left = new CAsUniversalVar(scope, this.left, leftType);
             this.right = new CAsUniversalVar(scope, this.right, rightType);
             scope.root.headerFlags.js_var_eq = true;
-        }
-        else if (!isEqualityOp && (toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType))) {
-
-            const js_var_operator_map = {
-                [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
-                [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
-                [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
-                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
-            };
-            
-            this.computeOperation = js_var_operator_map[operatorKind];
-            this.left = new CAsUniversalVar(scope, this.left, leftType);
-            this.right = new CAsUniversalVar(scope, this.right, rightType);
-            scope.root.headerFlags.js_var_compute = true;
 
         } else if (leftType instanceof StructType || leftType instanceof ArrayType || leftType instanceof DictType
                 || rightType instanceof StructType || rightType instanceof ArrayType || rightType instanceof DictType) {
@@ -218,6 +169,56 @@ export class CBinaryExpression {
             [this.call, this.callCondition] = callReplaceMap[operatorKind];
             if (this.call.indexOf('|') > -1)
                 [this.call, this.callAddArgs] = this.call.split('|');
+        }
+        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+    }
+}
+
+@CodeTemplate(`
+{#if operator}
+    {left} {operator} {right}
+{#elseif computeOperation}
+    js_var_compute({left}, {computeOperation}, {right})
+{#else}
+    /* unsupported arithmetic expression {nodeText} */
+{/if}`)
+class CArithmeticExpression {
+    public operator: string = null;
+    public computeOperation: string = null;
+    public left: CExpression;
+    public right: CExpression;
+    public nodeText: string;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        
+        if (toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType)) {
+            const js_var_operator_map = {
+                [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
+                [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
+                [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
+                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
+            };
+            
+            this.computeOperation = js_var_operator_map[node.operatorToken.kind];
+            this.left = new CAsUniversalVar(scope, node.left);
+            this.right = new CAsUniversalVar(scope, node.right);
+            scope.root.headerFlags.js_var_compute = true;
+        } else {
+            this.operator = node.operatorToken.getText();
+            this.left = new CAsNumber(scope, node.left);
+            this.right = new CAsNumber(scope, node.right);
+
+            if (node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
+                || node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
+            {
+                this.operator = ">>";
+                const leftAsString = CodeTemplateFactory.templateToString(this.left as any);
+                this.left = "((uint16_t)" + leftAsString + ")";
+                if (node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
+                    this.left = leftAsString + " = " + this.left;
+                scope.root.headerFlags.uint16_t = true;
+            }
         }
         this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
     }
@@ -288,11 +289,11 @@ class CPlusExpression {
             this.replacedWithVar = true;
             this.replacementVarName = tempVarName;
 
-            this.strlen_left = new CArgStrLen(scope, node.left, this.left, leftType);
-            this.strlen_right = new CArgStrLen(scope, node.right, this.right, rightType);
+            this.strlen_left = new CAsString_Length(scope, node.left, this.left, leftType);
+            this.strlen_right = new CAsString_Length(scope, node.right, this.right, rightType);
 
-            this.strcat_left = new CArgStrCat(scope, node.left, tempVarName, this.left, leftType);
-            this.strcat_right = new CArgStrCat(scope, node.right, tempVarName, this.right, rightType);
+            this.strcat_left = new CAsString_Concat(scope, node.left, tempVarName, this.left, leftType);
+            this.strcat_right = new CAsString_Concat(scope, node.right, tempVarName, this.right, rightType);
 
             scope.root.headerFlags.strings = true;
             scope.root.headerFlags.malloc = true;
@@ -304,150 +305,6 @@ class CPlusExpression {
             }
         }
 
-    }
-}
-
-@CodeTemplate(`
-{#statements}
-    {#if isArrayOfString}
-        {lengthVarName} = {arraySize};
-        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
-            {lengthVarName} += strlen({arrayElement});
-    {#elseif isArrayOfUniversalVar}
-        {lengthVarName} = {arraySize};
-        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
-            {lengthVarName} += strlen({tmpVarName} = js_var_to_str({arrayElement}, &{needDisposeVarName}));
-            if ({needDisposeVarName})
-                free((void *){tmpVarName});
-        }
-    {/if}
-{/statements}
-{#if isNumber}
-    STR_INT16_T_BUFLEN
-{#elseif isString}
-    strlen({arg})
-{#elseif isBoolean}
-    (5-{arg})
-{#elseif isArrayOfNumber}
-    (STR_INT16_T_BUFLEN + 1) * {arraySize}
-{#elseif isArrayOfBoolean}
-    6 * {arraySize}
-{#elseif isArrayOfObj}
-    16 * {arraySize}
-{#elseif isArrayOfString || isArrayOfUniversalVar}
-    {lengthVarName}
-{#elseif isArrayOfArray}
-    /* determining string length of array {arg} is not supported yet */
-{#else}
-    15
-{/if}`)
-class CArgStrLen {
-    public isNumber: boolean;
-    public isString: boolean;
-    public isBoolean: boolean;
-    public isArray: boolean;
-    public isArrayOfString: boolean;
-    public isArrayOfNumber: boolean;
-    public isArrayOfBoolean: boolean;
-    public isArrayOfUniversalVar: boolean;
-    public isArrayOfArray: boolean;
-    public isArrayOfObj: boolean;
-    public arraySize: CArraySize;
-    public arrayElement: CSimpleElementAccess;
-    public tmpVarName: string;
-    public needDisposeVarName: string;
-    public lengthVarName: string;
-    public iteratorVarName: string;
-    constructor(scope: IScope, node: ts.Node, public arg: CExpression, public type: CType) {
-        this.isNumber = type === NumberVarType;
-        this.isString = type === StringVarType;
-        this.isBoolean = type === BooleanVarType;
-        this.isArrayOfString = type instanceof ArrayType && type.elementType === StringVarType;
-        this.isArrayOfNumber = type instanceof ArrayType && type.elementType === NumberVarType;
-        this.isArrayOfBoolean = type instanceof ArrayType && type.elementType === BooleanVarType;
-        this.isArrayOfUniversalVar = type instanceof ArrayType && type.elementType === UniversalVarType;
-        this.isArrayOfArray = type instanceof ArrayType && type.elementType instanceof Array;
-        this.isArrayOfObj = type instanceof ArrayType && (type.elementType instanceof DictType || type.elementType instanceof StructType);
-        this.arraySize = type instanceof ArrayType && new CArraySize(scope, arg, type);
-
-        if (this.isArrayOfString || this.isArrayOfUniversalVar) {
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-            this.arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
-            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
-            scope.variables.push(new CVariable(scope, this.lengthVarName, NumberVarType));
-
-            scope.root.headerFlags.strings = true;
-        }
-
-        if (this.isArrayOfUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
-            if (!scope.variables.some(v => v.name == this.tmpVarName))
-                scope.variables.push(new CVariable(scope, this.tmpVarName, StringVarType));
-            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
-                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
-
-            scope.root.headerFlags.js_var_to_str = true;
-        }
-    }
-}
-
-@CodeTemplate(`
-{#if isNumber}
-    str_int16_t_cat({buf}, {arg});
-{#elseif isString}
-    strcat({buf}, {arg});
-{#elseif isBoolean}
-    strcat({buf}, {arg} ? "true" : "false");
-{#elseif isUniversalVar}
-    strcat({buf}, ({tmpVarName} = js_var_to_str({arg}, &{needDisposeVarName})));
-    if ({needDisposeVarName})
-        free((void *){tmpVarName});
-{#elseif isArray}
-    for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
-        if ({iteratorVarName} != 0)
-            strcat({buf}, ",");
-        {arrayElementCat}
-    }
-{#else}
-    strcat({buf}, "[object Object]");
-{/if}
-`)
-class CArgStrCat {
-    public isNumber: boolean;
-    public isString: boolean;
-    public isBoolean: boolean;
-    public isUniversalVar: boolean;
-    public tmpVarName: string;
-    public needDisposeVarName: string;
-    public isArray: boolean = false;
-    public iteratorVarName: string;
-    public arrayElementCat: CArgStrCat;
-    public arraySize: CArraySize;
-    constructor(scope: IScope, node: ts.Node, public buf: CExpression, public arg: CExpression, public type: CType) {
-        this.isNumber = type === NumberVarType;
-        this.isString = type === StringVarType;
-        this.isBoolean = type === BooleanVarType;
-        this.isUniversalVar = type === UniversalVarType;
-        if (this.isUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
-            if (!scope.variables.some(v => v.name == this.tmpVarName))
-                scope.variables.push(new CVariable(scope, this.tmpVarName, StringVarType));
-            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
-                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
-
-            scope.root.headerFlags.js_var_to_str = true;
-        }
-        if (type instanceof ArrayType) {
-            this.isArray = true;
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-            const arrayElement = new CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
-            this.arrayElementCat = new CArgStrCat(scope, node, buf, arrayElement, type.elementType);
-            this.arraySize = new CArraySize(scope, arg, type);
-        }
     }
 }
 

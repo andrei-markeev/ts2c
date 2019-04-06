@@ -4,7 +4,7 @@ import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
-import { CAsUniversalVar } from './variable';
+import { CAsUniversalVar } from './typeconvert';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {

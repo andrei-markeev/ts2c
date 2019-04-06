@@ -134,7 +134,7 @@ const relationalOps = [
     ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
     ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken
 ];
-const arithmeticOps = [
+export const arithmeticOps = [
     ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
     ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
     ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,

@@ -3,8 +3,9 @@ import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
-import { CVariable, CVariableAllocation, CAsUniversalVar } from './variable';
+import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType } from '../types';
+import { CAsUniversalVar } from './typeconvert';
 
 @CodeTemplate(`
 {#if standardCall}

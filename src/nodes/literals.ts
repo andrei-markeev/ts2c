@@ -2,10 +2,11 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
 import {ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType, findParentFunction} from '../types';
-import {CVariable, CVariableAllocation, CAsUniversalVar} from './variable';
+import {CVariable, CVariableAllocation} from './variable';
 import {CAssignment} from './assignment';
 import {CRegexSearchFunction} from './regexfunc';
 import { CExpression } from './expressions';
+import { CAsUniversalVar } from './typeconvert';
 
 @CodeTemplate(`
 {#if universalWrapper}
@@ -164,15 +165,9 @@ export class CNumber {
     }
 }
 
-@CodeTemplate(`
-{#if universalWrapper}
-    js_var_from_uint8_t({value})
-{#else}
-    {value}
-{/if}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
+@CodeTemplate(`{value}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
 export class CBoolean {
     public value: CExpression;
-    public universalWrapper: boolean = false;
     constructor(scope: IScope, node: ts.Node) {
         this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;

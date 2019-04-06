@@ -1,11 +1,12 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../../template';
 import {StandardCallResolver, IResolver, IResolverMatchOptions} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType, UniversalVarType} from '../../types';
+import {ArrayType, NumberVarType, TypeHelper, PointerVarType, UniversalVarType} from '../../types';
 import {IScope} from '../../program';
-import {CVariable, CAsUniversalVar} from '../../nodes/variable';
+import {CVariable} from '../../nodes/variable';
 import {CExpression} from '../../nodes/expressions';
 import {CElementAccess} from '../../nodes/elementaccess';
+import {CAsUniversalVar} from '../../nodes/typeconvert';
 
 @StandardCallResolver
 class ArrayPushResolver implements IResolver {

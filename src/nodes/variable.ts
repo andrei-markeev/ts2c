@@ -229,56 +229,6 @@ export class CVariableDestructors {
     }
 }
 
-@CodeTemplate(`
-{#if isUniversalVar}
-    {expression}
-{#elseif isString}
-    js_var_from_str({expression})
-{#elseif isNumber}
-    js_var_from_int16_t({expression})
-{#elseif isBoolean}
-    js_var_from_uint8_t({expression})
-{#elseif isArray}
-    js_var_from_array({expression})
-{#elseif isDict}
-    js_var_from_dict({expression})
-{#else}
-    /** converting {expression} to js_var is not supported yet */
-{/if}`)
-export class CAsUniversalVar {
-    public isUniversalVar: boolean;
-    public isString: boolean;
-    public isNumber: boolean;
-    public isBoolean: boolean;
-    public isArray: boolean;
-    public isDict: boolean;
-    public expression: CExpression;
-    constructor (scope: IScope, expr: ts.Node | CExpression, type?: CType) {
-        this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
-        type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
-
-        this.isUniversalVar = type === UniversalVarType;
-        this.isString = type === StringVarType;
-        this.isNumber = type === NumberVarType;
-        this.isBoolean = type === BooleanVarType;
-        this.isArray = type instanceof ArrayType;
-        this.isDict = type instanceof StructType || type instanceof DictType;
-
-        if (type === StringVarType)
-            scope.root.headerFlags.js_var_from_str = true;
-        if (type === NumberVarType)
-            scope.root.headerFlags.js_var_from_int16_t = true;
-        if (type === BooleanVarType)
-            scope.root.headerFlags.js_var_from_uint8_t = true;
-        if (type instanceof ArrayType)
-            scope.root.headerFlags.js_var_array = true;
-        if (type instanceof StructType || type instanceof DictType)
-            scope.root.headerFlags.js_var_dict = true;
-
-        scope.root.headerFlags.js_var = true;
-    }
-}
-
 interface CVariableOptions {
     removeStorageSpecifier?: boolean;
     initializer?: string;
@@ -320,7 +270,7 @@ export class CVariable {
     }
     typeHasNumber(type: CType) {
         return type == NumberVarType
-            || type instanceof ArrayType && type.elementType == NumberVarType
+            || type instanceof ArrayType && this.typeHasNumber(type.elementType)
             || type instanceof ArrayType && type.isDynamicArray
             || type instanceof StructType && Object.keys(type.properties).some(k => this.typeHasNumber(type.properties[k]))
             || type instanceof DictType;

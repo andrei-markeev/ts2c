@@ -4,7 +4,7 @@ import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
 import {CExpression} from './expressions';
 import { CUndefined } from './literals';
-import { CAsUniversalVar } from './variable';
+import { CAsUniversalVar } from './typeconvert';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
