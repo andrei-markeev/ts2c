@@ -58,3 +58,6 @@ export function isDeleteExpression(n): n is DeleteExpression {
 export function isThisKeyword(n): n is ts.Node {
     return n.kind === ts.SyntaxKind.ThisKeyword;
 }
+export function isCompoundAssignment(n: ts.Node) {
+    return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
+}

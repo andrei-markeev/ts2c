@@ -7,6 +7,7 @@ import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar } from './typeconvert';
+import { isCompoundAssignment } from '../typeguards';
 
 export interface CExpression { }
 
@@ -177,12 +178,15 @@ export class CBinaryExpression {
 @CodeTemplate(`
 {#if operator}
     {left} {operator} {right}
+{#elseif computeOperation && isCompoundAssignment}
+    {left} = js_var_compute({left}, {computeOperation}, {right})
 {#elseif computeOperation}
     js_var_compute({left}, {computeOperation}, {right})
 {#else}
     /* unsupported arithmetic expression {nodeText} */
 {/if}`)
 class CArithmeticExpression {
+    public isCompoundAssignment;
     public operator: string = null;
     public computeOperation: string = null;
     public left: CExpression;
@@ -191,13 +195,18 @@ class CArithmeticExpression {
     constructor(scope: IScope, node: ts.BinaryExpression) {
         let leftType = scope.root.typeHelper.getCType(node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
+        this.isCompoundAssignment = isCompoundAssignment(node.operatorToken);
         
         if (toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType)) {
             const js_var_operator_map = {
                 [ts.SyntaxKind.AsteriskToken]: "JS_VAR_ASTERISK",
+                [ts.SyntaxKind.AsteriskEqualsToken]: "JS_VAR_ASTERISK",
                 [ts.SyntaxKind.SlashToken]: "JS_VAR_SLASH",
+                [ts.SyntaxKind.SlashEqualsToken]: "JS_VAR_SLASH",
                 [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
-                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS"
+                [ts.SyntaxKind.PercentEqualsToken]: "JS_VAR_PERCENT",
+                [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS",
+                [ts.SyntaxKind.MinusEqualsToken]: "JS_VAR_MINUS"
             };
             
             this.computeOperation = js_var_operator_map[node.operatorToken.kind];

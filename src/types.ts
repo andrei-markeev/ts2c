@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword } from './typeguards';
+import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -304,11 +304,6 @@ export class TypeHelper {
 
         // expressions
         addEquality(ts.isIdentifier, n => n, n => this.getDeclaration(n));
-        for (let i = 0; i < 10; i++)
-            addEquality(ts.isArrayLiteralExpression, n => n, type(n => {
-                const elemType = this.getCType(n.elements[i]);
-                return elemType ? new ArrayType(elemType, 0, false) : null
-            }));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
@@ -318,7 +313,8 @@ export class TypeHelper {
             const resultType = this.getCType(n);
             const operandType = this.getCType(n.left);
             if (resultType === UniversalVarType) {
-                return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
+                return isCompoundAssignment(n.operatorToken) ? UniversalVarType
+                    : operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
                     : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
                     : null;
             } else
@@ -383,6 +379,18 @@ export class TypeHelper {
                 : type === UniversalVarType ? UniversalVarType
                 : null
         }));
+        for (let i = 0; i < 10; i++) {
+            addEquality(ts.isArrayLiteralExpression, n => n, type(n => {
+                const elemType = this.getCType(n.elements[i]);
+                return elemType ? new ArrayType(elemType, 0, false) : null
+            }));
+            addEquality(ts.isArrayLiteralExpression, n => n.elements[i], type(n => {
+                const arrType = this.getCType(n);
+                return arrType && arrType instanceof ArrayType ? arrType.elementType
+                    : arrType === UniversalVarType ? UniversalVarType
+                    : null
+            }));
+        }
 
         // calls
         addEquality(ts.isCallExpression, n => n.expression, n => this.getDeclaration(n));
