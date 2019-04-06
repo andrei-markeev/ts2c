@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment } from './typeguards';
+import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -134,31 +134,14 @@ const relationalOps = [
     ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
     ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken
 ];
-export const arithmeticOps = [
-    ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
-    ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
-    ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
-    ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
-    ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
-    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
-    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
-    ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
-    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
-];
 const logicalOps = [
     ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
 ];
 
 export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    return arithmeticOps.indexOf(op) > -1
+    return isNumberOp(op) || isIntegerOp(op)
         || op == ts.SyntaxKind.PlusToken && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
         || equalityOps.concat(relationalOps).indexOf(op) > -1 && (leftType !== StringVarType || rightType !== StringVarType);
-}
-export function operandsToString(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    return op == ts.SyntaxKind.PlusToken && (toPrimitive(leftType) === StringVarType || toPrimitive(rightType === StringVarType));
-}
-export function operandsToBoolean(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    return logicalOps.indexOf(op) > -1;
 }
 
 export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
@@ -168,7 +151,7 @@ export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightTy
         return BooleanVarType;
     if (leftType == null || rightType == null)
         return null;
-    if (arithmeticOps.indexOf(op) > -1)
+    if (isNumberOp(op) || isIntegerOp(op))
         return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
     if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
         return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType 

@@ -145,7 +145,7 @@ class HeaderFlags {
      headerFlags.regex || headerFlags.str_to_int16_t }
     typedef short int16_t;
 {/if}
-{#if headerFlags.uint16_t}
+{#if headerFlags.uint16_t || headerFlags.js_var_compute}
     typedef unsigned short uint16_t;
 {/if}
 {#if headerFlags.regex}
@@ -770,7 +770,7 @@ class HeaderFlags {
 
 {#if headerFlags.js_var_compute}
 
-    enum js_var_op {JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT};
+    enum js_var_op {JS_VAR_MINUS, JS_VAR_ASTERISK, JS_VAR_SLASH, JS_VAR_PERCENT, JS_VAR_SHL, JS_VAR_SHR, JS_VAR_USHR, JS_VAR_OR, JS_VAR_AND};
     struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_var right)
     {
         struct js_var result, left_to_number, right_to_number;
@@ -780,8 +780,10 @@ class HeaderFlags {
         right_to_number = js_var_to_number(right);
 
         if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN) {
-            result.type = JS_VAR_NAN;
-            return result;
+            if (op == JS_VAR_MINUS || op == JS_VAR_ASTERISK || op == JS_VAR_SLASH || op == JS_VAR_PERCENT) {
+                result.type = JS_VAR_NAN;
+                return result;
+            }
         }
         
         result.type = JS_VAR_INT16;
@@ -797,6 +799,21 @@ class HeaderFlags {
                 break;
             case JS_VAR_PERCENT:
                 result.number = left_to_number.number % right_to_number.number;
+                break;
+            case JS_VAR_SHL:
+                result.number = left_to_number.number << right_to_number.number;
+                break;
+            case JS_VAR_SHR:
+                result.number = left_to_number.number >> right_to_number.number;
+                break;
+            case JS_VAR_USHR:
+                result.number = ((uint16_t)left_to_number.number) >> right_to_number.number;
+                break;
+            case JS_VAR_AND:
+                result.number = left_to_number.number & right_to_number.number;
+                break;
+            case JS_VAR_OR:
+                result.number = left_to_number.number | right_to_number.number;
                 break;
         }
         return result;

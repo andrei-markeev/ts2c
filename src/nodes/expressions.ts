@@ -2,12 +2,12 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps, arithmeticOps} from '../types';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps} from '../types';
 import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar } from './typeconvert';
-import { isCompoundAssignment } from '../typeguards';
+import { isCompoundAssignment, isNumberOp, isIntegerOp } from '../typeguards';
 
 export interface CExpression { }
 
@@ -80,7 +80,7 @@ export class CBinaryExpression {
             const right = new CPlusExpression(scope, node);
             this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(<any>right) + ")";
         }
-        if (arithmeticOps.indexOf(node.operatorToken.kind) > -1) {
+        if (isNumberOp(node.operatorToken.kind) || isIntegerOp(node.operatorToken.kind)) {
             this.expression = new CArithmeticExpression(scope, node);
             return;
         }
@@ -206,7 +206,17 @@ class CArithmeticExpression {
                 [ts.SyntaxKind.PercentToken]: "JS_VAR_PERCENT",
                 [ts.SyntaxKind.PercentEqualsToken]: "JS_VAR_PERCENT",
                 [ts.SyntaxKind.MinusToken]: "JS_VAR_MINUS",
-                [ts.SyntaxKind.MinusEqualsToken]: "JS_VAR_MINUS"
+                [ts.SyntaxKind.MinusEqualsToken]: "JS_VAR_MINUS",
+                [ts.SyntaxKind.LessThanLessThanToken]: "JS_VAR_SHL",
+                [ts.SyntaxKind.LessThanLessThanEqualsToken]: "JS_VAR_SHL",
+                [ts.SyntaxKind.GreaterThanGreaterThanToken]: "JS_VAR_SHR",
+                [ts.SyntaxKind.GreaterThanGreaterThanEqualsToken]: "JS_VAR_SHR",
+                [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: "JS_VAR_USHR",
+                [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken]: "JS_VAR_USHR",
+                [ts.SyntaxKind.BarToken]: "JS_VAR_OR",
+                [ts.SyntaxKind.BarEqualsToken]: "JS_VAR_OR",
+                [ts.SyntaxKind.AmpersandToken]: "JS_VAR_AND",
+                [ts.SyntaxKind.AmpersandEqualsToken]: "JS_VAR_AND"
             };
             
             this.computeOperation = js_var_operator_map[node.operatorToken.kind];

@@ -67,9 +67,9 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`+`**
     - [x] **`-`**
  - [x] **Bitwise shift operators**
-    - [x] **`<<`** _(only numbers)_
-    - [x] **`>>`** _(only numbers)_
-    - [x] **`>>>`** _(only numbers)_
+    - [x] **`<<`**
+    - [x] **`>>`**
+    - [x] **`>>>`**
  - [ ] Relational operators
     - [x] **`<`** _(only numbers)_
     - [x] **`>`** _(only numbers)_
@@ -93,17 +93,17 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **Assignment operators**
     - [x] **Simple assignment `=`**
     - [x] **Compound assignments**
-        - [x] **`+=`** _(partial: number+number, string+number, string+string)_
-        - [x] **`-=`** _(only numbers)_
-        - [x] **`*=`** _(only numbers)_
-        - [x] **`/=`** _(only numbers)_
-        - [x] **`%=`** _(only numbers)_
-        - [x] **`<<=`** _(only numbers)_
-        - [x] **`>>=`** _(only numbers)_
-        - [x] **`>>>=`** _(only numbers)_
-        - [x] **`&=`** _(only numbers)_
-        - [x] **`^=`** _(only numbers)_
-        - [x] **`|=`** _(only numbers)_
+        - [x] **`+=`**
+        - [x] **`-=`**
+        - [x] **`*=`**
+        - [x] **`/=`**
+        - [x] **`%=`**
+        - [x] **`<<=`**
+        - [x] **`>>=`**
+        - [x] **`>>>=`**
+        - [x] **`&=`**
+        - [x] **`^=`**
+        - [x] **`|=`**
  - [x] **Comma operator**
 
 ### Built-in objects

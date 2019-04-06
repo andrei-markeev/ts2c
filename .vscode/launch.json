@@ -8,7 +8,7 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/js_var/binexpr4.ts"],
+            "args": ["tests/js_var/binexpr5.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         },

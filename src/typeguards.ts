@@ -61,3 +61,25 @@ export function isThisKeyword(n): n is ts.Node {
 export function isCompoundAssignment(n: ts.Node) {
     return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
 }
+
+
+const toNumberOps = [
+    ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
+    ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
+    ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
+    ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
+];
+const toIntegerOps = [
+    ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
+];
+
+export function isNumberOp(op: ts.SyntaxKind) {
+    return toNumberOps.indexOf(op) > -1;
+}
+export function isIntegerOp(op: ts.SyntaxKind) {
+    return toIntegerOps.indexOf(op) > -1;
+}
