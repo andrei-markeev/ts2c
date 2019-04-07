@@ -49,11 +49,11 @@ export class CCallExpression {
 export class CNew {
     public funcName: CExpression = "";
     public arguments: CExpression[];
-    public allocator: CVariableAllocation = null; 
+    public allocator: CVariableAllocation | string = ""; 
     public nodeText: string;
     constructor(scope: IScope, node: ts.NewExpression) {
-        if (ts.isIdentifier(node.expression)) {
-            const decl = scope.root.typeHelper.getDeclaration(node.expression);
+        const decl = scope.root.typeHelper.getDeclaration(node.expression);
+        if (decl && ts.isIdentifier(node.expression)) {
             const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
 
             this.funcName = CodeTemplateFactory.createForNode(scope, node.expression);

@@ -424,6 +424,7 @@ export class TypeHelper {
         addEquality(ts.isReturnStatement, n => n.expression, type(n => FuncType.getReturnType(this, findParentFunction(n))));
         addEquality(ts.isReturnStatement, n => findParentFunction(n), type(n => this.getCType(n.expression) ? new FuncType(this.getCType(n.expression)) : null));
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
+        addEquality(ts.isCatchClause, n => n.variableDeclaration, type(StringVarType));
 
         this.resolveTypes(typeEqualities);
     }
@@ -471,11 +472,11 @@ export class TypeHelper {
                 type.isDynamicArray = true;
         }
 
+        /*
         this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
         
-        /*
         this.allNodes
             .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
             .forEach(n => console.log(

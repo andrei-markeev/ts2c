@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {CProgram, IScope} from '../program';
-import {ArrayType, NumberVarType} from '../types';
+import {ArrayType, NumberVarType, StringVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression, CCondition} from './expressions';
 import {CElementAccess} from './elementaccess';
@@ -261,8 +261,6 @@ export class CForInStatement implements IScope {
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
         this.varAccess = new CElementAccess(scope, node.expression);
-        let dictVarType = scope.root.typeHelper.getCType(node.expression);
-        // TODO: do something with dictVarType
 
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declInit = (<ts.VariableDeclarationList>node.initializer).declarations[0];
@@ -326,9 +324,8 @@ export class CBlock implements IScope {
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
-        if (node.kind == ts.SyntaxKind.Block) {
-            let block = <ts.Block>node;
-            block.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
+        if (ts.isBlock(node)) {
+            node.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
         }
         else
             this.statements.push(CodeTemplateFactory.createForNode(this, node));
@@ -351,5 +348,46 @@ export class CImport {
                 scope.root.includes.push(moduleName);
         }
         this.nodeText = node.getText();
+    }
+}
+
+@CodeTemplate(`
+TRY
+{tryBlock}
+CATCH
+{#if catchVarName}
+        {catchVarName} = err_defs->data[err_val - 1];
+{/if}
+{catchBlock}
+{finallyBlock}
+END_TRY
+`, ts.SyntaxKind.TryStatement)
+export class CTryStatement {
+    public tryBlock: CBlock;
+    public catchBlock: CBlock | string;
+    public finallyBlock: CBlock | string;
+    public catchVarName: string;
+    constructor(scope: IScope, node: ts.TryStatement) {
+        this.tryBlock = new CBlock(scope, node.tryBlock);
+        this.catchBlock = node.catchClause ? new CBlock(scope, node.catchClause.block) : "";
+        this.finallyBlock = node.finallyBlock ? new CBlock(scope, node.finallyBlock) : "";
+        this.catchVarName = node.catchClause && node.catchClause.variableDeclaration && node.catchClause.variableDeclaration.name.getText();
+        if (this.catchVarName)
+            scope.variables.push(new CVariable(scope, this.catchVarName, StringVarType));
+        scope.root.headerFlags.try_catch = true;
+    }
+}
+
+@CodeTemplate(`
+{#statements}
+    ARRAY_PUSH(err_defs, {value});
+{/statements}
+THROW(err_defs->size);
+`, ts.SyntaxKind.ThrowStatement)
+export class CThrowStatement {
+    public value: CExpression;
+    constructor(scope: IScope, node: ts.ThrowStatement) {
+        this.value = CodeTemplateFactory.createForNode(scope, node.expression);
+        scope.root.headerFlags.try_catch = true;
     }
 }

@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import {TypeHelper, NumberVarType, findParentFunction} from './types';
+import {TypeHelper} from './types';
 import {SymbolsHelper} from './symbols';
 import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
@@ -75,6 +75,7 @@ class HeaderFlags {
     js_var_eq: boolean = false;
     js_var_plus: boolean = false;
     js_var_compute: boolean = false;
+    js_var_get: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;
@@ -98,7 +99,7 @@ class HeaderFlags {
     parse_int16_t: boolean = false;
     regex: boolean = false;
     regex_match: boolean = false;
-    js_var_get: boolean;
+    try_catch: boolean = false;
 }
 
 
@@ -111,11 +112,13 @@ class HeaderFlags {
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str
+    || headerFlags.js_var_get || headerFlags.try_catch}
     #include <stdlib.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str
+    || headerFlags.js_var_get || headerFlags.try_catch}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf || headerFlags.parse_int16_t}
@@ -126,6 +129,9 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute}
     #include <ctype.h>
+{/if}
+{#if headerFlags.try_catch || headerFlags.js_var_get}
+    #include <setjmp.h>
 {/if}
 
 {#if includes.length}
@@ -142,7 +148,8 @@ class HeaderFlags {
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
-     headerFlags.regex || headerFlags.str_to_int16_t }
+     headerFlags.regex || headerFlags.str_to_int16_t || headerFlags.array_string_t ||
+     headerFlags.try_catch }
     typedef short int16_t;
 {/if}
 {#if headerFlags.uint16_t || headerFlags.js_var_compute}
@@ -166,7 +173,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_plus}
+{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_plus || headerFlags.js_var_get}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -174,7 +181,7 @@ class HeaderFlags {
     } *
 {/if}
 
-{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_plus}
+{#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_plus || headerFlags.try_catch || headerFlags.js_var_get}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
         array->data = malloc((init_capacity) * sizeof(*array->data)); \\
@@ -438,7 +445,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_get}
+{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_get || headerFlags.try_catch}
     struct array_string_t {
         int16_t size;
         int16_t capacity;
@@ -665,6 +672,16 @@ class HeaderFlags {
 
 {/if}
 
+{#if headerFlags.try_catch || headerFlags.js_var_get}
+    int err_i = 0;
+    jmp_buf err_jmp[10];
+    #define TRY { int err_val = setjmp(err_jmp[err_i++]); if (!err_val) {
+    #define CATCH } else {
+    #define THROW(x) longjmp(err_jmp[--err_i], x)
+    struct array_string_t * err_defs;
+    #define END_TRY err_defs->size--; if (err_i > 0) longjmp(err_jmp[--err_i], err_val); } }
+{/if}
+
 {#if headerFlags.js_var_get}
     struct js_var js_var_get(struct js_var v, struct js_var arg) {
         struct js_var tmp;
@@ -683,6 +700,9 @@ class HeaderFlags {
             if (need_dispose)
                 free((void *)key);
             return tmp;
+        } else if (v.type == JS_VAR_NULL || v.type == JS_VAR_UNDEFINED) {
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read property of null or undefined.");
+            THROW(err_defs->size);
         } else
             return js_var_from(JS_VAR_UNDEFINED);
     }
@@ -872,6 +892,9 @@ class HeaderFlags {
 
 int main(void) {
     {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
+    {#if headerFlags.try_catch || headerFlags.js_var_get}
+        ARRAY_CREATE(err_defs, 2, 0);
+    {/if}
 
     {statements {    }=> {this}}
 
