@@ -68,7 +68,7 @@ int main(void) {
 Project status
 --------------
 
-__**Work in progress:**__ it works, but only about **50% of ES3** syntax is currently supported.
+__**Work in progress:**__ it works, but only about **60% of ES3** specification is currently supported: statements and expressions - 84%, built-in objects - 16%.
 
 Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `function` inside expression or passing functions by reference, `eval`, `Date`, `Math`, etc.
 
