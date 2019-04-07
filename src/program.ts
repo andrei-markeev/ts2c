@@ -679,7 +679,7 @@ class HeaderFlags {
     #define CATCH } else {
     #define THROW(x) longjmp(err_jmp[--err_i], x)
     struct array_string_t * err_defs;
-    #define END_TRY err_defs->size--; if (err_i > 0) longjmp(err_jmp[--err_i], err_val); } }
+    #define END_TRY err_defs->size--; } }
 {/if}
 
 {#if headerFlags.js_var_get}
