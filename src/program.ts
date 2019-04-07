@@ -149,7 +149,7 @@ class HeaderFlags {
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
      headerFlags.regex || headerFlags.str_to_int16_t || headerFlags.array_string_t ||
-     headerFlags.try_catch }
+     headerFlags.try_catch || headerFlags.parse_int16_t }
     typedef short int16_t;
 {/if}
 {#if headerFlags.uint16_t || headerFlags.js_var_compute}

@@ -91,6 +91,13 @@ export class CAsNumber {
             this.isSingleElementStaticArray = true;
             this.arrayFirstElementAsNumber = new CAsNumber(scope, new CSimpleElementAccess(scope, type, this.expression, "0"), type.elementType);
         }
+
+        if (this.isString)
+            scope.root.headerFlags.str_to_int16_t = true;
+        if (this.isUniversalVar)
+            scope.root.headerFlags.js_var_to_number = true;
+        if (!this.isNumber && !this.isBoolean && !this.isString && !this.isUniversalVar && !this.isSingleElementStaticArray)
+            scope.root.headerFlags.js_var_from = true;
     }
 }
 
