@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isConvertToNumberExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp } from './typeguards';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -163,11 +163,21 @@ export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightTy
     return null;
 }
 
-export function toNumberCanBeNaN(t) {
+export function getUnaryExprResultType(op: ts.SyntaxKind, operandType: CType) {
+    if (op === ts.SyntaxKind.ExclamationToken) {
+        return BooleanVarType;
+    } else if (op === ts.SyntaxKind.TildeToken) {
+        return NumberVarType;
+    } else {
+        return toNumberCanBeNaN(operandType) ? UniversalVarType : NumberVarType;
+    }
+}
+
+export function toNumberCanBeNaN(t: CType) {
     return t !== null && t !== PointerVarType && t !== NumberVarType && t !== BooleanVarType && !(t instanceof ArrayType && !t.isDynamicArray && t.capacity == 1 && !toNumberCanBeNaN(t.elementType));
 }
 
-export function toPrimitive(t) {
+export function toPrimitive(t: CType) {
     return t === null || t === PointerVarType ? t : t === NumberVarType || t === BooleanVarType ? NumberVarType : StringVarType;
 }
 
@@ -290,7 +300,14 @@ export class TypeHelper {
         addEquality(isEqualsExpression, n => n.left, n => n.right);
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
-        addEquality(isConvertToNumberExpression, n => n, type(n => this.getCType(n.operand) == NumberVarType ? NumberVarType : UniversalVarType));
+        addEquality(isUnaryExpression, n => n, type(n => getUnaryExprResultType(n.operator, this.getCType(n.operand))));
+        addEquality(isUnaryExpression, n => n.operand, type(n => {
+            const resultType = this.getCType(n);
+            if (resultType == UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
+                return UniversalVarType;
+            else
+                return null;
+        }));
         addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
         addEquality(ts.isBinaryExpression, n => n.left, type(n => {
             const resultType = this.getCType(n);

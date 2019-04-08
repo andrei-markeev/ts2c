@@ -329,64 +329,83 @@ class CPlusExpression {
 
 
 @CodeTemplate(`
-{#if isPostfix && operator}
-    {operand}{operator}
-{#elseif !isPostfix && operator}
-    {operator}{operand}
-{#elseif call}
-    {call}({operand})
-{#elseif expression}
-    {expression}
+{#if isCompound}
+    ({operand} = {before}{operand}{after})
 {#else}
-    /* unsupported expression {nodeText} */
+    {before}{operand}{after}
 {/if}`, [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
 class CUnaryExpression {
-    public nodeText: string;
-    public operator: string;
+    public before: string = "";
     public operand: CExpression;
+    public after: string = "";
     public isPostfix: boolean;
-    public call: string = null;
-    public expression: CExpression = null;
+    public isCompound: boolean = false;
     constructor(scope: IScope, node: ts.PostfixUnaryExpression | ts.PrefixUnaryExpression) {
-        let operatorMap: { [token: number]: string } = {};
-        let type = scope.root.typeHelper.getCType(node.operand);
-
-        this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
         this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
-        this.nodeText = node.getText();
 
-        operatorMap[ts.SyntaxKind.ExclamationToken] = '!';
-        if (type == NumberVarType || type == BooleanVarType) {
-            operatorMap[ts.SyntaxKind.PlusPlusToken] = '++';
-            operatorMap[ts.SyntaxKind.MinusMinusToken] = '--';
-            operatorMap[ts.SyntaxKind.MinusToken] = '-';
-            operatorMap[ts.SyntaxKind.PlusToken] = '+';
-            operatorMap[ts.SyntaxKind.TildeToken] = '~';
-        }
-        if (node.operator === ts.SyntaxKind.PlusToken) {
-            if (type == StringVarType) {
-                this.call = "str_to_int16_t";
-                scope.root.headerFlags.str_to_int16_t = true;
-            } else if (type == UniversalVarType) {
-                this.call = "js_var_to_number";
-                scope.root.headerFlags.js_var_to_number = true;
-            } else if (type instanceof StructType) {
-                this.call = "js_var_from";
-                this.operand = "JS_VAR_NAN";
-                scope.root.headerFlags.js_var_from = true;
-            } else if (type instanceof ArrayType && !type.isDynamicArray && type.capacity == 0) {
-                this.expression = "js_var_from_int16_t(0)";
+        const type = scope.root.typeHelper.getCType(node.operand);
+        if (node.operator === ts.SyntaxKind.PlusToken)
+            this.operand = new CAsNumber(scope, node.operand);
+        else if (node.operator === ts.SyntaxKind.MinusToken) {
+            this.before = "-";
+            this.operand = new CAsNumber(scope, node.operand);
+            if (toNumberCanBeNaN(type)) {
+                this.before = "js_var_compute(js_var_from_int16_t(0), JS_VAR_MINUS, ";
+                this.after = ")";
+                scope.root.headerFlags.js_var_compute = true;
                 scope.root.headerFlags.js_var_from_int16_t = true;
-            } else if (type instanceof ArrayType && !type.isDynamicArray && type.capacity > 1) {
-                this.expression = "js_var_from(JS_VAR_NAN)";
-                scope.root.headerFlags.js_var_from = true;
-            } else if (type instanceof DictType) {
-                this.expression = "js_var_from(JS_VAR_NAN)";
-                scope.root.headerFlags.js_var_from = true;
+            }
+        } else if (node.operator === ts.SyntaxKind.TildeToken) {
+            this.before = "~";
+            this.operand = new CAsNumber(scope, node.operand);
+            if (toNumberCanBeNaN(type))
+                this.after = ".number";
+        } else if (node.operator === ts.SyntaxKind.ExclamationToken) {
+            this.before = "!";
+            this.operand = new CCondition(scope, node.operand);
+        } else if (node.operator === ts.SyntaxKind.PlusPlusToken) {
+            if (this.isPostfix) {
+                if (toNumberCanBeNaN(type))
+                    this.operand = `/* not supported expression ${node.getText()} */`;
+                else {
+                    this.operand = new CAsNumber(scope, node.operand);
+                    this.after = "++";
+                }
+            } else {
+                if (toNumberCanBeNaN(type)) {
+                    this.isCompound = true;
+                    this.before = "js_var_plus(js_var_to_number(";
+                    this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
+                    this.after = "), js_var_from_int16_t(1))";
+                    scope.root.headerFlags.js_var_plus = true;
+                    scope.root.headerFlags.js_var_from_int16_t = true;
+                } else {
+                    this.before = "++";
+                    this.operand = new CAsNumber(scope, node.operand);
+                }
+            }
+        } else if (node.operator === ts.SyntaxKind.MinusMinusToken) {
+            if (this.isPostfix) {
+                if (toNumberCanBeNaN(type))
+                    this.operand = `/* not supported expression ${node.getText()} */`;
+                else {
+                    this.operand = new CAsNumber(scope, node.operand);
+                    this.after = "--";
+                }
+            } else {
+                if (toNumberCanBeNaN(type)) {
+                    this.isCompound = true;
+                    this.before = "js_var_compute(";
+                    this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
+                    this.after = ", JS_VAR_MINUS, js_var_from_int16_t(1))";
+                    scope.root.headerFlags.js_var_compute = true;
+                    scope.root.headerFlags.js_var_from_int16_t = true;
+                } else {
+                    this.before = "++";
+                    this.operand = new CAsNumber(scope, node.operand);
+                }
             }
         }
-        
-        this.operator = operatorMap[node.operator];
     }
 }
 

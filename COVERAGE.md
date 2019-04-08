@@ -47,17 +47,17 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Argument list**
     - [ ] Function expression `function() {` ... `}`
  - [x] **Postfix expressions**
-    - [x] **`--`**
-    - [x] **`++`**
+    - [x] **`--`** _(only numbers)_
+    - [x] **`++`** _(only numbers)_
  - [x] **Unary operators**
     - [x] **`delete`**
     - [x] **`void`**
     - [x] **`typeof`**
-    - [x] **Prefix increment operator `++`** _(only numbers)_
-    - [x] **Prefix decrement operator `--`** _(only numbers)_
+    - [x] **Prefix increment operator `++`**
+    - [x] **Prefix decrement operator `--`**
     - [x] **Unary `+`**
-    - [x] **Unary `-`** _(only numbers)_
-    - [x] **Bitwise NOT `~`** _(only numbers)_
+    - [x] **Unary `-`**
+    - [x] **Bitwise NOT `~`**
     - [x] **Logical NOT `!`**
  - [x] **Multiplicative operators**
     - [x] **`*`**
@@ -83,9 +83,9 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`===`**
     - [x] **`!==`**
  - [x] **Binary bitwise operators**
-    - [x] **`&`** _(only numbers)_
-    - [x] **`|`** _(only numbers)_
-    - [x] **`^`** _(only numbers)_
+    - [x] **`&`**
+    - [x] **`|`**
+    - [x] **`^`**
  - [x] **Binary logical operators**
     - [x] **`&&`** _(partial: results are boolean)_
     - [x] **`||`** _(partial: results are boolean)_
@@ -270,4 +270,4 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] ignoreCase
      - [ ] multiline
      - [ ] lastIndex
- - [ ] ~~Error objects~~ _(will not be implemented in v1)_
+ - [ ] Error objects

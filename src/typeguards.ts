@@ -45,8 +45,8 @@ export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionIni
 export function isLiteral(n): n is ts.LiteralExpression {
     return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
 }
-export function isConvertToNumberExpression(n): n is ts.PrefixUnaryExpression {
-    return ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusToken;
+export function isUnaryExpression(n): n is ts.PrefixUnaryExpression {
+    return ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n);
 }
 export const SyntaxKind_NaNKeyword = ts.SyntaxKind.Count + 1;
 export function isNullOrUndefinedOrNaN(n): n is ts.Node {

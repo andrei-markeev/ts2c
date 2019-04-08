@@ -1,0 +1,10 @@
+var x = -"11";
+var y = -[[25]];
+var z = -{ some: "stuff" };
+console.log(x, y, z);
+console.log(-[1, 2, 3]);
+console.log(++x);
+console.log(--x);
+console.log(y--);
+console.log(y++);
+console.log(x, y, z);

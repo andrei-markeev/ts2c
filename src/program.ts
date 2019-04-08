@@ -738,7 +738,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.gc_main}
+{#if headerFlags.gc_main || headerFlags.js_var_plus}
     static ARRAY(void *) gc_main;
 {/if}
 
