@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression } from './typeguards';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -126,14 +126,6 @@ export class FuncType {
     constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
 }
 
-export const equalityOps = [
-    ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, 
-    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
-];
-const relationalOps = [
-    ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
-    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken
-];
 const logicalOps = [
     ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
 ];
@@ -141,13 +133,13 @@ const logicalOps = [
 export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     return isNumberOp(op) || isIntegerOp(op)
         || op == ts.SyntaxKind.PlusToken && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
-        || equalityOps.concat(relationalOps).indexOf(op) > -1 && (leftType !== StringVarType || rightType !== StringVarType);
+        || isRelationalOp(op) && (leftType !== StringVarType || rightType !== StringVarType);
 }
 
 export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     if (logicalOps.indexOf(op) > -1 || op === ts.SyntaxKind.EqualsToken)
         return rightType;
-    if (relationalOps.indexOf(op) > -1 || equalityOps.indexOf(op) > -1)
+    if (isRelationalOp(op) || isEqualityOp(op))
         return BooleanVarType;
     if (leftType == null || rightType == null)
         return null;
@@ -312,22 +304,28 @@ export class TypeHelper {
         addEquality(ts.isBinaryExpression, n => n.left, type(n => {
             const resultType = this.getCType(n);
             const operandType = this.getCType(n.left);
+            const rightType = this.getCType(n.right);
             if (resultType === UniversalVarType) {
                 return isCompoundAssignment(n.operatorToken) ? UniversalVarType
                     : operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
                     : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
                     : null;
-            } else
+            } else if (operandsToNumber(operandType, n.operatorToken.kind, rightType) && toNumberCanBeNaN(operandType))
+                return UniversalVarType;
+            else
                 return null;
         }));
         addEquality(ts.isBinaryExpression, n => n.right, type(n => {
             const resultType = this.getCType(n);
             const operandType = this.getCType(n.right);
+            const leftType = this.getCType(n.left);
             if (resultType === UniversalVarType) {
                 return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
                     : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
                     : null;
-            } else
+            } else if (operandsToNumber(leftType, n.operatorToken.kind, operandType) && toNumberCanBeNaN(operandType))
+                return UniversalVarType;
+            else
                 return null;
         }));
         addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
@@ -495,11 +493,11 @@ export class TypeHelper {
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
         
         this.allNodes
-            .filter(n => ts.isIdentifier(n) && n.getText() == "string1")
+            .filter(n => ts.isIdentifier(n) && n.getText() == "obj")
             .forEach(n => console.log(
                 n.getText(),
                 "(" + n.parent.getText() + "/" + ts.SyntaxKind[n.parent.kind] + ")",
-                "decl.", getDeclaration(this.typeChecker, n).getText() + "/" + ts.SyntaxKind[getDeclaration(this.typeChecker, n).kind],
+                "decl.", this.getDeclaration(n).getText() + "/" + ts.SyntaxKind[this.getDeclaration(n).kind],
                 "|", ts.SyntaxKind[n.kind],
                 "|", JSON.stringify(this.getCType(n))
             ));

@@ -2,12 +2,12 @@ import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber, equalityOps} from '../types';
+import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber} from '../types';
 import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar } from './typeconvert';
-import { isCompoundAssignment, isNumberOp, isIntegerOp } from '../typeguards';
+import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp } from '../typeguards';
 
 export interface CExpression { }
 
@@ -43,21 +43,15 @@ export class CCondition {
     {expression}
 {#elseif operator}
     {left} {operator} {right}
-{#elseif replacedWithCall}
-    {call}({left}, {right}{callAddArgs}){callCondition}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`, ts.SyntaxKind.BinaryExpression)
 export class CBinaryExpression {
-    public nodeText: string;
-    public operator: string;
-    public replacedWithCall: boolean = false;
-    public call: string;
-    public callCondition: string;
-    public callAddArgs: string = "";
     public expression: CExpression = null;
+    public operator: string;
     public left: CExpression;
     public right: CExpression;
+    public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
         if (node.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
             this.expression = AssignmentHelper.create(scope, node.left, node.right, true);
@@ -84,93 +78,23 @@ export class CBinaryExpression {
             this.expression = new CArithmeticExpression(scope, node);
             return;
         }
+        if (isRelationalOp(node.operatorToken.kind)) {
+            this.expression = new CRelationalExpression(scope, node);
+            return;
+        }
+        if (isEqualityOp(node.operatorToken.kind)) {
+            this.expression = new CEqualityExpression(scope, node);
+            return;
+        }
 
-        let leftType = scope.root.typeHelper.getCType(node.left);
         this.left = CodeTemplateFactory.createForNode(scope, node.left);
-        let rightType = scope.root.typeHelper.getCType(node.right);
         this.right = CodeTemplateFactory.createForNode(scope, node.right);
-        const operatorKind = node.operatorToken.kind;
 
-        let operatorMap: { [token: number]: string } = {};
-        let callReplaceMap: { [token: number]: [string, string] } = {};
-        
-        operatorMap[ts.SyntaxKind.AmpersandAmpersandToken] = '&&';
-        operatorMap[ts.SyntaxKind.BarBarToken] = '||';
+        if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+            this.operator = "&&";
+        else if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+            this.operator = "||";
 
-        const isEqualityOp = equalityOps.indexOf(operatorKind) > -1;
-        
-        if (leftType == BooleanVarType && operandsToNumber(leftType, operatorKind, rightType))
-            leftType = NumberVarType;
-        if (rightType == BooleanVarType && operandsToNumber(leftType, operatorKind, rightType))
-            rightType = NumberVarType;
-
-        if (leftType == NumberVarType && rightType == NumberVarType) {
-            operatorMap[ts.SyntaxKind.GreaterThanToken] = '>';
-            operatorMap[ts.SyntaxKind.GreaterThanEqualsToken] = '>=';
-            operatorMap[ts.SyntaxKind.LessThanToken] = '<';
-            operatorMap[ts.SyntaxKind.LessThanEqualsToken] = '<=';
-            operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
-            operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
-            operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
-            operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
-        }
-        else if (leftType == StringVarType && rightType == StringVarType) {
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['strcmp', ' != 0'];
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['strcmp', ' != 0'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['strcmp', ' == 0'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['strcmp', ' == 0'];
-
-            if (callReplaceMap[operatorKind])
-                scope.root.headerFlags.strings = true;
-
-        }
-        else if (leftType == NumberVarType && rightType == StringVarType
-            || leftType == StringVarType && rightType == NumberVarType) {
-
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['str_int16_t_cmp', ' != 0'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['str_int16_t_cmp', ' == 0'];
-
-            if (callReplaceMap[operatorKind]) {
-                scope.root.headerFlags.str_int16_t_cmp = true;
-                // str_int16_t_cmp expects certain order of arguments (string, number)
-                if (leftType == NumberVarType) {
-                    let tmp = this.left;
-                    this.left = this.right;
-                    this.right = tmp;
-                }
-            }
-
-        }
-        else if (isEqualityOp && (leftType == UniversalVarType || rightType == UniversalVarType)) {
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == FALSE'];
-            callReplaceMap[ts.SyntaxKind.ExclamationEqualsToken] = ['js_var_eq|, FALSE', ' == FALSE'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = ['js_var_eq|, TRUE', ' == TRUE'];
-            callReplaceMap[ts.SyntaxKind.EqualsEqualsToken] = ['js_var_eq|, FALSE', ' == TRUE'];
-            this.left = new CAsUniversalVar(scope, this.left, leftType);
-            this.right = new CAsUniversalVar(scope, this.right, rightType);
-            scope.root.headerFlags.js_var_eq = true;
-
-        } else if (leftType instanceof StructType || leftType instanceof ArrayType || leftType instanceof DictType
-                || rightType instanceof StructType || rightType instanceof ArrayType || rightType instanceof DictType) {
-
-            operatorMap[ts.SyntaxKind.ExclamationEqualsEqualsToken] = '!=';
-            operatorMap[ts.SyntaxKind.ExclamationEqualsToken] = '!=';
-            operatorMap[ts.SyntaxKind.EqualsEqualsEqualsToken] = '==';
-            operatorMap[ts.SyntaxKind.EqualsEqualsToken] = '==';
-
-            if (isEqualityOp && leftType != rightType) {
-                this.expression = "FALSE";
-                scope.root.headerFlags.bool = true;
-            }
-
-        }
-        this.operator = operatorMap[operatorKind];
-        if (callReplaceMap[operatorKind]) {
-            this.replacedWithCall = true;
-            [this.call, this.callCondition] = callReplaceMap[operatorKind];
-            if (this.call.indexOf('|') > -1)
-                [this.call, this.callAddArgs] = this.call.split('|');
-        }
         this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
     }
 }
@@ -243,6 +167,141 @@ class CArithmeticExpression {
     }
 }
 
+
+@CodeTemplate(`
+{#if operator}
+    {left} {operator} {right}
+{#elseif stringCondition}
+    strcmp({left}, {right}) {stringCondition}
+{#elseif universalCondition}
+    js_var_lessthan({left}, {right}) {universalCondition}
+{#else}
+    /* unsupported relational expression {nodeText} */
+{/if}`)
+class CRelationalExpression {
+    public operator: string = null;
+    public universalCondition: string = null;
+    public stringCondition: string = null;
+    public left: CExpression;
+    public right: CExpression;
+    public nodeText: string;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        let leftType = scope.root.typeHelper.getCType(node.left);
+        let rightType = scope.root.typeHelper.getCType(node.right);
+        
+        if (leftType === UniversalVarType || rightType === UniversalVarType) {
+            switch(node.operatorToken.kind) {
+                case ts.SyntaxKind.LessThanToken:
+                    this.left = new CAsUniversalVar(scope, node.left);
+                    this.right = new CAsUniversalVar(scope, node.right);
+                    this.universalCondition = "> 0";
+                    break;
+                case ts.SyntaxKind.LessThanEqualsToken:
+                    // notice operands are swapped
+                    this.left = new CAsUniversalVar(scope, node.right);
+                    this.right = new CAsUniversalVar(scope, node.left);
+                    this.universalCondition = "< 0";
+                    break;
+                case ts.SyntaxKind.GreaterThanToken:
+                    // notice operands are swapped
+                    this.left = new CAsUniversalVar(scope, node.right);
+                    this.right = new CAsUniversalVar(scope, node.left);
+                    this.universalCondition = "> 0";
+                    break;
+                case ts.SyntaxKind.GreaterThanEqualsToken:
+                    this.left = new CAsUniversalVar(scope, node.left);
+                    this.right = new CAsUniversalVar(scope, node.right);
+                    this.universalCondition = "< 0";
+                    break;
+            }
+            
+            scope.root.headerFlags.js_var_lessthan = true;
+        } else if (leftType === StringVarType && rightType === StringVarType) {
+            this.stringCondition = node.operatorToken.getText() + " 0";
+            this.left = CodeTemplateFactory.createForNode(scope, node.left);
+            this.right = CodeTemplateFactory.createForNode(scope, node.right);
+            scope.root.headerFlags.strings = true;
+        } else {
+            this.operator = node.operatorToken.getText();
+            this.left = new CAsNumber(scope, node.left);
+            this.right = new CAsNumber(scope, node.right);
+        }
+        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+    }
+}
+
+@CodeTemplate(`
+{#if expression}
+    {expression}
+{#elseif operator}
+    {left} {operator} {right}
+{#elseif stringCondition}
+    strcmp({left}, {right}) {stringCondition}
+{#elseif strNumCondition}
+    str_int16_t_cmp({left}, {right}) {strNumCondition}
+{#elseif universalCondition}
+    js_var_eq({left}, {right}, {strict}) {universalCondition}
+{#else}
+    /* unsupported equality expression {nodeText} */
+{/if}`)
+class CEqualityExpression {
+    public expression: string = null;
+    public operator: string = null;
+    public stringCondition: string = null;
+    public strNumCondition: string = null;
+    public universalCondition: string = null;
+    public strict: string = null;
+    public left: CExpression;
+    public right: CExpression;
+    public nodeText: string;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        const leftType = scope.root.typeHelper.getCType(node.left);
+        const rightType = scope.root.typeHelper.getCType(node.right);
+
+        const notEquals = node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken;
+        this.strict = node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ? "TRUE" : "FALSE";
+
+        this.left = CodeTemplateFactory.createForNode(scope, node.left);
+        this.right = CodeTemplateFactory.createForNode(scope, node.right);
+
+        if ((leftType == NumberVarType || leftType == BooleanVarType) && (rightType == NumberVarType || rightType == BooleanVarType)) {
+            this.operator = notEquals ? "!=" : "==";
+        }
+        else if (leftType == StringVarType && rightType == StringVarType) {
+            this.stringCondition = notEquals ? "!= 0" : "== 0";
+            scope.root.headerFlags.strings = true;
+        }
+        else if (leftType == NumberVarType && rightType == StringVarType
+            || leftType == StringVarType && rightType == NumberVarType) {
+
+            this.strNumCondition = notEquals ? "!= 0" : "== 0";
+            scope.root.headerFlags.str_int16_t_cmp = true;
+            // str_int16_t_cmp expects certain order of arguments (string, number)
+            if (leftType == NumberVarType) {
+                const tmp = this.left;
+                this.left = this.right;
+                this.right = tmp;
+            }
+
+        }
+        else if (leftType == UniversalVarType || rightType == UniversalVarType) {
+            this.universalCondition = notEquals ? "== FALSE" : "== TRUE";
+            this.left = new CAsUniversalVar(scope, this.left, leftType);
+            this.right = new CAsUniversalVar(scope, this.right, rightType);
+            scope.root.headerFlags.js_var_eq = true;
+
+        } else if (leftType instanceof StructType || leftType instanceof ArrayType || leftType instanceof DictType
+                || rightType instanceof StructType || rightType instanceof ArrayType || rightType instanceof DictType) {
+
+            if (leftType != rightType) {
+                this.expression = notEquals ? "TRUE" : "FALSE";
+                scope.root.headerFlags.bool = true;
+            } else
+                this.operator = notEquals ? "!=" : "==";
+        }
+        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+    }
+}
 
 @CodeTemplate(`
 {#statements}

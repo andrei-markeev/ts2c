@@ -62,24 +62,32 @@ export function isCompoundAssignment(n: ts.Node) {
     return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
 }
 
-
-const toNumberOps = [
-    ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
-    ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
-    ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
-    ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
-];
-const toIntegerOps = [
-    ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
-    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
-    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
-    ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
-    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
-];
-
 export function isNumberOp(op: ts.SyntaxKind) {
-    return toNumberOps.indexOf(op) > -1;
+    return [
+        ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
+        ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
+        ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
+        ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
+    ].indexOf(op) > -1;
 }
 export function isIntegerOp(op: ts.SyntaxKind) {
-    return toIntegerOps.indexOf(op) > -1;
+    return [
+        ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
+        ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+        ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+        ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
+        ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
+    ].indexOf(op) > -1;
+}
+export function isRelationalOp(op: ts.SyntaxKind) {
+    return [
+        ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
+        ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken
+    ].indexOf(op) > -1;
+}
+export function isEqualityOp(op: ts.SyntaxKind) {
+    return [
+        ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, 
+        ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    ].indexOf(op) > -1;
 }

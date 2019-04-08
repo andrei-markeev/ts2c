@@ -73,6 +73,7 @@ class HeaderFlags {
     js_var_to_bool: boolean = false;
     js_var_typeof: boolean = false;
     js_var_eq: boolean = false;
+    js_var_lessthan: boolean = false;
     js_var_plus: boolean = false;
     js_var_compute: boolean = false;
     js_var_get: boolean = false;
@@ -108,26 +109,27 @@ class HeaderFlags {
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
     || headerFlags.str_substring
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
-    || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus}
+    || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus
+    || headerFlags.js_var_lessthan}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str
-    || headerFlags.js_var_get || headerFlags.try_catch}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus
+    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch}
     #include <stdlib.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
-    || headerFlags.str_to_int16_t || headerFlags.js_var_plus || headerFlags.js_var_from_str
-    || headerFlags.js_var_get || headerFlags.try_catch}
+    || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus 
+    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf || headerFlags.parse_int16_t}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
     #include <limits.h>
 {/if}
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
     #include <ctype.h>
 {/if}
 {#if headerFlags.try_catch || headerFlags.js_var_get}
@@ -270,7 +272,7 @@ class HeaderFlags {
 
 {/if}
 
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str}
+{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}
@@ -437,7 +439,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
@@ -516,7 +518,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
     struct js_var str_to_int16_t(const char * str) {
         struct js_var v;
         const char *p = str;
@@ -548,7 +550,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_str || headerFlags.js_var_plus}
+{#if headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
     const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
@@ -597,7 +599,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
 
     struct js_var js_var_to_number(struct js_var v)
     {
@@ -735,6 +737,40 @@ class HeaderFlags {
                 return FALSE;
         } else
             return FALSE;
+    }
+{/if}
+
+{#if headerFlags.js_var_lessthan}
+    int16_t js_var_lessthan(struct js_var left, struct js_var right)
+    {
+        struct js_var left_to_number, right_to_number;
+        const char *left_as_string, *right_as_string;
+        uint8_t need_dispose_left, need_dispose_right;
+        int16_t result;
+
+        if ((left.type == JS_VAR_STRING || left.type == JS_VAR_ARRAY || left.type == JS_VAR_DICT)
+            && (right.type == JS_VAR_STRING || right.type == JS_VAR_ARRAY || right.type == JS_VAR_DICT))
+        {
+            left_as_string = js_var_to_str(left, &need_dispose_left);
+            right_as_string = js_var_to_str(right, &need_dispose_right);
+            
+            result = strcmp(left_as_string, right_as_string) < 0 ? 1 : -1;
+
+            if (need_dispose_left)
+                free((void *)left_as_string);
+            if (need_dispose_right)
+                free((void *)right_as_string);
+            return result;
+        } else {
+            left_to_number = js_var_to_number(left);
+            right_to_number = js_var_to_number(right);
+
+            if (left_to_number.type == JS_VAR_NAN || right_to_number.type == JS_VAR_NAN)
+                return 0;
+            if (left_to_number.number == 0 && right_to_number.number == 0)
+                return -1;
+            return left_to_number.number < right_to_number.number ? 1 : -1;
+        }
     }
 {/if}
 

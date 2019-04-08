@@ -71,10 +71,10 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`>>`**
     - [x] **`>>>`**
  - [ ] Relational operators
-    - [x] **`<`** _(only numbers)_
-    - [x] **`>`** _(only numbers)_
-    - [x] **`<=`** _(only numbers)_
-    - [x] **`>=`** _(only numbers)_
+    - [x] **`<`**
+    - [x] **`>`**
+    - [x] **`<=`**
+    - [x] **`>=`**
     - [ ] `instanceof`
     - [ ] `in`
  - [x] **Equality operators**
@@ -176,7 +176,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] valueOf
  - [ ] Number
-     - [x] **constructor as function**
+     - [x] **Number (as function)**
      - [ ] new
      - [ ] MAX_VALUE
      - [ ] MIN_VALUE
