@@ -175,7 +175,7 @@ export class CForStatement {
         else
             this.init = CodeTemplateFactory.createForNode(scope, node.initializer);
         this.condition = new CCondition(scope, node.condition);
-        this.increment = CodeTemplateFactory.createForNode(scope, node.incrementor);
+        this.increment = node.incrementor ? CodeTemplateFactory.createForNode(scope, node.incrementor) : "";
     }
 }
 
