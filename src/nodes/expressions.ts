@@ -6,8 +6,9 @@ import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVar
 import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
-import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar } from './typeconvert';
+import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar, CAsString } from './typeconvert';
 import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp } from '../typeguards';
+import { CArraySize } from './elementaccess';
 
 export interface CExpression { }
 
@@ -84,6 +85,10 @@ export class CBinaryExpression {
         }
         if (isEqualityOp(node.operatorToken.kind)) {
             this.expression = new CEqualityExpression(scope, node);
+            return;
+        }
+        if (node.operatorToken.kind === ts.SyntaxKind.InKeyword) {
+            this.expression = new CInExpression(scope, node);
             return;
         }
 
@@ -386,6 +391,78 @@ class CPlusExpression {
     }
 }
 
+@CodeTemplate(`
+{#statements}
+    {#if tmpVarName}
+        {tmpVarName} = {key};
+    {/if}
+{/statements}
+{#if result}
+    {result}
+{#elseif isArray && tmpVarName}
+    ({tmpVarName}.type != JS_VAR_NAN && {tmpVarName}.number >= 0 && {tmpVarName}.number < {arraySize})
+{#elseif isArray && !tmpVarName}
+    ({key} >= 0 && {key} < {arraySize})
+{#elseif isStruct}
+    dict_find_pos({propertiesVarName}, {propertiesCount}, {key}) > -1
+{#elseif isDict}
+    dict_find_pos({obj}->index->data, {obj}->index->size, {key}) > -1
+{#elseif isUniversalVar}
+    js_var_get({obj}, {key}).type != JS_VAR_UNDEFINED
+{#else}
+    /* unsupported 'in' expression {nodeText} */
+{/if}`)
+class CInExpression {
+    public isPrimitive: boolean = false;
+    public isArray: boolean = false;
+    public arraySize: CArraySize;
+    public isStruct: boolean = false;
+    public propertiesVarName: string;
+    public propertiesCount: string;
+    public isDict: boolean = false;
+    public isUniversalVar: boolean = false;
+    public result: string = null;
+    public obj: CExpression;
+    public key: CExpression;
+    public tmpVarName: string = null;
+    public nodeText: string;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        const type = scope.root.typeHelper.getCType(node.right);
+        this.obj = CodeTemplateFactory.createForNode(scope, node.right);
+        if (type instanceof ArrayType) {
+            this.isArray = true;
+            this.arraySize = new CArraySize(scope, this.obj, type);
+            this.key = new CAsNumber(scope, node.left);
+            const keyType = scope.root.typeHelper.getCType(node.left);
+            if (toNumberCanBeNaN(keyType)) {
+                this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp_key");
+                scope.variables.push(new CVariable(scope, this.tmpVarName, UniversalVarType));
+            }
+        } else {
+            this.key = new CAsString(scope, node.left);
+        }
+        if (type instanceof StructType) {
+            this.isStruct = true;
+            const propTypes = Object.keys(type.properties);
+            if (propTypes.length == 0) {
+                this.result = "FALSE";
+                scope.root.headerFlags.bool = true;
+            } else {
+                const initializer = "{ " + propTypes.sort().map(p => '"' + p + '"').join(", ") + " }";
+                this.propertiesVarName = type.structName + "_props";
+                this.propertiesCount = propTypes.length + "";
+                if (!scope.root.variables.some(v => v.name === this.propertiesVarName))
+                    scope.root.variables.push(new CVariable(scope, this.propertiesVarName, "const char *{var}[" + this.propertiesCount + "]", { initializer }));
+                scope.root.headerFlags.dict_find_pos = true;
+            }
+        }
+        this.isDict = type instanceof DictType;
+        this.isUniversalVar = type === UniversalVarType;
+
+        // TODO: length
+        // TODO: standard calls
+    }
+}
 
 @CodeTemplate(`
 {#if isCompound}

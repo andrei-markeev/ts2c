@@ -103,6 +103,80 @@ export class CAsNumber {
 
 @CodeTemplate(`
 {#statements}
+    {#if isNumber}
+        {tmpVarName} = malloc(STR_INT16_T_BUFLEN);
+        assert({tmpVarName} != NULL);
+        sprintf({tmpVarName}, "%d", {arg});
+        ARRAY_PUSH(gc_main, (void *){tmpVarName});
+    {#elseif isUniversalVar}
+        {tmpVarName} = js_var_to_str({arg}, &{needDisposeVarName});
+        if ({needDisposeVarName})
+            ARRAY_PUSH(gc_main, (void *){tmpVarName});
+    {#elseif isArray}
+        {tmpVarName} = malloc({arrayStrLen});
+        assert({tmpVarName} != NULL);
+        {tmpVarName}[0] = '\\0';
+        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
+            if ({iteratorVarName} != 0)
+                strcat({tmpVarName}, ",");
+            {arrayElementCat}
+        }
+        ARRAY_PUSH(gc_main, (void *){tmpVarName});
+    {/if}
+{/statements}
+{#if isNumberLiteral}
+    "{arg}"
+{#elseif isString}
+    {arg}
+{#elseif isBoolean}
+    ({arg} ? "true" : "false")
+{#elseif isUniversalVar || isArray || isNumber}
+    {tmpVarName}
+{#else}
+    "[object Object]"
+{/if}`)
+export class CAsString {
+    public arg: CExpression;
+    public isNumberLiteral: boolean;
+    public isNumber: boolean;
+    public isString: boolean;
+    public isBoolean: boolean;
+    public isArray: boolean;
+    public isUniversalVar: boolean;
+    public tmpVarName: string;
+    public iteratorVarName: string;
+    public arraySize: CArraySize;
+    public arrayStrLen: CAsString_Length;
+    public arrayElementCat: CAsString_Concat;
+    constructor(scope: IScope, node: ts.Node) {
+        const type = scope.root.typeHelper.getCType(node);
+        this.arg = CodeTemplateFactory.createForNode(scope, node);
+        this.isNumberLiteral = ts.isNumericLiteral(node);
+        this.isNumber = !this.isNumberLiteral && type === NumberVarType;
+        this.isString = type === StringVarType;
+        this.isBoolean = type === BooleanVarType;
+        this.isUniversalVar = type === UniversalVarType;
+        this.isArray = type instanceof ArrayType;
+        if (this.isNumber || this.isArray || this.isUniversalVar) {
+            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "buf");
+            scope.variables.push(new CVariable(scope, this.tmpVarName, "char *"));
+            scope.root.headerFlags.gc_iterator = true;
+        }
+        if (this.isNumber)
+            scope.root.headerFlags.str_int16_t_buflen = true;
+        if (type instanceof ArrayType) {
+            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
+            const arrayElement = new CSimpleElementAccess(scope, type, this.arg, this.iteratorVarName);
+            this.arrayElementCat = new CAsString_Concat(scope, node, this.tmpVarName, arrayElement, type.elementType);
+            this.arraySize = new CArraySize(scope, this.arg, type);
+            this.arrayStrLen = new CAsString_Length(scope, node, this.arg, type);
+        }
+    }
+}
+
+@CodeTemplate(`
+{#statements}
     {#if isArrayOfString}
         {lengthVarName} = {arraySize};
         for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
@@ -139,7 +213,6 @@ export class CAsString_Length {
     public isNumber: boolean;
     public isString: boolean;
     public isBoolean: boolean;
-    public isArray: boolean;
     public isArrayOfString: boolean;
     public isArrayOfNumber: boolean;
     public isArrayOfBoolean: boolean;
@@ -224,6 +297,8 @@ export class CAsString_Concat {
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;
         this.isUniversalVar = type === UniversalVarType;
+        if (this.isNumber)
+            scope.root.headerFlags.str_int16_t_cat = true;
         if (this.isUniversalVar) {
             this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
             this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);

@@ -21,7 +21,7 @@ export class MemoryManager {
     private reusedVariables: { [key: string]: string } = {};
     private originalNodes: { [key: string]: ts.Node } = {};
     private references: { [key: string]: ts.Node[] } = {};
-    private needsGCMainForJsVar: boolean = false;
+    private needsGCMain: boolean = false;
 
     constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
@@ -58,13 +58,18 @@ export class MemoryManager {
             
                         if (plusOperator) {
                             if (leftType == UniversalVarType || rightType == UniversalVarType)
-                                this.needsGCMainForJsVar = true;
+                                this.needsGCMain = true;
                             else {
                                 const isInConsoleLog = ts.isCallExpression(binExpr.parent) && binExpr.parent.expression.getText() == "console.log";
                                 if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
                                     this.scheduleNodeDisposal(binExpr, false);
                             }
                         }
+
+                        if (binExpr.operatorToken.kind === ts.SyntaxKind.InKeyword
+                                && !(rightType instanceof ArrayType)
+                                && (leftType === UniversalVarType || leftType instanceof ArrayType || leftType === NumberVarType && !ts.isNumericLiteral(binExpr.left)))
+                            this.needsGCMain = true;
                             
                     }
                     break;
@@ -91,7 +96,7 @@ export class MemoryManager {
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
             gcVars.push("gc_" + realScopeId);
         }
-        if (scopeId == "main" && this.needsGCMainForJsVar && gcVars[0] != "gc_main") {
+        if (scopeId == "main" && this.needsGCMain && gcVars[0] != "gc_main") {
             gcVars.push("gc_main");
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {

@@ -1,0 +1,20 @@
+var obj1 = { some: "thing" };
+var obj2 = { "[object Object]": "test", "1,2,3": "test2", hello: "here", "33": "44" };
+var obj3 = {};
+var arr = ["some", "thing", "1,2,3"];
+
+console.log("some" in obj1);
+console.log("hello" in obj1);
+console.log(33 in obj1);
+console.log("" in obj3);
+console.log("test" in obj3);
+console.log("some" in obj2);
+console.log("hello" in obj2);
+console.log(33 in obj2);
+console.log({ x: "something "} in obj2);
+console.log([1, 2, 3] in obj2);
+console.log("1" in arr);
+console.log("some" in arr);
+console.log(2 in arr);
+console.log(-1 in arr);
+console.log(33 in arr);

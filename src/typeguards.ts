@@ -91,3 +91,7 @@ export function isEqualityOp(op: ts.SyntaxKind) {
         ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ].indexOf(op) > -1;
 }
+
+export function isStringLiteralAsIdentifier(n: ts.Node): n is ts.StringLiteral {
+    return ts.isStringLiteral(n) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(n.text);
+}

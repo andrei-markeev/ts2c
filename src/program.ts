@@ -88,6 +88,8 @@ class HeaderFlags {
     gc_iterator: boolean = false;
     gc_iterator2: boolean = false;
     dict: boolean = false;
+    dict_find_pos: boolean = false;
+    str_int16_t_buflen: boolean = false;
     str_int16_t_cmp: boolean = false;
     str_int16_t_cat: boolean = false;
     str_pos: boolean = false;
@@ -126,7 +128,7 @@ class HeaderFlags {
 {#if headerFlags.printf || headerFlags.parse_int16_t}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
+{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
     #include <limits.h>
 {/if}
 {#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
@@ -226,13 +228,7 @@ class HeaderFlags {
     } *
 {/if}
 
-{#if headerFlags.dict || headerFlags.js_var_dict}
-    #define DICT_CREATE(dict, init_capacity) { \\
-        dict = malloc(sizeof(*dict)); \\
-        ARRAY_CREATE(dict->index, init_capacity, 0); \\
-        ARRAY_CREATE(dict->values, init_capacity, 0); \\
-    }
-
+{#if headerFlags.dict || headerFlags.js_var_dict || headerFlags.dict_find_pos}
     int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
         int16_t low = 0;
         int16_t high = keys_size - 1;
@@ -255,7 +251,15 @@ class HeaderFlags {
 
         return -1 - low;
     }
+{/if}
 
+{#if headerFlags.dict || headerFlags.js_var_dict}
+    #define DICT_CREATE(dict, init_capacity) { \\
+        dict = malloc(sizeof(*dict)); \\
+        ARRAY_CREATE(dict->index, init_capacity, 0); \\
+        ARRAY_CREATE(dict->values, init_capacity, 0); \\
+    }
+    
     int16_t tmp_dict_pos;
     #define DICT_GET(dict, prop, default) ((tmp_dict_pos = dict_find_pos(dict->index->data, dict->index->size, prop)) < 0 ? default : dict->values->data[tmp_dict_pos])
 
@@ -272,7 +276,7 @@ class HeaderFlags {
 
 {/if}
 
-{#if headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan}
+{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}

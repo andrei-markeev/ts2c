@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp } from './typeguards';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -139,7 +139,7 @@ export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: 
 export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     if (logicalOps.indexOf(op) > -1 || op === ts.SyntaxKind.EqualsToken)
         return rightType;
-    if (isRelationalOp(op) || isEqualityOp(op))
+    if (isRelationalOp(op) || isEqualityOp(op) || op === ts.SyntaxKind.InKeyword || op === ts.SyntaxKind.InstanceOfKeyword)
         return BooleanVarType;
     if (leftType == null || rightType == null)
         return null;
@@ -339,13 +339,18 @@ export class TypeHelper {
         // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
         addEquality(ts.isPropertyAssignment, n => n.parent, type(n => {
-            const propName = (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && n.name.text;
-            return struct(propName, n.pos, this.getCType(n) || PointerVarType)
+            const propName = (ts.isIdentifier(n.name) || isStringLiteralAsIdentifier(n.name)) && n.name.text;
+            if (propName)
+                return struct(propName, n.pos, this.getCType(n) || PointerVarType)
+            else
+                return new DictType(this.getCType(n));
         }));
         addEquality(ts.isPropertyAssignment, n => n, type(n => {
-            const propName = (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && n.name.text;
+            const propName = (ts.isIdentifier(n.name) || isStringLiteralAsIdentifier(n.name)) && n.name.text;
             const type = this.getCType(n.parent);
-            return type instanceof StructType ? type.properties[propName] : null;
+            return type instanceof StructType ? type.properties[propName]
+                : type instanceof DictType ? type.elementType
+                : null;
         }));
         addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
@@ -361,7 +366,7 @@ export class TypeHelper {
         addEquality(isFieldElementAccess, n => n.expression, type(n => {
             const type = this.getCType(n.argumentExpression);
             const elementType = this.getCType(n) || PointerVarType;
-            return ts.isStringLiteral(n.argumentExpression) ? struct(n.argumentExpression.getText().slice(1, -1), n.pos, elementType)
+            return isStringLiteralAsIdentifier(n.argumentExpression) ? struct(n.argumentExpression.text, n.pos, elementType)
                 : ts.isNumericLiteral(n.argumentExpression) ? new ArrayType(elementType, 0, false)
                 : type == NumberVarType ? new ArrayType(elementType, 0, false)
                 : type == StringVarType ? new DictType(elementType)
