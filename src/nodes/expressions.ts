@@ -9,6 +9,7 @@ import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar, CAsString } from './typeconvert';
 import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp } from '../typeguards';
 import { CArraySize } from './elementaccess';
+import { StandardCallHelper } from '../standard';
 
 export interface CExpression { }
 
@@ -413,7 +414,6 @@ class CPlusExpression {
     /* unsupported 'in' expression {nodeText} */
 {/if}`)
 class CInExpression {
-    public isPrimitive: boolean = false;
     public isArray: boolean = false;
     public arraySize: CArraySize;
     public isStruct: boolean = false;
@@ -459,8 +459,24 @@ class CInExpression {
         this.isDict = type instanceof DictType;
         this.isUniversalVar = type === UniversalVarType;
 
-        // TODO: length
-        // TODO: standard calls
+        if (ts.isStringLiteral(node.left)) {
+            const ident = ts.createIdentifier(node.left.text);
+            const propAccess = ts.createPropertyAccess(node.right, ident);
+            const standardCall = ts.createCall(propAccess,[],[]);
+            ident.parent = propAccess;
+            ident.getText = () => ident.text;
+            propAccess.parent = standardCall;
+            propAccess.getText = () => "(" + node.right.getText() + ")." + ident.text;
+            standardCall.parent = node.parent;
+            standardCall.getText = () => propAccess.getText() + "()";
+            if (StandardCallHelper.isStandardCall(scope.root.typeHelper, standardCall))
+                this.result = "TRUE";
+        }
+        
+        if (this.isArray && ts.isStringLiteral(node.left) && node.left.text === "length")
+            this.result = "TRUE";
+     
+        this.nodeText = node.getText();
     }
 }
 

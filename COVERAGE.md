@@ -76,7 +76,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`<=`**
     - [x] **`>=`**
     - [ ] `instanceof`
-    - [x] **`in`** _(partial: standard methods and properties aren't detected)_
+    - [x] **`in`**
  - [x] **Equality operators**
     - [x] **`==`**
     - [x] **`!=`**
