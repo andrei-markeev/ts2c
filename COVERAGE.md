@@ -87,8 +87,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **`|`**
     - [x] **`^`**
  - [x] **Binary logical operators**
-    - [x] **`&&`** _(partial: results are boolean)_
-    - [x] **`||`** _(partial: results are boolean)_
+    - [x] **`&&`**
+    - [x] **`||`**
  - [x] **Conditional operator `?` `:`**
  - [x] **Assignment operators**
     - [x] **Simple assignment `=`**

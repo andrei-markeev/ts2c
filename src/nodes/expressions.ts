@@ -7,7 +7,7 @@ import {CVariable} from './variable';
 import {CRegexAsString} from './regexfunc';
 import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar, CAsString } from './typeconvert';
-import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp } from '../typeguards';
+import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp, isLogicOp, isInBoolContext, isSimpleNode } from '../typeguards';
 import { CArraySize } from './elementaccess';
 import { StandardCallHelper } from '../standard';
 
@@ -43,8 +43,6 @@ export class CCondition {
 @CodeTemplate(`
 {#if expression}
     {expression}
-{#elseif operator}
-    {left} {operator} {right}
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`, ts.SyntaxKind.BinaryExpression)
@@ -92,17 +90,84 @@ export class CBinaryExpression {
             this.expression = new CInExpression(scope, node);
             return;
         }
-
-        this.left = CodeTemplateFactory.createForNode(scope, node.left);
-        this.right = CodeTemplateFactory.createForNode(scope, node.right);
-
-        if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
-            this.operator = "&&";
-        else if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken)
-            this.operator = "||";
+        if (isLogicOp(node.operatorToken.kind)) {
+            this.expression = new CLogicExpession(scope, node);
+            return;
+        }
 
         this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
     }
+}
+
+@CodeTemplate(`
+{#statements}
+    {#if leftVarName}
+        {leftVarName} = {left};
+    {/if}
+    {#if rightVarName}
+        {rightVarName} = {right};
+    {/if}
+{/statements}
+{#if isBoolContext}
+    {left} {operator} {right}
+{#else}
+    {condition} ? {whenTrue} : {whenFalse}
+{/if}`)
+class CLogicExpession {
+    public isBoolContext: boolean;
+    public operator: string;
+    public left: CExpression;
+    public right: CExpression;
+    public leftVarName: string = "";
+    public rightVarName: string = "";
+    public condition: CExpression;
+    public whenTrue: CExpression;
+    public whenFalse: CExpression;
+    constructor(scope: IScope, node: ts.BinaryExpression) {
+        const type = scope.root.typeHelper.getCType(node);
+        
+        if (type === UniversalVarType) {
+            this.left = new CAsUniversalVar(scope, node.left);
+            this.right = new CAsUniversalVar(scope, node.right);
+        } else {
+            this.left = CodeTemplateFactory.createForNode(scope, node.left);
+            this.right = CodeTemplateFactory.createForNode(scope, node.right);
+        }
+
+        this.isBoolContext = isInBoolContext(node) && type !== UniversalVarType;
+        const isOr = node.operatorToken.kind === ts.SyntaxKind.BarBarToken;
+
+        if (this.isBoolContext) {
+            this.operator = isOr ? "||" : "&&";
+        } else {
+            if (!isSimpleNode(node.left))
+            {
+                this.leftVarName = scope.root.symbolsHelper.addTemp(node, "tmp1");
+                scope.variables.push(new CVariable(scope, this.leftVarName, type));
+            }
+            if (!isSimpleNode(node.right))
+            {
+                this.rightVarName = scope.root.symbolsHelper.addTemp(node, "tmp2");
+                scope.variables.push(new CVariable(scope, this.rightVarName, type));
+            }
+
+            if (this.leftVarName && type === UniversalVarType) {
+                this.condition = "js_var_to_bool(" + this.leftVarName + ")";
+                scope.root.headerFlags.js_var_to_bool = true;
+            }
+            else
+                this.condition = this.leftVarName || new CCondition(scope, node.left);
+
+            if (isOr) {
+                this.whenTrue = this.leftVarName || this.left;
+                this.whenFalse = this.rightVarName || this.right;
+            } else {
+                this.whenTrue = this.rightVarName || this.right;
+                this.whenFalse = this.leftVarName || this.left;
+            }
+        }
+    }
+
 }
 
 @CodeTemplate(`
@@ -553,7 +618,7 @@ class CUnaryExpression {
                     scope.root.headerFlags.js_var_compute = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
                 } else {
-                    this.before = "++";
+                    this.before = "--";
                     this.operand = new CAsNumber(scope, node.operand);
                 }
             }

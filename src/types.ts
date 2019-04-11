@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier } from './typeguards';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier, isLogicOp } from './typeguards';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -126,23 +126,21 @@ export class FuncType {
     constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
 }
 
-const logicalOps = [
-    ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
-];
-
 export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     return isNumberOp(op) || isIntegerOp(op)
         || op == ts.SyntaxKind.PlusToken && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
         || isRelationalOp(op) && (leftType !== StringVarType || rightType !== StringVarType);
 }
 
-export function getBinExprResultType(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    if (logicalOps.indexOf(op) > -1 || op === ts.SyntaxKind.EqualsToken)
+export function getBinExprResultType(mergeTypes: TypeHelper["mergeTypes"], leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+    if (op === ts.SyntaxKind.EqualsToken)
         return rightType;
     if (isRelationalOp(op) || isEqualityOp(op) || op === ts.SyntaxKind.InKeyword || op === ts.SyntaxKind.InstanceOfKeyword)
         return BooleanVarType;
     if (leftType == null || rightType == null)
         return null;
+    if (isLogicOp(op))
+        return mergeTypes(leftType, rightType).type;
     if (isNumberOp(op) || isIntegerOp(op))
         return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
     if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
@@ -300,7 +298,7 @@ export class TypeHelper {
             else
                 return null;
         }));
-        addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
+        addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.mergeTypes.bind(this), this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
         addEquality(ts.isBinaryExpression, n => n.left, type(n => {
             const resultType = this.getCType(n);
             const operandType = this.getCType(n.left);
@@ -319,7 +317,7 @@ export class TypeHelper {
             const resultType = this.getCType(n);
             const operandType = this.getCType(n.right);
             const leftType = this.getCType(n.left);
-            if (resultType === UniversalVarType) {
+            if (resultType === UniversalVarType && !isLogicOp(n.operatorToken.kind)) {
                 return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
                     : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
                     : null;

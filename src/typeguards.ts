@@ -91,7 +91,26 @@ export function isEqualityOp(op: ts.SyntaxKind) {
         ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ].indexOf(op) > -1;
 }
+export function isLogicOp(op: ts.SyntaxKind) {
+    return [
+        ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
+    ].indexOf(op) > -1;
+}
 
 export function isStringLiteralAsIdentifier(n: ts.Node): n is ts.StringLiteral {
     return ts.isStringLiteral(n) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(n.text);
+}
+
+export function isInBoolContext(n: ts.Node) {
+    while (ts.isBinaryExpression(n.parent) && isLogicOp(n.parent.operatorToken.kind))
+        n = n.parent;
+    return ts.isPrefixUnaryExpression(n.parent) && n.parent.operator === ts.SyntaxKind.ExclamationToken
+        || ts.isIfStatement(n.parent) && n.parent.expression === n
+        || ts.isWhileStatement(n.parent) && n.parent.expression === n
+        || ts.isDoStatement(n.parent) && n.parent.expression === n
+        || ts.isForStatement(n.parent) && n.parent.condition === n;
+}
+
+export function isSimpleNode(n: ts.Node) {
+    return ts.isStringLiteral(n) || ts.isNumericLiteral(n) || ts.isIdentifier(n);
 }
