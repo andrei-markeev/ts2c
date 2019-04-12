@@ -3,6 +3,7 @@ import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarTy
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
+import { isPlusOp } from './typeguards';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -54,13 +55,14 @@ export class MemoryManager {
                         const leftType = this.typeHelper.getCType(binExpr.left);
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
-                        const plusOperator = binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken || binExpr.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken;
-            
-                        if (plusOperator) {
+                        if (isPlusOp(binExpr.operatorToken.kind)) {
                             if (leftType == UniversalVarType || rightType == UniversalVarType)
                                 this.needsGCMain = true;
                             else {
-                                const isInConsoleLog = ts.isCallExpression(binExpr.parent) && binExpr.parent.expression.getText() == "console.log";
+                                let n: ts.Node = binExpr;
+                                while (ts.isBinaryExpression(n.parent) && isPlusOp(n.parent.operatorToken.kind))
+                                    n = n.parent;
+                                const isInConsoleLog = ts.isCallExpression(n.parent) && n.parent.expression.getText() == "console.log";
                                 if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
                                     this.scheduleNodeDisposal(binExpr, false);
                             }

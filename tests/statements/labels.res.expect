@@ -1,0 +1,37 @@
+---1
+continue i = 0, j = 0
+continue i = 0, j = 1
+continue i = 0, j = 2
+continue i = 1, j = 0
+continue i = 2, j = 0
+continue i = 2, j = 1
+continue i = 2, j = 2
+break i = 0, j = 0
+break i = 0, j = 1
+break i = 0, j = 2
+break i = 1, j = 0
+for of 0
+for of 0
+for of 1
+for of 2
+for of 3
+for of 0
+for of 1
+for of 0
+for of 1
+for of 2
+for of 3
+while 0
+while 1
+while 0
+while 1
+while 0
+while 1
+do while 0
+do while 1
+do while 0
+do while 1
+do while 0
+do while 1
+for in egg
+for in ham

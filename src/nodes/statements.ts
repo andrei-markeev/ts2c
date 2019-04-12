@@ -4,16 +4,65 @@ import {CProgram, IScope} from '../program';
 import {ArrayType, NumberVarType, StringVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression, CCondition} from './expressions';
-import {CElementAccess} from './elementaccess';
+import {CElementAccess, CArraySize, CSimpleElementAccess} from './elementaccess';
 import {AssignmentHelper} from './assignment';
 
-@CodeTemplate(`break;\n`, ts.SyntaxKind.BreakStatement)
-export class CBreakStatement {
-    constructor(scope: IScope, node: ts.BreakStatement) { }
+@CodeTemplate(`{statement}{breakLabel}`, ts.SyntaxKind.LabeledStatement)
+export class CLabeledStatement {
+    public statement: CExpression;
+    public breakLabel: string;
+    constructor(scope: IScope, node: ts.LabeledStatement) {
+        let i = 0;
+        const nodes = [node.statement];
+        while (i < nodes.length)
+            nodes.push.apply(nodes, nodes[i++].getChildren());
+        this.breakLabel = nodes.some(n => ts.isBreakStatement(n) && n.label.text === node.label.text)
+            ? " " + node.label.text + "_break:"
+            : "";
+
+        const hasContinue = nodes.some(n => ts.isContinueStatement(n) && n.label.text === node.label.text);
+        if (hasContinue) {
+            if (ts.isForStatement(node.statement))
+                this.statement = new CForStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+            else if (ts.isForOfStatement(node.statement))
+                this.statement = new CForOfStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+            else if (ts.isWhileStatement(node.statement))
+                this.statement = new CWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+            else if (ts.isDoStatement(node.statement))
+                this.statement = new CDoWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+            else if (ts.isForInStatement(node.statement))
+                this.statement = new CForInStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+            else
+                this.statement = "/* Unsupported labeled statement " + node.getText() + " */";
+        } else
+            this.statement = CodeTemplateFactory.createForNode(scope, node.statement);
+    }
 }
-@CodeTemplate(`continue;\n`, ts.SyntaxKind.ContinueStatement)
+@CodeTemplate(`
+{#if label}
+    goto {label};
+{#else}
+    break;
+{/if}
+`, ts.SyntaxKind.BreakStatement)
+export class CBreakStatement {
+    public label: string;
+    constructor(scope: IScope, node: ts.BreakStatement) {
+        this.label = node.label && node.label.text + "_break";
+    }
+}
+@CodeTemplate(`
+{#if label}
+    goto {label};
+{#else}
+    continue;
+{/if}
+`, ts.SyntaxKind.ContinueStatement)
 export class CContinueStatement {
-    constructor(scope: IScope, node: ts.BreakStatement) { }
+    public label: string;
+    constructor(scope: IScope, node: ts.BreakStatement) {
+        this.label = node.label && node.label.text + "_continue";
+    }
 }
 @CodeTemplate(`;\n`, ts.SyntaxKind.EmptyStatement)
 export class CEmptyStatement {
@@ -129,26 +178,50 @@ class CSwitchCaseCompare {
 
 
 @CodeTemplate(`
-while ({condition})
-{block}`, ts.SyntaxKind.WhileStatement)
+{#if continueLabel}
+    while({condition}) {
+        {variables {    }=> {this};\n}
+        {statements {    }=> {this}}
+        {continueLabel}: ;
+    }
+{#else}
+    while ({condition})
+    {block}
+{/if}`, ts.SyntaxKind.WhileStatement)
 export class CWhileStatement {
     public condition: CExpression;
     public block: CBlock;
-    constructor(scope: IScope, node: ts.WhileStatement) {
+    public variables: CVariable[] = [];
+    public statements: any[] = [];
+    constructor(scope: IScope, node: ts.WhileStatement, public continueLabel?: string) {
         this.block = new CBlock(scope, node.statement);
+        this.variables = this.block.variables;
+        this.statements = this.block.statements;
         this.condition = new CCondition(scope, node.expression);
     }
 }
 
 @CodeTemplate(`
-do
-{block}
-while ({condition});`, ts.SyntaxKind.DoStatement)
+{#if continueLabel}
+    do {
+        {variables {    }=> {this};\n}
+        {statements {    }=> {this}}
+        {continueLabel}: ;
+    } while ({condition});
+{#else}
+    do
+    {block}
+    while ({condition});
+{/if}`, ts.SyntaxKind.DoStatement)
 export class CDoWhileStatement {
     public condition: CExpression;
     public block: CBlock;
-    constructor(scope: IScope, node: ts.WhileStatement) {
+    public variables: CVariable[] = [];
+    public statements: any[] = [];
+    constructor(scope: IScope, node: ts.DoStatement, public continueLabel?: string) {
         this.block = new CBlock(scope, node.statement);
+        this.variables = this.block.variables;
+        this.statements = this.block.statements;
         this.condition = new CCondition(scope, node.expression);
     }
 }
@@ -157,16 +230,30 @@ export class CDoWhileStatement {
 {#if varDecl}
     {varDecl}
 {/if}
-for ({init};{condition};{increment})
-{block}`, ts.SyntaxKind.ForStatement)
+{#if continueLabel}
+    {init};
+    while({condition}) {
+        {variables {    }=> {this};\n}
+        {statements {    }=> {this}}
+        {continueLabel}:
+        {increment};
+    }
+{#else}
+    for ({init};{condition};{increment})
+    {block}
+{/if}`, ts.SyntaxKind.ForStatement)
 export class CForStatement {
     public init: CExpression;
     public condition: CExpression;
     public increment: CExpression;
     public block: CBlock;
+    public variables: CVariable[] = [];
+    public statements: any[] = [];
     public varDecl: CVariableDeclaration = null;
-    constructor(scope: IScope, node: ts.ForStatement) {
+    constructor(scope: IScope, node: ts.ForStatement, public continueLabel?: string) {
         this.block = new CBlock(scope, node.statement);
+        this.variables = this.block.variables;
+        this.statements = this.block.statements;
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declList = <ts.VariableDeclarationList>node.initializer;
             this.varDecl = new CVariableDeclaration(scope, declList.declarations[0]);
@@ -180,18 +267,20 @@ export class CForStatement {
 }
 
 @CodeTemplate(`
-{#if isDynamicArray}
-    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayAccess}->size; {iteratorVarName}++)
-    {
+{#if continueLabel}
+    {iteratorVarName} = 0;
+    while ({iteratorVarName} < {arraySize}) {
         {variables {    }=> {this};\n}
-        {init} = {cast}{arrayAccess}->data[{iteratorVarName}];
-        {statements {    }=> {this}}
+        {init} = {cast}{elementAccess};
+    {statements {    }=> {this}}
+        {continueLabel}:
+        {iteratorVarName}++;
     }
 {#else}
-    for ({iteratorVarName} = 0; {iteratorVarName} < {arrayCapacity}; {iteratorVarName}++)
+    for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)
     {
         {variables {    }=> {this};\n}
-        {init} = {cast}{arrayAccess}[{iteratorVarName}];
+        {init} = {cast}{elementAccess};
         {statements {    }=> {this}}
     }
 {/if}
@@ -204,33 +293,30 @@ export class CForOfStatement implements IScope {
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
-    public isDynamicArray: boolean;
-    public arrayAccess: CElementAccess;
-    public arrayCapacity: string;
+    public elementAccess: CSimpleElementAccess;
+    public arraySize: CArraySize;
     public cast: string = "";
-    constructor(scope: IScope, node: ts.ForOfStatement) {
+    constructor(scope: IScope, node: ts.ForOfStatement, public continueLabel?: string) {
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
-        this.arrayAccess = new CElementAccess(scope, node.expression);
-        let arrayVarType = scope.root.typeHelper.getCType(node.expression);
-        if (arrayVarType && arrayVarType instanceof ArrayType) {
-            this.isDynamicArray = arrayVarType.isDynamicArray;
-            this.arrayCapacity = arrayVarType.capacity + "";
-            let elemType = arrayVarType.elementType;
-            if (elemType instanceof ArrayType && elemType.isDynamicArray)
-                this.cast = "(void *)";
-        }
+        const arrType = <ArrayType>scope.root.typeHelper.getCType(node.expression);
+        const varAccess = CodeTemplateFactory.createForNode(scope, node.expression);
+        this.elementAccess = new CSimpleElementAccess(scope, arrType, varAccess, this.iteratorVarName);
+        this.arraySize = new CArraySize(scope, varAccess, arrType);
+        if (arrType && arrType instanceof ArrayType && arrType.elementType instanceof ArrayType && arrType.elementType.isDynamicArray)
+            this.cast = "(void *)";
+
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             let declInit = (<ts.VariableDeclarationList>node.initializer).declarations[0];
             scope.variables.push(new CVariable(scope, declInit.name.getText(), declInit.name));
             this.init = declInit.name.getText();
         }
-        else {
+        else
             this.init = new CElementAccess(scope, node.initializer);
-        }
+
         this.statements.push(CodeTemplateFactory.createForNode(this, node.statement));
         scope.variables = scope.variables.concat(this.variables);
         this.variables = [];
@@ -238,12 +324,23 @@ export class CForOfStatement implements IScope {
 }
 
 @CodeTemplate(`
-for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)
-{
-    {variables {    }=> {this};\n}
-    {init} = {varAccess}->index->data[{iteratorVarName}];
-    {statements {    }=> {this}}
-}
+{#if continueLabel}
+    {iteratorVarName} = 0;
+    while ({iteratorVarName} < {varAccess}->index->size) {
+        {variables {    }=> {this};\n}
+        {init} = {varAccess}->index->data[{iteratorVarName}];
+        {statements {    }=> {this}}
+        {continueLabel}:
+        {iteratorVarName}++;
+    }
+{#else}
+    for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)
+    {
+        {variables {    }=> {this};\n}
+        {init} = {varAccess}->index->data[{iteratorVarName}];
+        {statements {    }=> {this}}
+    }
+{/if}
 `, ts.SyntaxKind.ForInStatement)
 export class CForInStatement implements IScope {
     public variables: CVariable[] = [];
@@ -254,7 +351,7 @@ export class CForInStatement implements IScope {
     public iteratorVarName: string;
     public varAccess: CElementAccess;
     public init: CElementAccess | string;
-    constructor(scope: IScope, node: ts.ForInStatement) {
+    constructor(scope: IScope, node: ts.ForInStatement, public continueLabel?: string) {
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;

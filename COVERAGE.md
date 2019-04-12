@@ -19,8 +19,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **`break`**
  - [x] **`return`**
  - [x] **`switch`**
- - [ ] ~~`with`~~  _(will not be implemented in v1)_
- - [ ] ~~Labelled statements~~  _(will not be implemented in v1)_
+ - [ ] `with`
+ - [x] **Labelled statements**
  - [x] **`throw`**
  - [x] **`try`** _(maximum 10 directly or indirectly nested try-catch blocks)_
  - [x] **Function definition `function` ident `() {` ... `}`** _(only in global scope)_

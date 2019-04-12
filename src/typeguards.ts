@@ -96,6 +96,9 @@ export function isLogicOp(op: ts.SyntaxKind) {
         ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
     ].indexOf(op) > -1;
 }
+export function isPlusOp(op: ts.SyntaxKind) {
+    return op == ts.SyntaxKind.PlusToken || op == ts.SyntaxKind.PlusEqualsToken;
+}
 
 export function isStringLiteralAsIdentifier(n: ts.Node): n is ts.StringLiteral {
     return ts.isStringLiteral(n) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(n.text);

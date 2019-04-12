@@ -439,6 +439,7 @@ export class TypeHelper {
             return type instanceof ArrayType ? type.elementType : null
         }));
         addEquality(ts.isForInStatement, n => n.initializer, type(StringVarType));
+        addEquality(ts.isForInStatement, n => n.expression, type(n => new DictType(PointerVarType)));
         addEquality(ts.isReturnStatement, n => n.expression, type(n => FuncType.getReturnType(this, findParentFunction(n))));
         addEquality(ts.isReturnStatement, n => findParentFunction(n), type(n => this.getCType(n.expression) ? new FuncType(this.getCType(n.expression)) : null));
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
