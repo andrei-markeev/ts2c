@@ -29,12 +29,12 @@ export class CCallExpression {
         if (funcType && funcType.instanceType != null)
             return;
 
-        this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
 
         if (this.standardCall)
             return;
 
+        this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
     }
 }
