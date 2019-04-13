@@ -122,7 +122,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] encodeURI
      - [ ] encodeURIComponent
  - [ ] Object
-     - [ ] new
+     - [x] **new** _(partial: without argument)_
      - [ ] toString
      - [ ] toLocaleString
      - [ ] hasOwnProperty

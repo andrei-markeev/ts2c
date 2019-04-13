@@ -84,7 +84,7 @@ class CArrayLiteralExpression {
 {#else}
     {expression}
 {/if}`, ts.SyntaxKind.ObjectLiteralExpression)
-class CObjectLiteralExpression {
+export class CObjectLiteralExpression {
     public expression: string = '';
     public isStruct: boolean;
     public isDict: boolean;

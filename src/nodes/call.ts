@@ -6,6 +6,8 @@ import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType } from '../types';
 import { CAsUniversalVar } from './typeconvert';
+import { isNullOrUndefined } from '../typeguards';
+import { CObjectLiteralExpression } from './literals';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -43,6 +45,8 @@ export class CCallExpression {
 {/statements}
 {#if funcName}
     {funcName}({arguments {, }=> {this}})
+{#elseif expression}
+    {expression}
 {#else}
     /* Unsupported 'new' expression {nodeText} */
 {/if}`, ts.SyntaxKind.NewExpression)
@@ -50,6 +54,7 @@ export class CNew {
     public funcName: CExpression = "";
     public arguments: CExpression[];
     public allocator: CVariableAllocation | string = ""; 
+    public expression: CExpression = "";
     public nodeText: string;
     constructor(scope: IScope, node: ts.NewExpression) {
         const decl = scope.root.typeHelper.getDeclaration(node.expression);
@@ -64,6 +69,12 @@ export class CNew {
                 scope.variables.push(new CVariable(scope, varName, funcType.instanceType))
             this.arguments.unshift(varName);
             this.allocator = new CVariableAllocation(scope, varName, funcType.instanceType, node);
+        } else if (ts.isIdentifier(node.expression) && node.expression.text === "Object") {
+            if (node.arguments.length === 0 || isNullOrUndefined(node.arguments[0])) {
+                const objLiteral: any = node;
+                objLiteral.properties = [];
+                this.expression = new CObjectLiteralExpression(scope, objLiteral);
+            }
         }
 
         this.nodeText = node.getText();

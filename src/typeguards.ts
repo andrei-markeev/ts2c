@@ -52,6 +52,9 @@ export const SyntaxKind_NaNKeyword = ts.SyntaxKind.Count + 1;
 export function isNullOrUndefinedOrNaN(n): n is ts.Node {
     return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword || n.kind === SyntaxKind_NaNKeyword;
 }
+export function isNullOrUndefined(n): n is ts.Node {
+    return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword;
+}
 export function isDeleteExpression(n): n is DeleteExpression {
     return ts.isDeleteExpression(n) && (ts.isPropertyAccessExpression(n.expression) || ts.isElementAccessExpression(n.expression));
 }

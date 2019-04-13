@@ -405,7 +405,10 @@ export class TypeHelper {
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
 
-        addEquality(ts.isNewExpression, n => n, type(n => FuncType.getInstanceType(this, n.expression)));
+        addEquality(ts.isNewExpression, n => n, type(n => 
+            ts.isIdentifier(n.expression) && n.expression.text === "Object" ? new StructType({})
+            : FuncType.getInstanceType(this, n.expression)
+        ));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isNewExpression, n => n.arguments[i], n => {
                 const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
