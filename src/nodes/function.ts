@@ -11,10 +11,11 @@ export class CFunctionPrototype {
     public name: string;
     public parameters: CVariable[] = [];
     constructor(scope: IScope, node: ts.FunctionDeclaration) {
-        this.returnType = scope.root.typeHelper.getTypeString(node);
+        const type = scope.root.typeHelper.getCType(node) as FuncType;
+        this.returnType = scope.root.typeHelper.getTypeString(type.returnType);
 
         this.name = node.name.getText();
-        this.parameters = node.parameters.map(p => new CVariable(scope, p.name.getText(), p.name, { removeStorageSpecifier: true }));
+        this.parameters = node.parameters.map((p, i) => new CVariable(scope, p.name.getText(), type.parameterTypes[i], { removeStorageSpecifier: true }));
     }
 }
 
@@ -46,8 +47,8 @@ export class CFunction implements IScope {
         const funcType = root.typeHelper.getCType(node) as FuncType;
         this.funcDecl = new CVariable(root, this.name, funcType.returnType, { removeStorageSpecifier: true });
 
-        this.parameters = node.parameters.map(p => {
-            return new CVariable(this, (<ts.Identifier>p.name).text, p.name, { removeStorageSpecifier: true });
+        this.parameters = node.parameters.map((p, i) => {
+            return new CVariable(this, (<ts.Identifier>p.name).text, funcType.parameterTypes[i], { removeStorageSpecifier: true });
         });
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));

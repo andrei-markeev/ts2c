@@ -29,7 +29,7 @@ export class CCallExpression {
         if (funcType && funcType.instanceType != null)
             return;
 
-        this.funcName = call.expression.getText();
+        this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
 
         if (this.standardCall)

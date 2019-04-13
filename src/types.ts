@@ -115,7 +115,8 @@ export class FuncType {
         return type && type instanceof FuncType ? type.instanceType : null
     }
     public getText() {
-        return typeof(this.returnType) === "string" ? this.returnType : this.returnType.getText();
+        const toText = (t: CType) => typeof(t) === "string" ? t : t.getText();
+        return toText(this.returnType) + " (*{var})(" + this.parameterTypes.map(toText).join(', ') + ")"
     }
     public getBodyText() {
         const paramTypes = [].concat(this.parameterTypes);
@@ -346,6 +347,7 @@ export class TypeHelper {
                 : type instanceof DictType ? type.elementType
                 : null;
         }));
+        addEquality(ts.isPropertyAccessExpression, n => n, n => n.name);
         addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
             const type = this.getCType(n.expression);
@@ -391,13 +393,8 @@ export class TypeHelper {
 
         // calls
         addEquality(ts.isCallExpression, n => n.expression, n => this.getDeclaration(n));
+        addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n), n.arguments.map(arg => this.getCType(arg))) : null));
         addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this, n.expression)));
-        addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n)) : null));
-        for (let i = 0; i < 10; i++)
-            addEquality(ts.isCallExpression, n => {
-                const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
-                return func ? func.parameters[i] : null
-            }, type(n => this.getCType(n.arguments[i])));
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
 
@@ -407,8 +404,8 @@ export class TypeHelper {
         ));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isNewExpression, n => n.arguments[i], n => {
-                const func = <ts.FunctionDeclaration>this.getDeclaration(n.expression);
-                return func ? func.parameters[i] : null
+                const func = this.getDeclaration(n.expression);
+                return func && ts.isFunctionDeclaration(func) ? func.parameters[i] : null
             });
         addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType(VoidType, [], this.getCType(n))));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this, findParentFunction(n))));
@@ -427,6 +424,11 @@ export class TypeHelper {
         // statements
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
         addEquality(ts.isFunctionDeclaration, n => n, type(n => new FuncType(VoidType, n.parameters.map(p => this.getCType(p)))));
+        for (let i = 0; i < 10; i++)
+            addEquality(ts.isFunctionDeclaration, n => n.parameters[i], type(n => {
+                const type = this.getCType(n);
+                return type instanceof FuncType ? type.parameterTypes[i] : null
+            }));
         addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.getCType(n.initializer.declarations[0]) || PointerVarType, 0, false)));
         addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
             const type = this.getCType(n.expression);
@@ -495,8 +497,9 @@ export class TypeHelper {
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
         
+        */
         this.allNodes
-            .filter(n => ts.isIdentifier(n) && n.getText() == "obj")
+            .filter(n => ts.isIdentifier(n) && n.getText() == "echo")
             .forEach(n => console.log(
                 n.getText(),
                 "(" + n.parent.getText() + "/" + ts.SyntaxKind[n.parent.kind] + ")",
@@ -504,7 +507,6 @@ export class TypeHelper {
                 "|", ts.SyntaxKind[n.kind],
                 "|", JSON.stringify(this.getCType(n))
             ));
-        */
 
     }
 
