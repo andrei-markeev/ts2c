@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
+import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CProgram, IScope} from '../program';
 import {ArrayType, NumberVarType, StringVarType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
@@ -12,10 +12,7 @@ export class CLabeledStatement {
     public statement: CExpression;
     public breakLabel: string;
     constructor(scope: IScope, node: ts.LabeledStatement) {
-        let i = 0;
-        const nodes = [node.statement];
-        while (i < nodes.length)
-            nodes.push.apply(nodes, nodes[i++].getChildren());
+        const nodes = getAllNodesUnder(node);
         this.breakLabel = nodes.some(n => ts.isBreakStatement(n) && n.label.text === node.label.text)
             ? " " + node.label.text + "_break:"
             : "";

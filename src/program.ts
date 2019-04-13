@@ -3,7 +3,6 @@ import {TypeHelper} from './types';
 import {SymbolsHelper} from './symbols';
 import {MemoryManager} from './memory';
 import {CodeTemplate, CodeTemplateFactory} from './template';
-import {CFunction, CFunctionPrototype} from './nodes/function';
 import {CVariable, CVariableDestructors} from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
@@ -11,6 +10,7 @@ import './nodes/statements';
 import './nodes/expressions';
 import './nodes/call';
 import './nodes/literals';
+import './nodes/function';
 
 import './standard/global/parseInt';
 
@@ -43,6 +43,7 @@ import './standard/number/number';
 
 import './standard/console/log';
 import { SyntaxKind_NaNKeyword } from './typeguards';
+import { CFunctionPrototype } from './nodes/function';
 
 export interface IScope {
     parent: IScope;
@@ -1010,14 +1011,9 @@ export class CProgram implements IScope {
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
-        for (let source of sources) {
-            for (let s of source.statements) {
-                if (s.kind == ts.SyntaxKind.FunctionDeclaration)
-                    this.functions.push(new CFunction(this, <any>s));
-                else
-                    this.statements.push(CodeTemplateFactory.createForNode(this, s));
-            }
-        }
+        for (let source of sources)
+            for (let s of source.statements)
+                this.statements.push(CodeTemplateFactory.createForNode(this, s));
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
         this.headerFlags.array_string_t = this.headerFlags.array_string_t || structs.filter(s => s.name == "array_string_t").length > 0;
@@ -1027,7 +1023,6 @@ export class CProgram implements IScope {
             name: s.name,
             properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
         }));
-        this.functionPrototypes = [];//functionPrototypes.map(fp => new CFunctionPrototype(this, fp));
 
         this.destructors = new CVariableDestructors(this, null);
     }

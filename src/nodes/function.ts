@@ -1,8 +1,9 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
+import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
 import {FuncType} from '../types';
+import { StandardCallHelper } from '../standard';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype {
@@ -26,7 +27,7 @@ export class CFunctionPrototype {
     {statements {    }=> {this}}
 
     {destructors}
-}`, ts.SyntaxKind.FunctionDeclaration)
+}`)
 export class CFunction implements IScope {
     public parent: IScope;
     public func = this;
@@ -61,6 +62,17 @@ export class CFunction implements IScope {
             root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 
+        const nodesInFunction = getAllNodesUnder(node);
+        const declaredFunctionNames = root.functions.map(f => f.name);
+        nodesInFunction.filter(n => ts.isCallExpression(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
+            .forEach((c: ts.CallExpression) => {
+                if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
+                    const decl = root.typeHelper.getDeclaration(c.expression);
+                    if (decl)
+                        root.functionPrototypes.push(new CFunctionPrototype(root, <ts.FunctionDeclaration>decl))
+                }
+            });
+
         node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
         if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
@@ -69,12 +81,19 @@ export class CFunction implements IScope {
     }
 }
 
+@CodeTemplate(``, ts.SyntaxKind.FunctionDeclaration)
+export class CFunctionDeclaration {
+    constructor(scope: IScope, node: ts.FunctionDeclaration) {
+        scope.root.functions.push(new CFunction(scope.root, node));
+    }
+}
+
 @CodeTemplate(`{name}`, ts.SyntaxKind.FunctionExpression)
 export class CFunctionExpression {
     public name: string;
 
-    constructor(scope: IScope, expression: ts.FunctionExpression) {
-        const dynamicFunction = new CFunction(scope.root, expression);
+    constructor(scope: IScope, node: ts.FunctionExpression) {
+        const dynamicFunction = new CFunction(scope.root, node);
         scope.root.functions.push(dynamicFunction);
         this.name = dynamicFunction.name;
     }

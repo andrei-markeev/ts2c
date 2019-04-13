@@ -257,11 +257,7 @@ export class TypeHelper {
         else if (source && source.kind != null && source.flags != null) // ts.Node
             cType = this.getCType(source);
 
-        if (cType instanceof ArrayType) {
-            return cType.getText();
-        } else if (cType instanceof StructType)
-            return cType.getText();
-        else if (cType instanceof DictType)
+        if (cType instanceof ArrayType || cType instanceof StructType || cType instanceof DictType || cType instanceof FuncType)
             return cType.getText();
         else if (typeof cType === 'string')
             return cType;

@@ -23,7 +23,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
  - [x] **Labelled statements**
  - [x] **`throw`**
  - [x] **`try`** _(maximum 10 directly or indirectly nested try-catch blocks)_
- - [x] **Function definition `function` ident `() {` ... `}`** _(only in global scope)_
+ - [x] **Function definition `function` ident `() {` ... `}`**
 
 
 ### Expressions
