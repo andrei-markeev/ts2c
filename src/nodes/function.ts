@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType} from '../types';
+import {FuncType, findParentFunction} from '../types';
 import { StandardCallHelper } from '../standard';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
@@ -11,11 +11,15 @@ export class CFunctionPrototype {
     public name: string;
     public parameters: CVariable[] = [];
     constructor(scope: IScope, node: ts.FunctionDeclaration) {
-        const type = scope.root.typeHelper.getCType(node) as FuncType;
-        this.returnType = scope.root.typeHelper.getTypeString(type.returnType);
+        const funcType = scope.root.typeHelper.getCType(node) as FuncType;
+        this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
 
         this.name = node.name.getText();
-        this.parameters = node.parameters.map((p, i) => new CVariable(scope, p.name.getText(), type.parameterTypes[i], { removeStorageSpecifier: true }));
+        this.parameters = node.parameters.map((p, i) => new CVariable(scope, p.name.getText(), funcType.parameterTypes[i], { removeStorageSpecifier: true }));
+        if (funcType.instanceType)
+            this.parameters.unshift(new CVariable(scope, "this", funcType.instanceType, { removeStorageSpecifier: true }));
+        for (let p of funcType.closureParams)
+            this.parameters.push(new CVariable(scope, p.text, p, { removeStorageSpecifier: true }));
     }
 }
 
@@ -52,6 +56,8 @@ export class CFunction implements IScope {
         });
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
+        for (let p of funcType.closureParams)
+            this.parameters.push(new CVariable(this, p.text, p, { removeStorageSpecifier: true }));
 
         this.variables = [];
 
@@ -73,7 +79,7 @@ export class CFunction implements IScope {
                         root.functionPrototypes.push(new CFunctionPrototype(root, <ts.FunctionDeclaration>decl))
                 }
             });
-
+        
         node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
         if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {

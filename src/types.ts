@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
 import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier, isLogicOp } from './typeguards';
+import { getAllNodesUnder } from './template';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
 export const UniversalVarType = "struct js_var";
@@ -124,6 +125,7 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType) + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")";
     }
+    public closureParams: ts.Identifier[] = [];
     constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
 }
 
@@ -490,23 +492,30 @@ export class TypeHelper {
             const type = this.typeOfNodeDict[k].type;
             if (type instanceof ArrayType && !type.isDynamicArray && type.capacity == 0)
                 type.isDynamicArray = true;
+            if (type instanceof StructType && Object.keys(type.properties).length == 0)
+                this.typeOfNodeDict[k].type = new DictType(PointerVarType);
+        }
+
+        for (let node of this.allNodes) {
+            if (ts.isFunctionDeclaration(node) && findParentFunction(node.parent))
+            {
+                const funcType = this.getCType(node) as FuncType;
+                const nodesInFunction = getAllNodesUnder(node);
+                nodesInFunction.filter(n => ts.isIdentifier(n))
+                    .forEach((ident: ts.Identifier) => {
+                        const decl = this.getDeclaration(ident);
+                        const parentFunc = decl && !ts.isFunctionDeclaration(decl) && findParentFunction(decl);
+                        if (parentFunc && parentFunc != node)
+                            funcType.closureParams.push(ident);
+                    });
+            }
         }
 
         /*
         this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
             .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", JSON.stringify(this.getCType(n))));
-        
         */
-        this.allNodes
-            .filter(n => ts.isIdentifier(n) && n.getText() == "echo")
-            .forEach(n => console.log(
-                n.getText(),
-                "(" + n.parent.getText() + "/" + ts.SyntaxKind[n.parent.kind] + ")",
-                "decl.", this.getDeclaration(n).getText() + "/" + ts.SyntaxKind[this.getDeclaration(n).kind],
-                "|", ts.SyntaxKind[n.kind],
-                "|", JSON.stringify(this.getCType(n))
-            ));
 
     }
 

@@ -1,9 +1,9 @@
-function onetwo(i) {
-    return 1 * two(i);
+function one(i) {
+    return two();
+
+    function two() {
+        return 2 * i;
+    }
 }
 
-function two(i) {
-    return 2 * i;
-}
-
-console.log(onetwo(3));
+console.log(one(3));
