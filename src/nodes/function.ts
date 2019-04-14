@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType, findParentFunction} from '../types';
+import {FuncType, findParentFunction, getTypeText} from '../types';
 import { StandardCallHelper } from '../standard';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
@@ -19,7 +19,7 @@ export class CFunctionPrototype {
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(scope, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         for (let p of funcType.closureParams)
-            this.parameters.push(new CVariable(scope, p.text, p, { removeStorageSpecifier: true }));
+            this.parameters.push(new CVariable(scope, p.node.text, p.node, { removeStorageSpecifier: true }));
     }
 }
 
@@ -56,8 +56,10 @@ export class CFunction implements IScope {
         });
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
-        for (let p of funcType.closureParams)
-            this.parameters.push(new CVariable(this, p.text, p, { removeStorageSpecifier: true }));
+        for (let p of funcType.closureParams) {
+            const type = root.typeHelper.getCType(p.node);
+            this.parameters.push(new CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+        }
 
         this.variables = [];
 
@@ -69,22 +71,24 @@ export class CFunction implements IScope {
             root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 
-        const nodesInFunction = getAllNodesUnder(node);
-        const declaredFunctionNames = root.functions.map(f => f.name);
-        nodesInFunction.filter(n => ts.isCallExpression(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
-            .forEach((c: ts.CallExpression) => {
-                if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
-                    const decl = root.typeHelper.getDeclaration(c.expression);
-                    if (decl)
-                        root.functionPrototypes.push(new CFunctionPrototype(root, <ts.FunctionDeclaration>decl))
-                }
-            });
-        
         node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
         if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
             this.destructors = new CVariableDestructors(this, node);
         }
+
+        const nodesInFunction = getAllNodesUnder(node);
+        const declaredFunctionNames = root.functions.concat(root.functionPrototypes).map(f => f.name);
+        nodesInFunction.filter(n => ts.isCallExpression(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
+            .forEach((c: ts.CallExpression) => {
+                if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
+                    const decl = root.typeHelper.getDeclaration(c.expression);
+                    if (decl && ts.isFunctionDeclaration(decl)) {
+                        root.functionPrototypes.push(new CFunctionPrototype(root, decl))
+                        declaredFunctionNames.push(decl.name.text);
+                    }
+                }
+            });
     }
 }
 

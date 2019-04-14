@@ -14,6 +14,7 @@ export const RegexVarType = "struct regex_struct_t";
 export const RegexMatchVarType = "struct regex_match_struct_t";
 
 const getTypeBodyText = (t: CType) => typeof t === "string" ? t : t.getBodyText();
+export const getTypeText = (t: CType) => typeof(t) === "string" ? t : t.getText();
 
 /** Type that represents static or dynamic array */
 export class ArrayType {
@@ -116,8 +117,7 @@ export class FuncType {
         return type && type instanceof FuncType ? type.instanceType : null
     }
     public getText() {
-        const toText = (t: CType) => typeof(t) === "string" ? t : t.getText();
-        return toText(this.returnType) + " (*{var})(" + this.parameterTypes.map(toText).join(', ') + ")"
+        return getTypeText(this.returnType) + " (*{var})(" + this.parameterTypes.map(getTypeText).join(', ') + ")"
     }
     public getBodyText() {
         const paramTypes = [].concat(this.parameterTypes);
@@ -125,7 +125,7 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType) + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")";
     }
-    public closureParams: ts.Identifier[] = [];
+    public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = [];
     constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
 }
 
@@ -505,9 +505,24 @@ export class TypeHelper {
                     .forEach((ident: ts.Identifier) => {
                         const decl = this.getDeclaration(ident);
                         const parentFunc = decl && !ts.isFunctionDeclaration(decl) && findParentFunction(decl);
-                        if (parentFunc && parentFunc != node)
-                            funcType.closureParams.push(ident);
+                        const assigned = ts.isBinaryExpression(ident.parent) && (isCompoundAssignment(ident.parent.operatorToken) || ident.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken);
+                        if (parentFunc && parentFunc != node) {
+                            const existing = funcType.closureParams.filter(p => p.node.text === ident.text)[0];
+                            if (!existing)
+                                funcType.closureParams.push({ assigned, node: ident, refs: [ident] });
+                            else if (assigned && !existing.assigned)
+                                existing.assigned = true;
+                            else
+                                existing.refs.push(ident);
+                        }
                     });
+                for (let p of funcType.closureParams) {
+                    if (p.assigned) {
+                        const newText = "*" + p.node.text;
+                        for (let ref of p.refs)
+                            Object.defineProperty(ref, "text", { get: () => newText });
+                    }
+                }
             }
         }
 

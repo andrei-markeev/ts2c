@@ -35,7 +35,9 @@ export class CCallExpression {
             return;
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
-        this.arguments = call.arguments.concat(funcType.closureParams).map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        for (let p of funcType.closureParams)
+            this.arguments.push(p.node.text.replace(/^\*/, "&"));
     }
 }
 
