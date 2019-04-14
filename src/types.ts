@@ -499,14 +499,22 @@ export class TypeHelper {
         for (let node of this.allNodes) {
             if (ts.isFunctionDeclaration(node) && findParentFunction(node.parent))
             {
-                const funcType = this.getCType(node) as FuncType;
+                let funcType = this.getCType(node) as FuncType;
                 const nodesInFunction = getAllNodesUnder(node);
                 nodesInFunction.filter(n => ts.isIdentifier(n))
                     .forEach((ident: ts.Identifier) => {
                         const decl = this.getDeclaration(ident);
                         const parentFunc = decl && !ts.isFunctionDeclaration(decl) && findParentFunction(decl);
+                        const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
                         const assigned = ts.isBinaryExpression(ident.parent) && (isCompoundAssignment(ident.parent.operatorToken) || ident.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken);
-                        if (parentFunc && parentFunc != node) {
+                        if (parentFunc && parentFunc != node && !isFieldName) {
+                            if (!funcType.closureParams.length) {
+                                // because function types are deduplicated, same type instance may be assigned to several functions
+                                // we need to ensure that this function will have unique type so that we can fill closureParams
+                                // and they will not be added to any other functions
+                                funcType = new FuncType(funcType.returnType, funcType.parameterTypes, funcType.instanceType);
+                                this.setNodeType(node, funcType);
+                            }
                             const existing = funcType.closureParams.filter(p => p.node.text === ident.text)[0];
                             if (!existing)
                                 funcType.closureParams.push({ assigned, node: ident, refs: [ident] });
@@ -518,6 +526,8 @@ export class TypeHelper {
                     });
                 for (let p of funcType.closureParams) {
                     if (p.assigned) {
+                        // this is admittedly a hacky way to achieve passing variable by reference
+                        // hopefully some better solution can be found later
                         const newText = "*" + p.node.text;
                         for (let ref of p.refs)
                             Object.defineProperty(ref, "text", { get: () => newText });
