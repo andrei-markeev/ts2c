@@ -2,8 +2,9 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType, findParentFunction, getTypeText} from '../types';
+import {FuncType, getTypeText} from '../types';
 import { StandardCallHelper } from '../standard';
+import { isEqualsExpression } from '../typeguards';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype {
@@ -47,9 +48,17 @@ export class CFunction implements IScope {
     constructor(public root: CProgram, node: ts.FunctionDeclaration | ts.FunctionExpression) {
         this.parent = root;
 
-        this.name = node.name.getText();
+        this.name = node.name && node.name.text;
+        if (!this.name) {
+            let funcExprName = "func";
+            if (isEqualsExpression(node.parent) && node.parent.right == node && ts.isIdentifier(node.parent.left))
+                funcExprName = node.parent.left.text + "_func";
+            if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
+                funcExprName = node.parent.name.text + "_func";
+            this.name = root.symbolsHelper.addTemp(node, funcExprName);
+        }
         const funcType = root.typeHelper.getCType(node) as FuncType;
-        this.funcDecl = new CVariable(root, this.name, funcType.returnType, { removeStorageSpecifier: true });
+        this.funcDecl = new CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
 
         this.parameters = node.parameters.map((p, i) => {
             return new CVariable(this, (<ts.Identifier>p.name).text, funcType.parameterTypes[i], { removeStorageSpecifier: true });
@@ -83,7 +92,7 @@ export class CFunction implements IScope {
             .forEach((c: ts.CallExpression) => {
                 if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
                     const decl = root.typeHelper.getDeclaration(c.expression);
-                    if (decl && ts.isFunctionDeclaration(decl)) {
+                    if (decl && decl !== node && ts.isFunctionDeclaration(decl)) {
                         root.functionPrototypes.push(new CFunctionPrototype(root, decl))
                         declaredFunctionNames.push(decl.name.text);
                     }

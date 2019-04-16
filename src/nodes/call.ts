@@ -23,15 +23,13 @@ export class CCallExpression {
     public arguments: CExpression[];
     constructor(scope: IScope, call: ts.CallExpression) {
 
-        // call of function that uses "this"
-        const decl = scope.root.typeHelper.getDeclaration(call.expression);
-        const funcType = decl && scope.root.typeHelper.getCType(decl) as FuncType;
-        if (funcType && funcType.instanceType != null)
+        this.standardCall = StandardCallHelper.createTemplate(scope, call);
+        if (this.standardCall)
             return;
 
-        this.standardCall = StandardCallHelper.createTemplate(scope, call);
-
-        if (this.standardCall)
+        // calling function that uses "this"
+        const funcType = scope.root.typeHelper.getCType(call.expression) as FuncType;
+        if (funcType && funcType.instanceType != null)
             return;
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);

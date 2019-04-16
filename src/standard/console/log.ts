@@ -1,9 +1,12 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType, UniversalVarType} from '../../types';
+import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../../template';
+import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType, UniversalVarType, getTypeText} from '../../types';
 import {IScope} from '../../program';
 import {CVariable} from '../../nodes/variable';
 import { StandardCallResolver, IResolver } from '../../standard';
+import { isSideEffectExpression } from '../../typeguards';
+import { CAssignment } from '../../nodes/assignment';
+import { CString } from '../../nodes/literals';
 
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {
@@ -46,13 +49,12 @@ class CConsoleLog {
         let printNodes = node.arguments;
         for (let i = 0; i < printNodes.length; i++) {
             let printNode = printNodes[i];
-            let type = scope.root.typeHelper.getCType(printNode);
             let nodeExpressions = processBinaryExpressions(scope, printNode);
             
             let stringLit = '';
             nodeExpressions = nodeExpressions.reduce((a, c) => {
-                if (c.node.kind == ts.SyntaxKind.StringLiteral)
-                    stringLit += c.expression.resolve().slice(1, -1);
+                if (ts.isStringLiteral(c.node))
+                    stringLit += CodeTemplateFactory.templateToString(<any>new CString(scope, c.node)).slice(1, -1);
                 else {
                     a.push(c);
                     c.prefix = stringLit;
@@ -64,13 +66,30 @@ class CConsoleLog {
                 if (nodeExpressions.length)
                     nodeExpressions[nodeExpressions.length - 1].postfix = stringLit;
                 else
-                    nodeExpressions.push({ node: printNode, expression: stringLit, prefix: '', postfix: '' });
+                    nodeExpressions.push({ node: printNode, prefix: '', postfix: '' });
             }
-            
 
             for (let j = 0; j < nodeExpressions.length; j++) {
-                let { node, expression, prefix, postfix } = nodeExpressions[j];
-                let accessor = expression["resolve"] ? expression["resolve"]() : expression;
+                const { node, prefix, postfix } = nodeExpressions[j];
+                const nodesUnder: ts.Node[] = getAllNodesUnder(node);
+                const hasSideEffects = nodesUnder.some(n => isSideEffectExpression(n));
+                let accessor = "";
+                if (hasSideEffects)
+                {
+                    const tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_result");
+                    let tempVarType = scope.root.typeHelper.getCType(node);
+                    // crutch
+                    if (tempVarType instanceof ArrayType && !tempVarType.isDynamicArray)
+                        tempVarType = getTypeText(tempVarType.elementType) + "*";
+                    scope.variables.push(new CVariable(scope, tempVarName, tempVarType));
+                    printfs.push(new CAssignment(scope, tempVarName, null, tempVarType, <ts.Expression>node, false));
+                    accessor = tempVarName;
+                }
+                else if (ts.isStringLiteral(node))
+                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1);
+                else
+                    accessor = CodeTemplateFactory.templateToString(CodeTemplateFactory.createForNode(scope, node));
+
                 let options = {
                     prefix: (i > 0 && j == 0 ? " " : "") + prefix,
                     postfix: postfix + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
@@ -84,7 +103,7 @@ class CConsoleLog {
     }
 }
 
-function processBinaryExpressions(scope: IScope, printNode: ts.Node) {
+function processBinaryExpressions(scope: IScope, printNode: ts.Node): { node: ts.Node, prefix: string, postfix: string }[] {
     let type = scope.root.typeHelper.getCType(printNode);
     if (type == StringVarType && ts.isBinaryExpression(printNode)) {
         let binExpr = <ts.BinaryExpression>printNode;
@@ -96,7 +115,7 @@ function processBinaryExpressions(scope: IScope, printNode: ts.Node) {
         }
     }
     
-    return [ { node: printNode, expression: CodeTemplateFactory.createForNode(scope, printNode), prefix: '', postfix: '' } ];
+    return [ { node: printNode, prefix: '', postfix: '' } ];
 }
 
 interface PrintfOptions {

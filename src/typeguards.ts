@@ -27,6 +27,9 @@ export function isEqualsExpression(n): n is ts.BinaryExpression {
 export function isMethodCall(n): n is MethodCallExpression {
     return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
 }
+export function isFunction(n): n is ts.FunctionDeclaration | ts.FunctionExpression {
+    return ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n);
+}
 export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
     return ts.isFunctionExpression(n) && ts.isCallExpression(n.parent) && n.parent.arguments[0] == n && ts.isPropertyAccessExpression(n.parent.expression);
 }
@@ -62,7 +65,10 @@ export function isThisKeyword(n): n is ts.Node {
     return n.kind === ts.SyntaxKind.ThisKeyword;
 }
 export function isCompoundAssignment(n: ts.Node) {
-    return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
+    if (ts.isBinaryExpression(n))
+        return n.operatorToken.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.operatorToken.kind <= ts.SyntaxKind.LastCompoundAssignment;
+    else
+        return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
 }
 
 export function isNumberOp(op: ts.SyntaxKind) {
@@ -119,4 +125,12 @@ export function isInBoolContext(n: ts.Node) {
 
 export function isSimpleNode(n: ts.Node) {
     return ts.isStringLiteral(n) || ts.isNumericLiteral(n) || ts.isIdentifier(n);
+}
+
+export function isSideEffectExpression(n: ts.Node) {
+    return isEqualsExpression(n) || isCompoundAssignment(n)
+        || isUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusPlusToken
+        || isUnaryExpression(n) && n.operator === ts.SyntaxKind.MinusMinusToken
+        || ts.isCallExpression(n)
+        || ts.isNewExpression(n);
 }

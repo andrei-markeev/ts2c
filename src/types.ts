@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier, isLogicOp } from './typeguards';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier, isLogicOp, isFunction } from './typeguards';
 import { getAllNodesUnder } from './template';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
@@ -13,8 +13,8 @@ export const BooleanVarType = "uint8_t";
 export const RegexVarType = "struct regex_struct_t";
 export const RegexMatchVarType = "struct regex_match_struct_t";
 
-const getTypeBodyText = (t: CType) => typeof t === "string" ? t : t.getBodyText();
-export const getTypeText = (t: CType) => typeof(t) === "string" ? t : t.getText();
+const getTypeBodyText = (t: CType): string => typeof t === "string" ? t : t.getBodyText();
+export const getTypeText = (t: CType): string => typeof(t) === "string" ? t : t.getText();
 
 /** Type that represents static or dynamic array */
 export class ArrayType {
@@ -107,26 +107,33 @@ export class DictType {
 
 export class FuncType {
     public static getReturnType(typeHelper: TypeHelper, node: ts.Node): CType {
-        const decl = typeHelper.getDeclaration(node);
-        const type = typeHelper.getCType(decl);
+        const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.returnType : null;
     }
     public static getInstanceType(typeHelper: TypeHelper, node: ts.Node): CType {
-        const decl = typeHelper.getDeclaration(node);
-        const type = typeHelper.getCType(decl);
+        const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.instanceType : null
     }
     public getText() {
-        return getTypeText(this.returnType) + " (*{var})(" + this.parameterTypes.map(getTypeText).join(', ') + ")"
+        let retType = getTypeText(this.returnType).replace(/ \{var\}\[\d+\]/g, "* {var}").replace(/^static /, "");
+        if (retType.indexOf("{var}") == -1)
+            retType += " {var}";
+        return retType.replace(" {var}", " (*{var})") + "(" + this.parameterTypes.map(t => getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, "")).join(', ') + ")";
     }
     public getBodyText() {
         const paramTypes = [].concat(this.parameterTypes);
         if (this.instanceType)
             paramTypes.unshift(this.instanceType);
-        return getTypeBodyText(this.returnType) + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")";
+        return getTypeBodyText(this.returnType) 
+            + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
+            + "[[" + this.closureParams.map(p => p.node.text).join(", ") + "]]";
     }
-    public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = [];
-    constructor(public returnType: CType, public parameterTypes: CType[] = [], public instanceType: CType = null) { }
+    constructor(
+        public returnType: CType,
+        public parameterTypes: CType[] = [],
+        public instanceType: CType = null,
+        public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = []
+    ) { }
 }
 
 export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
@@ -176,7 +183,7 @@ export function toPrimitive(t: CType) {
 
 export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
     let parentFunc = node;
-    while (parentFunc && !ts.isFunctionDeclaration(parentFunc))
+    while (parentFunc && !isFunction(parentFunc))
         parentFunc = parentFunc.parent;
     return <ts.FunctionDeclaration>parentFunc;
 }
@@ -393,7 +400,7 @@ export class TypeHelper {
             }));
         }
 
-        // calls
+        // functions
         addEquality(ts.isCallExpression, n => n.expression, n => this.getDeclaration(n));
         addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n), n.arguments.map(arg => this.getCType(arg))) : null));
         addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this, n.expression)));
@@ -423,14 +430,50 @@ export class TypeHelper {
             return objType instanceof ArrayType && n.parent.expression.name.text == "forEach" ? objType.elementType : null;
         }));
 
-        // statements
-        addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
-        addEquality(ts.isFunctionDeclaration, n => n, type(n => new FuncType(VoidType, n.parameters.map(p => this.getCType(p)))));
+        addEquality(isFunction, n => n, type(n => new FuncType(VoidType, n.parameters.map(p => this.getCType(p)))));
+        addEquality(isFunction, n => n, type(node => {
+            if (!findParentFunction(node.parent))
+                return null;
+            const nodesInFunction = getAllNodesUnder(node);
+            const closureParams = [];
+            nodesInFunction.filter(n => ts.isIdentifier(n))
+                .forEach((ident: ts.Identifier) => {
+                    const decl = this.getDeclaration(ident);
+                    const parentFunc = decl && !isFunction(decl) && findParentFunction(decl);
+                    const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
+                    const assigned = isEqualsExpression(ident.parent) || isCompoundAssignment(ident.parent);
+                    if (parentFunc && parentFunc != node && !isFieldName) {
+                        const existing = closureParams.filter(p => p.node.text === ident.text)[0];
+                        if (!existing)
+                            closureParams.push({ assigned, node: ident, refs: [ident] });
+                        else if (assigned && !existing.assigned)
+                            existing.assigned = true;
+                        else
+                            existing.refs.push(ident);
+                    }
+                });
+
+            for (let p of closureParams) {
+                if (p.assigned && p.node.text.indexOf("*") != 0) {
+                    // this is admittedly a hacky way to achieve passing variable by reference
+                    // hopefully some better solution can be found later
+                    const newText = "*" + p.node.text;
+                    for (let ref of p.refs)
+                        Object.defineProperty(ref, "text", { get: () => newText });
+                }
+            }
+
+            return new FuncType(VoidType, [], null, closureParams);
+
+        }));
         for (let i = 0; i < 10; i++)
-            addEquality(ts.isFunctionDeclaration, n => n.parameters[i], type(n => {
+            addEquality(isFunction, n => n.parameters[i], type(n => {
                 const type = this.getCType(n);
                 return type instanceof FuncType ? type.parameterTypes[i] : null
             }));
+
+        // statements
+        addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
         addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.getCType(n.initializer.declarations[0]) || PointerVarType, 0, false)));
         addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
             const type = this.getCType(n.expression);
@@ -494,46 +537,6 @@ export class TypeHelper {
                 type.isDynamicArray = true;
             if (type instanceof StructType && Object.keys(type.properties).length == 0)
                 this.typeOfNodeDict[k].type = new DictType(PointerVarType);
-        }
-
-        for (let node of this.allNodes) {
-            if (ts.isFunctionDeclaration(node) && findParentFunction(node.parent))
-            {
-                let funcType = this.getCType(node) as FuncType;
-                const nodesInFunction = getAllNodesUnder(node);
-                nodesInFunction.filter(n => ts.isIdentifier(n))
-                    .forEach((ident: ts.Identifier) => {
-                        const decl = this.getDeclaration(ident);
-                        const parentFunc = decl && !ts.isFunctionDeclaration(decl) && findParentFunction(decl);
-                        const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
-                        const assigned = ts.isBinaryExpression(ident.parent) && (isCompoundAssignment(ident.parent.operatorToken) || ident.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken);
-                        if (parentFunc && parentFunc != node && !isFieldName) {
-                            if (!funcType.closureParams.length) {
-                                // because function types are deduplicated, same type instance may be assigned to several functions
-                                // we need to ensure that this function will have unique type so that we can fill closureParams
-                                // and they will not be added to any other functions
-                                funcType = new FuncType(funcType.returnType, funcType.parameterTypes, funcType.instanceType);
-                                this.setNodeType(node, funcType);
-                            }
-                            const existing = funcType.closureParams.filter(p => p.node.text === ident.text)[0];
-                            if (!existing)
-                                funcType.closureParams.push({ assigned, node: ident, refs: [ident] });
-                            else if (assigned && !existing.assigned)
-                                existing.assigned = true;
-                            else
-                                existing.refs.push(ident);
-                        }
-                    });
-                for (let p of funcType.closureParams) {
-                    if (p.assigned) {
-                        // this is admittedly a hacky way to achieve passing variable by reference
-                        // hopefully some better solution can be found later
-                        const newText = "*" + p.node.text;
-                        for (let ref of p.refs)
-                            Object.defineProperty(ref, "text", { get: () => newText });
-                    }
-                }
-            }
         }
 
         /*
@@ -728,9 +731,15 @@ export class TypeHelper {
                 if (pTypeReplaced)
                     paramTypesReplaced = true;
             }
+            const closureParamCount = Math.max(type1.closureParams.length, type2.closureParams.length);
+            let closureParamsReplaced = type1.closureParams.length !== type2.closureParams.length;
+            let closureParams = [];
+            for (let i = 0; i < closureParamCount; i++) {
+                closureParams.push(type1.closureParams[i] || type2.closureParams[i]);
+            }
             
-            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced)
-                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType)), replaced: true };
+            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams)), replaced: true };
             else
                 return noChanges;
         }

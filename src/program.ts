@@ -58,7 +58,6 @@ class HeaderFlags {
     printf: boolean = false;
     malloc: boolean = false;
     bool: boolean = false;
-    uint8_t: boolean = false;
     int16_t: boolean = false;
     uint16_t: boolean = false;
     js_var: boolean = false;

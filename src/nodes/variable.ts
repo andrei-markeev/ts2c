@@ -231,11 +231,13 @@ export class CVariableDestructors {
 
 interface CVariableOptions {
     removeStorageSpecifier?: boolean;
+    arraysToPointers?: boolean;
     initializer?: string;
 }
 
 export class CVariable {
     private static: boolean;
+    private arraysToPointers: boolean;
     private initializer: string;
     public type: CType;
     private typeHelper: TypeHelper;
@@ -251,7 +253,7 @@ export class CVariable {
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
         if (type == BooleanVarType)
-            scope.root.headerFlags.uint8_t = true;
+            scope.root.headerFlags.bool = true;
         if (type instanceof ArrayType && type.elementType == UniversalVarType)
             scope.root.headerFlags.js_var_dict = true;
         if (type instanceof DictType && type.elementType == UniversalVarType)
@@ -262,6 +264,7 @@ export class CVariable {
             this.static = true;
         if (options && options.removeStorageSpecifier)
             this.static = false;
+        this.arraysToPointers = options && options.arraysToPointers;
         if (options && options.initializer)
             this.initializer = options.initializer;
         
@@ -278,6 +281,9 @@ export class CVariable {
     resolve() {
         let varString = this.typeHelper.getTypeString(this.type);
 
+        if (this.arraysToPointers)
+            varString = varString.replace(/ \{var\}\[\d+\]/g, "* {var}");
+
         if (varString.indexOf('{var}') > -1)
             varString = varString.replace('{var}', this.name);
         else
@@ -290,6 +296,7 @@ export class CVariable {
     
         if (this.initializer)
             varString += " = " + this.initializer;
+
         return varString;
     }
 }

@@ -40,12 +40,12 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Array initializer `[` ... `]`** 
     - [x] **Object initializer `{` ... `}`**
     - [x] **Grouping operator `(` `)`**
- - [ ] Left-hand-side Expressions
+ - [x] Left-hand-side Expressions
     - [x] **Property accessors**
     - [x] **`new` operator**
     - [x] **Function call**
     - [x] **Argument list**
-    - [ ] Function expression `function() {` ... `}`
+    - [x] **Function expression `function() {` ... `}`** _(some closure scenarios aren't supported yet)_
  - [x] **Postfix expressions**
     - [x] **`--`** _(only numbers)_
     - [x] **`++`** _(only numbers)_
