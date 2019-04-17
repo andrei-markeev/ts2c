@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, toPrimitive } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, toPrimitive, findParentFunction } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -91,7 +91,7 @@ export class MemoryManager {
     }
 
     public getGCVariablesForScope(node: ts.Node) {
-        let parentDecl = this.findParentFunctionNode(node);
+        let parentDecl = findParentFunction(node);
         var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
@@ -134,7 +134,7 @@ export class MemoryManager {
     }
 
     public getDestructorsForScope(node: ts.Node) {
-        let parentDecl = this.findParentFunctionNode(node);
+        let parentDecl = findParentFunction(node);
         let scopeId = parentDecl && parentDecl.pos + 1 || "main";
         let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean }[] = [];
         if (this.scopes[scopeId]) {
@@ -194,7 +194,7 @@ export class MemoryManager {
             }
         }
 
-        let varFuncNode = this.findParentFunctionNode(heapNode);
+        let varFuncNode = findParentFunction(heapNode);
         var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
         var isSimple = true;
         if (this.isInsideLoop(heapNode))
@@ -220,7 +220,7 @@ export class MemoryManager {
             let returned = false;
             for (let ref of refs) {
                 visited[ref.pos + "_" + ref.end] = true;
-                let parentNode = this.findParentFunctionNode(ref);
+                let parentNode = findParentFunction(ref);
                 if (!parentNode)
                     topScope = "main";
 
@@ -256,7 +256,7 @@ export class MemoryManager {
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
                         console.log(heapNode.getText() + " -> Found function call!");
                         if (topScope !== "main") {
-                            let funcNode = this.findParentFunctionNode(call);
+                            let funcNode = findParentFunction(call);
                             topScope = funcNode && funcNode.pos + 1 || "main";
                             let targetScope = node.parent.pos + 1 + "";
                             isSimple = false;
@@ -300,7 +300,7 @@ export class MemoryManager {
                 }
                 else if (ref.parent && ref.parent.kind == ts.SyntaxKind.ReturnStatement && !returned) {
                     returned = true;
-                    queue.push(parentNode.name);
+                    queue.push(parentNode);
                     console.log(heapNode.getText() + " -> Found variable returned from the function!");
                     isSimple = false;
                 }
@@ -380,14 +380,6 @@ export class MemoryManager {
         }
 
         return false;
-    }
-
-    private findParentFunctionNode(node: ts.Node) {
-        var parent = node;
-        while (parent && parent.kind != ts.SyntaxKind.FunctionDeclaration) {
-            parent = parent.parent;
-        }
-        return <ts.FunctionDeclaration>parent;
     }
 
     private isInsideLoop(node: ts.Node) {
