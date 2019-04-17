@@ -26,7 +26,8 @@
                 <textarea id="source">console.log("Hello world!");</textarea>
             </div>
             <button onclick="transpile()">Transpile</button>
-            <div class="editor">
+            <div id="error" class="container note"><strong>Transpilation failed.</strong> <span id="error-text"></span></div>
+            <div id="results" class="editor">
                 <textarea id="target"></textarea>
             </div>
         </div>
@@ -47,8 +48,17 @@
             targetEditor.setSize('auto', 'auto');
             function transpile() {
                 var source = sourceEditor.getValue();
-                var transpiled = ts2c.transpile(source);
-                targetEditor.setValue(transpiled);
+                try {
+                    document.getElementById("error").style.display = 'none';
+                    document.getElementById("results").style.display = '';
+                    var transpiled = ts2c.transpile(source);
+                    targetEditor.setValue(transpiled);
+                } catch(e) {
+                    document.getElementById("error").style.display = '';
+                    document.getElementById("results").style.display = 'none';
+                    document.getElementById("error-text").innerHTML = e.toString();
+                    throw e;
+                }
             }
             transpile();
         </script>
