@@ -4,7 +4,7 @@ import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
-import { FuncType, UniversalVarType } from '../types';
+import { FuncType, UniversalVarType, findParentFunction } from '../types';
 import { CAsUniversalVar } from './typeconvert';
 import { isNullOrUndefined } from '../typeguards';
 import { CObjectLiteralExpression } from './literals';
@@ -38,8 +38,16 @@ export class CCallExpression {
             this.arguments.push(this.funcName);
             this.funcName = CodeTemplateFactory.templateToString(this.funcName) + "->func";
         } else {
-            for (let p of funcType.closureParams)
-                this.arguments.push(p.node.text.replace(/^\*/, "&"));
+            for (let p of funcType.closureParams) {
+                const parentFunc = findParentFunction(call);
+                const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
+                const closureVarName = funcType && funcType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
+                const name = p.node.text.replace(/^\*/, "");
+                let value = name;
+                if (closureVarName && funcType.closureParams.some(p => p.node.text.replace(/^\*/, "") === name))
+                    value = closureVarName + "->" + name;
+                this.arguments.push((p.assigned ? "&" : "") + value);
+            }
         }
     }
 }

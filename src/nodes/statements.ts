@@ -68,15 +68,7 @@ export class CEmptyStatement {
 
 @CodeTemplate(`
 {destructors}
-{#if retVarName}
-    ret = malloc(sizeof(*ret));
-    assert(ret != NULL);
-    ret->func = {expression};
-    {closureParams => ret->{name} = {value};\n}
-    return ret;
-{#else}
 return {expression};
-{/if}
 `, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement {
     public expression: CExpression;
@@ -84,22 +76,6 @@ export class CReturnStatement {
     public retVarName: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
     constructor(scope: IScope, node: ts.ReturnStatement) {
-        const type = scope.root.typeHelper.getCType(node.expression);
-        if (type instanceof FuncType && type.needsClosureStruct)
-        {
-            const parentFunc = findParentFunction(node);
-            const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
-            this.retVarName = scope.root.symbolsHelper.addTemp(node, "ret");
-            scope.variables.push(new CVariable(scope, this.retVarName, type));
-            this.closureParams = type.closureParams.map(p => {
-                const name = p.node.text.replace(/^\*/, "");
-                let value = name;
-                if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(p => p.node.text === name))
-                    value = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + name;
-                return { name, value };
-            });
-            scope.root.headerFlags.malloc = true;
-        }
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
     }

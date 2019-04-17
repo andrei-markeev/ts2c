@@ -1,10 +1,11 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
-import {CVariable, CVariableDestructors} from './variable';
+import {CVariable, CVariableDestructors, CVariableAllocation} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType, findParentSourceFile} from '../types';
+import {FuncType, findParentSourceFile, findParentFunction} from '../types';
 import { StandardCallHelper } from '../standard';
 import { isEqualsExpression } from '../typeguards';
+import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype {
@@ -106,20 +107,49 @@ export class CFunction implements IScope {
     }
 }
 
-@CodeTemplate(``, ts.SyntaxKind.FunctionDeclaration)
-export class CFunctionDeclaration {
-    constructor(scope: IScope, node: ts.FunctionDeclaration) {
-        scope.root.functions.push(new CFunction(scope.root, node));
-    }
-}
-
-@CodeTemplate(`{name}`, ts.SyntaxKind.FunctionExpression)
+@CodeTemplate(`
+{#statements}
+    {#if isClosureFunc}
+        {allocator}
+        {closureVarName}->func = {name};
+        {closureParams => {closureVarName}->{key} = {value};\n}
+    {/if}
+{/statements}
+{expression}`, [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
 export class CFunctionExpression {
     public name: string;
+    public expression: string = '';
+    
+    public isClosureFunc: boolean = false;
+    public allocator: CVariableAllocation;
+    public closureVarName: string;
+    public closureParams: { key: string, value: CExpression }[];
 
-    constructor(scope: IScope, node: ts.FunctionExpression) {
-        const dynamicFunction = new CFunction(scope.root, node);
-        scope.root.functions.push(dynamicFunction);
-        this.name = dynamicFunction.name;
+    constructor(scope: IScope, node: ts.FunctionExpression | ts.FunctionDeclaration) {
+        const func = new CFunction(scope.root, node);
+        scope.root.functions.push(func);
+        this.name = func.name;
+
+        const type = scope.root.typeHelper.getCType(node);
+        const parentFunc = findParentFunction(node.parent);
+        if (parentFunc && type instanceof FuncType && type.needsClosureStruct) {
+            this.isClosureFunc = true;
+            this.closureVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (!scope.root.memoryManager.variableWasReused(node))
+                scope.variables.push(new CVariable(scope, this.closureVarName, type));
+            this.allocator = new CVariableAllocation(scope, this.closureVarName, type, node);
+            const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
+            const parentClosureVarName = parentFuncType && parentFuncType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
+            this.closureParams = type.closureParams.map(p => {
+                const key = p.node.text.replace(/^\*/, "");
+                let value = key;
+                if (parentClosureVarName && parentFuncType.closureParams.some(p => p.node.text === key))
+                    value = parentClosureVarName + "->" + key;
+                return { key, value };
+            });
+        }
+
+        if (ts.isFunctionExpression(node))
+            this.expression = this.closureVarName || func.name;
     }
 }

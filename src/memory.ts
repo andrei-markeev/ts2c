@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, toPrimitive, findParentFunction } from './types';
+import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarType, UniversalVarType, toPrimitive, findParentFunction, FuncType, findParentSourceFile } from './types';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -84,6 +84,17 @@ export class MemoryManager {
                 case ts.SyntaxKind.NewExpression:
                     {
                         this.scheduleNodeDisposal(node);
+                    }
+                    break;
+                case ts.SyntaxKind.FunctionExpression:
+                case ts.SyntaxKind.FunctionDeclaration:
+                    {
+                        const parentFunc = findParentFunction(node.parent);
+                        if (parentFunc) {
+                            const type = this.typeHelper.getCType(node);
+                            if (type instanceof FuncType && type.needsClosureStruct)
+                                this.scheduleNodeDisposal(node);
+                        }
                     }
                     break;
             }
@@ -220,7 +231,7 @@ export class MemoryManager {
             let returned = false;
             for (let ref of refs) {
                 visited[ref.pos + "_" + ref.end] = true;
-                let parentNode = findParentFunction(ref);
+                let parentNode = findParentFunction(isFunction(ref) ? ref.parent : ref);
                 if (!parentNode)
                     topScope = "main";
 
@@ -330,6 +341,8 @@ export class MemoryManager {
             varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else if (ts.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
+        else if (isFunction(heapNode))
+            varName = this.symbolsHelper.addTemp(findParentSourceFile(heapNode), heapNode.name ? heapNode.name.text + "_func" : "func");
         else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 

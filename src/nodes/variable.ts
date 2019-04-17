@@ -82,7 +82,7 @@ export class CVariableAllocation {
     constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: ts.Node)
     {
         this.needAllocateArray = varType instanceof ArrayType && varType.isDynamicArray;
-        this.needAllocateStruct = varType instanceof StructType;
+        this.needAllocateStruct = varType instanceof StructType || varType instanceof FuncType && varType.needsClosureStruct;
         this.needAllocateDict = varType instanceof DictType;
         this.initialCapacity = 4;
 

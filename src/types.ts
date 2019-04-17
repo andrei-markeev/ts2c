@@ -378,6 +378,13 @@ export class TypeHelper {
                 : type instanceof DictType ? type.elementType
                 : null;
         }));
+        addEquality(ts.isPropertyAssignment, n => n, type(n => {
+            const type = this.getCType(n.initializer);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }))
         addEquality(ts.isPropertyAccessExpression, n => n, n => n.name);
         addEquality(isFieldPropertyAccess, n => n.expression, type(n => struct(n.name.getText(), n.pos, this.getCType(n) || PointerVarType)));
         addEquality(isFieldPropertyAccess, n => n, type(n => {
@@ -460,19 +467,24 @@ export class TypeHelper {
             const closureParams = [];
             nodesInFunction.filter(n => ts.isIdentifier(n))
                 .forEach((ident: ts.Identifier) => {
-                    const decl = this.getDeclaration(ident);
-                    const parentFunc = decl && !isFunction(decl) && findParentFunction(decl);
-                    const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
-                    const assigned = isEqualsExpression(ident.parent) || isCompoundAssignment(ident.parent);
-                    if (parentFunc && parentFunc != node && isUnder(parentFunc, node) && !isFieldName) {
-                        const existing = closureParams.filter(p => p.node.escapedText === ident.escapedText)[0];
-                        if (!existing)
-                            closureParams.push({ assigned, node: ident, refs: [ident] });
-                        else if (assigned && !existing.assigned)
-                            existing.assigned = true;
-                        
-                        if (existing)
-                            existing.refs.push(ident);
+                    const identDecl = this.getDeclaration(ident);
+                    if (identDecl && isFunction(identDecl)) {
+                        const identDeclType = this.getCType(identDecl) as FuncType;
+                        [].push.apply(closureParams, identDeclType.closureParams);
+                    } else {
+                        const identDeclFunc = identDecl && findParentFunction(identDecl);
+                        const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
+                        const assigned = isEqualsExpression(ident.parent) || isCompoundAssignment(ident.parent);
+                        if (identDeclFunc && identDeclFunc != node && isUnder(identDeclFunc, node) && !isFieldName) {
+                            const existing = closureParams.filter(p => p.node.escapedText === ident.escapedText)[0];
+                            if (!existing)
+                                closureParams.push({ assigned, node: ident, refs: [ident] });
+                            else if (assigned && !existing.assigned)
+                                existing.assigned = true;
+                            
+                            if (existing)
+                                existing.refs.push(ident);
+                        }
                     }
                 });
 
