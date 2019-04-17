@@ -71,14 +71,15 @@ class CConsoleLog {
 
             for (let j = 0; j < nodeExpressions.length; j++) {
                 const { node, prefix, postfix } = nodeExpressions[j];
+                const type = scope.root.typeHelper.getCType(node);
                 const nodesUnder: ts.Node[] = getAllNodesUnder(node);
                 const hasSideEffects = nodesUnder.some(n => isSideEffectExpression(n));
                 let accessor = "";
-                if (hasSideEffects)
+                if (hasSideEffects && (type instanceof ArrayType || type instanceof StructType || type instanceof DictType || type === UniversalVarType))
                 {
                     const tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_result");
-                    let tempVarType = scope.root.typeHelper.getCType(node);
                     // crutch
+                    let tempVarType = type;
                     if (tempVarType instanceof ArrayType && !tempVarType.isDynamicArray)
                         tempVarType = getTypeText(tempVarType.elementType) + "*";
                     scope.variables.push(new CVariable(scope, tempVarName, tempVarType));
@@ -94,7 +95,7 @@ class CConsoleLog {
                     prefix: (i > 0 && j == 0 ? " " : "") + prefix,
                     postfix: postfix + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
                 };
-                printfs.push(new CPrintf(scope, node, accessor, scope.root.typeHelper.getCType(node), options));
+                printfs.push(new CPrintf(scope, node, accessor, type, options));
             }
         }
         this.printfCalls = printfs.slice(0, -1);
