@@ -77,6 +77,17 @@ var MemoryManager = /** @class */ (function () {
                         this.scheduleNodeDisposal(node);
                     }
                     break;
+                case ts.SyntaxKind.FunctionExpression:
+                case ts.SyntaxKind.FunctionDeclaration:
+                    {
+                        var parentFunc = types_1.findParentFunction(node.parent);
+                        if (parentFunc) {
+                            var type = this.typeHelper.getCType(node);
+                            if (type instanceof types_1.FuncType && type.needsClosureStruct)
+                                this.scheduleNodeDisposal(node);
+                        }
+                    }
+                    break;
             }
         }
     };
@@ -200,7 +211,7 @@ var MemoryManager = /** @class */ (function () {
             for (var _i = 0, refs_1 = refs; _i < refs_1.length; _i++) {
                 var ref = refs_1[_i];
                 visited[ref.pos + "_" + ref.end] = true;
-                var parentNode = types_1.findParentFunction(ref);
+                var parentNode = types_1.findParentFunction(typeguards_1.isFunction(ref) ? ref.parent : ref);
                 if (!parentNode)
                     topScope = "main";
                 if (ref.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -306,6 +317,8 @@ var MemoryManager = /** @class */ (function () {
             varName = this.symbolsHelper.addTemp(heapNode, standard_1.StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else if (ts.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
+        else if (typeguards_1.isFunction(heapNode))
+            varName = this.symbolsHelper.addTemp(types_1.findParentSourceFile(heapNode), heapNode.name ? heapNode.name.text + "_func" : "func");
         else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
         var vnode = heapNode;
@@ -525,9 +538,20 @@ var CCallExpression = /** @class */ (function () {
             this.funcName = template_1.CodeTemplateFactory.templateToString(this.funcName) + "->func";
         }
         else {
+            var _loop_1 = function (p) {
+                var parentFunc = types_1.findParentFunction(call);
+                var funcType_1 = scope.root.typeHelper.getCType(parentFunc);
+                var closureVarName = funcType_1 && funcType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
+                var name_1 = p.node.text.replace(/^\*/, "");
+                var value = name_1;
+                if (closureVarName && funcType_1.closureParams.some(function (p) { return p.node.text.replace(/^\*/, "") === name_1; }))
+                    value = closureVarName + "->" + name_1;
+                this_1.arguments.push((p.assigned ? "&" : "") + value);
+            };
+            var this_1 = this;
             for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
                 var p = _a[_i];
-                this.arguments.push(p.node.text.replace(/^\*/, "&"));
+                _loop_1(p);
             }
         }
     }
@@ -1378,24 +1402,36 @@ var CFunction = /** @class */ (function () {
     return CFunction;
 }());
 exports.CFunction = CFunction;
-var CFunctionDeclaration = /** @class */ (function () {
-    function CFunctionDeclaration(scope, node) {
-        scope.root.functions.push(new CFunction(scope.root, node));
-    }
-    CFunctionDeclaration = __decorate([
-        template_1.CodeTemplate("", ts.SyntaxKind.FunctionDeclaration)
-    ], CFunctionDeclaration);
-    return CFunctionDeclaration;
-}());
-exports.CFunctionDeclaration = CFunctionDeclaration;
 var CFunctionExpression = /** @class */ (function () {
     function CFunctionExpression(scope, node) {
-        var dynamicFunction = new CFunction(scope.root, node);
-        scope.root.functions.push(dynamicFunction);
-        this.name = dynamicFunction.name;
+        this.expression = '';
+        this.isClosureFunc = false;
+        var func = new CFunction(scope.root, node);
+        scope.root.functions.push(func);
+        this.name = func.name;
+        var type = scope.root.typeHelper.getCType(node);
+        var parentFunc = types_1.findParentFunction(node.parent);
+        if (parentFunc && type instanceof types_1.FuncType && type.needsClosureStruct) {
+            this.isClosureFunc = true;
+            this.closureVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (!scope.root.memoryManager.variableWasReused(node))
+                scope.variables.push(new variable_1.CVariable(scope, this.closureVarName, type));
+            this.allocator = new variable_1.CVariableAllocation(scope, this.closureVarName, type, node);
+            var parentFuncType_1 = scope.root.typeHelper.getCType(parentFunc);
+            var parentClosureVarName_1 = parentFuncType_1 && parentFuncType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
+            this.closureParams = type.closureParams.map(function (p) {
+                var key = p.node.text.replace(/^\*/, "");
+                var value = key;
+                if (parentClosureVarName_1 && parentFuncType_1.closureParams.some(function (p) { return p.node.text === key; }))
+                    value = parentClosureVarName_1 + "->" + key;
+                return { key: key, value: value };
+            });
+        }
+        if (ts.isFunctionExpression(node))
+            this.expression = this.closureVarName || func.name;
     }
     CFunctionExpression = __decorate([
-        template_1.CodeTemplate("{name}", ts.SyntaxKind.FunctionExpression)
+        template_1.CodeTemplate("\n{#statements}\n    {#if isClosureFunc}\n        {allocator}\n        {closureVarName}->func = {name};\n        {closureParams => {closureVarName}->{key} = {value};\n}\n    {/if}\n{/statements}\n{expression}", [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
     ], CFunctionExpression);
     return CFunctionExpression;
 }());
@@ -1811,26 +1847,11 @@ var CReturnStatement = /** @class */ (function () {
     function CReturnStatement(scope, node) {
         this.retVarName = null;
         this.closureParams = [];
-        var type = scope.root.typeHelper.getCType(node.expression);
-        if (type instanceof types_1.FuncType && type.needsClosureStruct) {
-            var parentFunc_1 = types_1.findParentFunction(node);
-            var funcType_1 = scope.root.typeHelper.getCType(parentFunc_1);
-            this.retVarName = scope.root.symbolsHelper.addTemp(node, "ret");
-            scope.variables.push(new variable_1.CVariable(scope, this.retVarName, type));
-            this.closureParams = type.closureParams.map(function (p) {
-                var name = p.node.text.replace(/^\*/, "");
-                var value = name;
-                if (funcType_1 && funcType_1.needsClosureStruct && funcType_1.closureParams.some(function (p) { return p.node.text === name; }))
-                    value = scope.root.symbolsHelper.getClosureVarName(parentFunc_1) + "->" + name;
-                return { name: name, value: value };
-            });
-            scope.root.headerFlags.malloc = true;
-        }
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new variable_1.CVariableDestructors(scope, node);
     }
     CReturnStatement = __decorate([
-        template_1.CodeTemplate("\n{destructors}\n{#if retVarName}\n    ret = malloc(sizeof(*ret));\n    assert(ret != NULL);\n    ret->func = {expression};\n    {closureParams => ret->{name} = {value};\n}\n    return ret;\n{#else}\nreturn {expression};\n{/if}\n", ts.SyntaxKind.ReturnStatement)
+        template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
     ], CReturnStatement);
     return CReturnStatement;
 }());
@@ -2375,7 +2396,7 @@ var CVariableAllocation = /** @class */ (function () {
     function CVariableAllocation(scope, varName, varType, refNode) {
         this.varName = varName;
         this.needAllocateArray = varType instanceof types_1.ArrayType && varType.isDynamicArray;
-        this.needAllocateStruct = varType instanceof types_1.StructType;
+        this.needAllocateStruct = varType instanceof types_1.StructType || varType instanceof types_1.FuncType && varType.needsClosureStruct;
         this.needAllocateDict = varType instanceof types_1.DictType;
         this.initialCapacity = 4;
         this.gcVarName = scope.root.memoryManager.getGCVariableForNode(refNode);
@@ -4390,13 +4411,14 @@ var CConsoleLog = /** @class */ (function () {
             }
             for (var j = 0; j < nodeExpressions.length; j++) {
                 var _a = nodeExpressions[j], node_1 = _a.node, prefix = _a.prefix, postfix = _a.postfix;
+                var type = scope.root.typeHelper.getCType(node_1);
                 var nodesUnder = template_1.getAllNodesUnder(node_1);
                 var hasSideEffects = nodesUnder.some(function (n) { return typeguards_1.isSideEffectExpression(n); });
                 var accessor = "";
-                if (hasSideEffects) {
+                if (hasSideEffects && (type instanceof types_1.ArrayType || type instanceof types_1.StructType || type instanceof types_1.DictType || type === types_1.UniversalVarType)) {
                     var tempVarName = scope.root.symbolsHelper.addTemp(node_1, "tmp_result");
-                    var tempVarType = scope.root.typeHelper.getCType(node_1);
                     // crutch
+                    var tempVarType = type;
                     if (tempVarType instanceof types_1.ArrayType && !tempVarType.isDynamicArray)
                         tempVarType = types_1.getTypeText(tempVarType.elementType) + "*";
                     scope.variables.push(new variable_1.CVariable(scope, tempVarName, tempVarType));
@@ -4411,7 +4433,7 @@ var CConsoleLog = /** @class */ (function () {
                     prefix: (i_1 > 0 && j == 0 ? " " : "") + prefix,
                     postfix: postfix + (i_1 == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
                 };
-                printfs.push(new CPrintf(scope, node_1, accessor, scope.root.typeHelper.getCType(node_1), options));
+                printfs.push(new CPrintf(scope, node_1, accessor, type, options));
             }
         };
         for (var i_1 = 0; i_1 < printNodes.length; i_1++) {
@@ -6306,6 +6328,13 @@ var TypeHelper = /** @class */ (function () {
                 : type instanceof DictType ? type.elementType
                     : null;
         }));
+        addEquality(ts.isPropertyAssignment, function (n) { return n; }, type(function (n) {
+            var type = _this.getCType(n.initializer);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
         addEquality(ts.isPropertyAccessExpression, function (n) { return n; }, function (n) { return n.name; });
         addEquality(typeguards_1.isFieldPropertyAccess, function (n) { return n.expression; }, type(function (n) { return struct(n.name.getText(), n.pos, _this.getCType(n) || exports.PointerVarType); }));
         addEquality(typeguards_1.isFieldPropertyAccess, function (n) { return n; }, type(function (n) {
@@ -6394,18 +6423,24 @@ var TypeHelper = /** @class */ (function () {
             var closureParams = [];
             nodesInFunction.filter(function (n) { return ts.isIdentifier(n); })
                 .forEach(function (ident) {
-                var decl = _this.getDeclaration(ident);
-                var parentFunc = decl && !typeguards_1.isFunction(decl) && findParentFunction(decl);
-                var isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
-                var assigned = typeguards_1.isEqualsExpression(ident.parent) || typeguards_1.isCompoundAssignment(ident.parent);
-                if (parentFunc && parentFunc != node && isUnder(parentFunc, node) && !isFieldName) {
-                    var existing = closureParams.filter(function (p) { return p.node.escapedText === ident.escapedText; })[0];
-                    if (!existing)
-                        closureParams.push({ assigned: assigned, node: ident, refs: [ident] });
-                    else if (assigned && !existing.assigned)
-                        existing.assigned = true;
-                    if (existing)
-                        existing.refs.push(ident);
+                var identDecl = _this.getDeclaration(ident);
+                if (identDecl && typeguards_1.isFunction(identDecl)) {
+                    var identDeclType = _this.getCType(identDecl);
+                    [].push.apply(closureParams, identDeclType.closureParams);
+                }
+                else {
+                    var identDeclFunc = identDecl && findParentFunction(identDecl);
+                    var isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
+                    var assigned = typeguards_1.isEqualsExpression(ident.parent) || typeguards_1.isCompoundAssignment(ident.parent);
+                    if (identDeclFunc && identDeclFunc != node && isUnder(identDeclFunc, node) && !isFieldName) {
+                        var existing = closureParams.filter(function (p) { return p.node.escapedText === ident.escapedText; })[0];
+                        if (!existing)
+                            closureParams.push({ assigned: assigned, node: ident, refs: [ident] });
+                        else if (assigned && !existing.assigned)
+                            existing.assigned = true;
+                        if (existing)
+                            existing.refs.push(ident);
+                    }
                 }
             });
             var _loop_4 = function (p) {
