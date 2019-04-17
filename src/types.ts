@@ -202,6 +202,12 @@ export function findParentSourceFile(node: ts.Node): ts.SourceFile {
         parent = parent.parent;
     return parent;
 }
+export function isUnder(refNode, node) {
+    let parent = node;
+    while (parent && parent != refNode)
+        parent = parent.parent;
+    return parent;
+}
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
@@ -458,7 +464,7 @@ export class TypeHelper {
                     const parentFunc = decl && !isFunction(decl) && findParentFunction(decl);
                     const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
                     const assigned = isEqualsExpression(ident.parent) || isCompoundAssignment(ident.parent);
-                    if (parentFunc && parentFunc != node && !isFieldName) {
+                    if (parentFunc && parentFunc != node && isUnder(parentFunc, node) && !isFieldName) {
                         const existing = closureParams.filter(p => p.node.escapedText === ident.escapedText)[0];
                         if (!existing)
                             closureParams.push({ assigned, node: ident, refs: [ident] });
