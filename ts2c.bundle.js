@@ -1813,16 +1813,24 @@ var CReturnStatement = /** @class */ (function () {
         this.closureParams = [];
         var type = scope.root.typeHelper.getCType(node.expression);
         if (type instanceof types_1.FuncType && type.needsClosureStruct) {
+            var parentFunc_1 = types_1.findParentFunction(node);
+            var funcType_1 = scope.root.typeHelper.getCType(parentFunc_1);
             this.retVarName = scope.root.symbolsHelper.addTemp(node, "ret");
             scope.variables.push(new variable_1.CVariable(scope, this.retVarName, type));
-            this.closureParams = type.closureParams.map(function (p) { return p.node.text.replace(/^\*/, ""); });
+            this.closureParams = type.closureParams.map(function (p) {
+                var name = p.node.text.replace(/^\*/, "");
+                var value = name;
+                if (funcType_1 && funcType_1.needsClosureStruct && funcType_1.closureParams.some(function (p) { return p.node.text === name; }))
+                    value = scope.root.symbolsHelper.getClosureVarName(parentFunc_1) + "->" + name;
+                return { name: name, value: value };
+            });
             scope.root.headerFlags.malloc = true;
         }
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new variable_1.CVariableDestructors(scope, node);
     }
     CReturnStatement = __decorate([
-        template_1.CodeTemplate("\n{destructors}\n{#if retVarName}\n    ret = malloc(sizeof(*ret));\n    assert(ret != NULL);\n    ret->func = {expression};\n    {closureParams => ret->{this} = {this};\n}\n    return ret;\n{#else}\nreturn {expression};\n{/if}\n", ts.SyntaxKind.ReturnStatement)
+        template_1.CodeTemplate("\n{destructors}\n{#if retVarName}\n    ret = malloc(sizeof(*ret));\n    assert(ret != NULL);\n    ret->func = {expression};\n    {closureParams => ret->{name} = {value};\n}\n    return ret;\n{#else}\nreturn {expression};\n{/if}\n", ts.SyntaxKind.ReturnStatement)
     ], CReturnStatement);
     return CReturnStatement;
 }());
@@ -6131,6 +6139,13 @@ function findParentSourceFile(node) {
     return parent;
 }
 exports.findParentSourceFile = findParentSourceFile;
+function isUnder(refNode, node) {
+    var parent = node;
+    while (parent && parent != refNode)
+        parent = parent.parent;
+    return parent;
+}
+exports.isUnder = isUnder;
 var TypeHelper = /** @class */ (function () {
     function TypeHelper(typeChecker, allNodes) {
         this.typeChecker = typeChecker;
@@ -6383,7 +6398,7 @@ var TypeHelper = /** @class */ (function () {
                 var parentFunc = decl && !typeguards_1.isFunction(decl) && findParentFunction(decl);
                 var isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
                 var assigned = typeguards_1.isEqualsExpression(ident.parent) || typeguards_1.isCompoundAssignment(ident.parent);
-                if (parentFunc && parentFunc != node && !isFieldName) {
+                if (parentFunc && parentFunc != node && isUnder(parentFunc, node) && !isFieldName) {
                     var existing = closureParams.filter(function (p) { return p.node.escapedText === ident.escapedText; })[0];
                     if (!existing)
                         closureParams.push({ assigned: assigned, node: ident, refs: [ident] });
