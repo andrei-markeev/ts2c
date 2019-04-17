@@ -81,7 +81,7 @@ var MemoryManager = /** @class */ (function () {
         }
     };
     MemoryManager.prototype.getGCVariablesForScope = function (node) {
-        var parentDecl = this.findParentFunctionNode(node);
+        var parentDecl = types_1.findParentFunction(node);
         var scopeId = parentDecl && parentDecl.pos + 1 + "" || "main";
         var realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId;
         var gcVars = [];
@@ -120,7 +120,7 @@ var MemoryManager = /** @class */ (function () {
             return null;
     };
     MemoryManager.prototype.getDestructorsForScope = function (node) {
-        var parentDecl = this.findParentFunctionNode(node);
+        var parentDecl = types_1.findParentFunction(node);
         var scopeId = parentDecl && parentDecl.pos + 1 || "main";
         var destructors = [];
         if (this.scopes[scopeId]) {
@@ -176,7 +176,7 @@ var MemoryManager = /** @class */ (function () {
                 heapNode = existingVariable;
             }
         }
-        var varFuncNode = this.findParentFunctionNode(heapNode);
+        var varFuncNode = types_1.findParentFunction(heapNode);
         var topScope = varFuncNode && varFuncNode.pos + 1 || "main";
         var isSimple = true;
         if (this.isInsideLoop(heapNode))
@@ -200,7 +200,7 @@ var MemoryManager = /** @class */ (function () {
             for (var _i = 0, refs_1 = refs; _i < refs_1.length; _i++) {
                 var ref = refs_1[_i];
                 visited[ref.pos + "_" + ref.end] = true;
-                var parentNode = this.findParentFunctionNode(ref);
+                var parentNode = types_1.findParentFunction(ref);
                 if (!parentNode)
                     topScope = "main";
                 if (ref.kind == ts.SyntaxKind.PropertyAccessExpression) {
@@ -232,7 +232,7 @@ var MemoryManager = /** @class */ (function () {
                     if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
                         console.log(heapNode.getText() + " -> Found function call!");
                         if (topScope !== "main") {
-                            var funcNode = this.findParentFunctionNode(call);
+                            var funcNode = types_1.findParentFunction(call);
                             topScope = funcNode && funcNode.pos + 1 || "main";
                             var targetScope = node.parent.pos + 1 + "";
                             isSimple = false;
@@ -278,7 +278,7 @@ var MemoryManager = /** @class */ (function () {
                 }
                 else if (ref.parent && ref.parent.kind == ts.SyntaxKind.ReturnStatement && !returned) {
                     returned = true;
-                    queue.push(parentNode.name);
+                    queue.push(ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name);
                     console.log(heapNode.getText() + " -> Found variable returned from the function!");
                     isSimple = false;
                 }
@@ -351,13 +351,6 @@ var MemoryManager = /** @class */ (function () {
             }
         }
         return false;
-    };
-    MemoryManager.prototype.findParentFunctionNode = function (node) {
-        var parent = node;
-        while (parent && parent.kind != ts.SyntaxKind.FunctionDeclaration) {
-            parent = parent.parent;
-        }
-        return parent;
     };
     MemoryManager.prototype.isInsideLoop = function (node) {
         var parent = node;
@@ -516,8 +509,8 @@ var typeguards_1 = require("../typeguards");
 var literals_1 = require("./literals");
 var CCallExpression = /** @class */ (function () {
     function CCallExpression(scope, call) {
-        this.funcName = '';
-        this.standardCall = '';
+        this.funcName = null;
+        this.standardCall = null;
         this.standardCall = standard_1.StandardCallHelper.createTemplate(scope, call);
         if (this.standardCall)
             return;
@@ -527,9 +520,15 @@ var CCallExpression = /** @class */ (function () {
             return;
         this.funcName = template_1.CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map(function (a, i) { return funcType.parameterTypes[i] === types_1.UniversalVarType ? new typeconvert_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
-        for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
-            var p = _a[_i];
-            this.arguments.push(p.node.text.replace(/^\*/, "&"));
+        if (funcType.needsClosureStruct) {
+            this.arguments.push(this.funcName);
+            this.funcName = template_1.CodeTemplateFactory.templateToString(this.funcName) + "->func";
+        }
+        else {
+            for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
+                var p = _a[_i];
+                this.arguments.push(p.node.text.replace(/^\*/, "&"));
+            }
         }
     }
     CCallExpression = __decorate([
@@ -638,6 +637,10 @@ var CElementAccess = /** @class */ (function () {
             type = scope.root.typeHelper.getCType(node);
             elementAccess = template_1.CodeTemplateFactory.createForNode(scope, node);
         }
+        var parentFunc = types_1.findParentFunction(node);
+        var funcType = scope.root.typeHelper.getCType(parentFunc);
+        if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }); }))
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + template_1.CodeTemplateFactory.templateToString(elementAccess).replace(/^\*/, "");
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
     CElementAccess_1 = CElementAccess;
@@ -1281,6 +1284,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var template_1 = require("../template");
 var variable_1 = require("./variable");
+var types_1 = require("../types");
 var standard_1 = require("../standard");
 var typeguards_1 = require("../typeguards");
 var CFunctionPrototype = /** @class */ (function () {
@@ -1319,7 +1323,7 @@ var CFunction = /** @class */ (function () {
                 funcExprName = node.parent.left.text + "_func";
             if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
                 funcExprName = node.parent.name.text + "_func";
-            this.name = root.symbolsHelper.addTemp(node, funcExprName);
+            this.name = root.symbolsHelper.addTemp(types_1.findParentSourceFile(node), funcExprName);
         }
         var funcType = root.typeHelper.getCType(node);
         this.funcDecl = new variable_1.CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
@@ -1328,10 +1332,16 @@ var CFunction = /** @class */ (function () {
         });
         if (funcType.instanceType)
             this.parameters.unshift(new variable_1.CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
-        for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
-            var p = _a[_i];
-            var type = root.typeHelper.getCType(p.node);
-            this.parameters.push(new variable_1.CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+        if (funcType.needsClosureStruct) {
+            var closureParamVarName = root.symbolsHelper.getClosureVarName(node);
+            this.parameters.push(new variable_1.CVariable(this, closureParamVarName, funcType));
+        }
+        else {
+            for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
+                var p = _a[_i];
+                var type = root.typeHelper.getCType(p.node);
+                this.parameters.push(new variable_1.CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+            }
         }
         this.variables = [];
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
@@ -1392,7 +1402,7 @@ var CFunctionExpression = /** @class */ (function () {
 exports.CFunctionExpression = CFunctionExpression;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../standard":14,"../template":42,"../typeguards":43,"./variable":11}],7:[function(require,module,exports){
+},{"../standard":14,"../template":42,"../typeguards":43,"../types":44,"./variable":11}],7:[function(require,module,exports){
 (function (global){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1799,11 +1809,20 @@ var CEmptyStatement = /** @class */ (function () {
 exports.CEmptyStatement = CEmptyStatement;
 var CReturnStatement = /** @class */ (function () {
     function CReturnStatement(scope, node) {
+        this.retVarName = null;
+        this.closureParams = [];
+        var type = scope.root.typeHelper.getCType(node.expression);
+        if (type instanceof types_1.FuncType && type.needsClosureStruct) {
+            this.retVarName = scope.root.symbolsHelper.addTemp(node, "ret");
+            scope.variables.push(new variable_1.CVariable(scope, this.retVarName, type));
+            this.closureParams = type.closureParams.map(function (p) { return p.node.text.replace(/^\*/, ""); });
+            scope.root.headerFlags.malloc = true;
+        }
         this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new variable_1.CVariableDestructors(scope, node);
     }
     CReturnStatement = __decorate([
-        template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
+        template_1.CodeTemplate("\n{destructors}\n{#if retVarName}\n    ret = malloc(sizeof(*ret));\n    assert(ret != NULL);\n    ret->func = {expression};\n    {closureParams => ret->{this} = {this};\n}\n    return ret;\n{#else}\nreturn {expression};\n{/if}\n", ts.SyntaxKind.ReturnStatement)
     ], CReturnStatement);
     return CReturnStatement;
 }());
@@ -2456,6 +2475,8 @@ var CVariable = /** @class */ (function () {
             scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof types_1.ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
+        else if (type instanceof types_1.FuncType && type.closureParams.length)
+            scope.root.symbolsHelper.ensureClosureStruct(type, name);
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
         if (type == types_1.BooleanVarType)
@@ -5374,6 +5395,7 @@ var SymbolsHelper = /** @class */ (function () {
             ]
         };
         this.iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
+        this.closureVarNames = [];
     }
     SymbolsHelper.prototype.getStructsAndFunctionPrototypes = function () {
         var _this = this;
@@ -5396,6 +5418,21 @@ var SymbolsHelper = /** @class */ (function () {
             }); })
         }); });
         return [structs];
+    };
+    SymbolsHelper.prototype.ensureClosureStruct = function (type, name) {
+        var _this = this;
+        if (!type.structName)
+            type.structName = name + "_t";
+        var i = 0;
+        var params = type.closureParams.reduce(function (a, p) {
+            a[p.node.text.replace(/^\*/, "")] = { type: _this.typeHelper.getCType(p.node), order: ++i };
+            return a;
+        }, {});
+        params["func"] = { type: type.getText(true), order: 0 };
+        var closureStruct = new types_1.StructType(params);
+        var found = this.findStructByType(closureStruct);
+        if (!found)
+            this.userStructs[type.structName] = closureStruct;
     };
     SymbolsHelper.prototype.ensureStruct = function (structType, name) {
         if (!structType.structName)
@@ -5483,6 +5520,13 @@ var SymbolsHelper = /** @class */ (function () {
         if (reserve)
             this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
+    };
+    SymbolsHelper.prototype.getClosureVarName = function (node) {
+        if (!this.closureVarNames[node.pos]) {
+            var name_1 = this.addTemp(node, "closure");
+            this.closureVarNames[node.pos] = name_1;
+        }
+        return this.closureVarNames[node.pos];
     };
     return SymbolsHelper;
 }());
@@ -5983,14 +6027,16 @@ var DictType = /** @class */ (function () {
 }());
 exports.DictType = DictType;
 var FuncType = /** @class */ (function () {
-    function FuncType(returnType, parameterTypes, instanceType, closureParams) {
+    function FuncType(returnType, parameterTypes, instanceType, closureParams, needsClosureStruct) {
         if (parameterTypes === void 0) { parameterTypes = []; }
         if (instanceType === void 0) { instanceType = null; }
         if (closureParams === void 0) { closureParams = []; }
+        if (needsClosureStruct === void 0) { needsClosureStruct = false; }
         this.returnType = returnType;
         this.parameterTypes = parameterTypes;
         this.instanceType = instanceType;
         this.closureParams = closureParams;
+        this.needsClosureStruct = needsClosureStruct;
     }
     FuncType.getReturnType = function (typeHelper, node) {
         var type = typeHelper.getCType(node);
@@ -6000,11 +6046,19 @@ var FuncType = /** @class */ (function () {
         var type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.instanceType : null;
     };
-    FuncType.prototype.getText = function () {
+    FuncType.prototype.getText = function (forceFuncType) {
+        if (forceFuncType === void 0) { forceFuncType = false; }
+        if (this.closureParams.length && !forceFuncType)
+            return 'struct ' + this.structName + ' *';
         var retType = exports.getTypeText(this.returnType).replace(/ \{var\}\[\d+\]/g, "* {var}").replace(/^static /, "");
         if (retType.indexOf("{var}") == -1)
             retType += " {var}";
-        return retType.replace(" {var}", " (*{var})") + "(" + this.parameterTypes.map(function (t) { return exports.getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, ""); }).join(', ') + ")";
+        return retType.replace(" {var}", " (*{var})") + "("
+            + this.parameterTypes
+                .map(function (t) { return exports.getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, ""); })
+                .concat(this.closureParams.length ? ['struct ' + this.structName + ' *'] : [])
+                .join(', ')
+            + ")";
     };
     FuncType.prototype.getBodyText = function () {
         var paramTypes = [].concat(this.parameterTypes);
@@ -6012,7 +6066,7 @@ var FuncType = /** @class */ (function () {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType)
             + "(" + paramTypes.map(function (pt) { return pt ? getTypeBodyText(pt) : exports.PointerVarType; }).join(", ") + ")"
-            + "[[" + this.closureParams.map(function (p) { return p.node.text; }).join(", ") + "]]";
+            + "[[" + this.closureParams.map(function (p) { return p.node.text; }).join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
     };
     return FuncType;
 }());
@@ -6167,6 +6221,13 @@ var TypeHelper = /** @class */ (function () {
         // expressions
         addEquality(ts.isIdentifier, function (n) { return n; }, function (n) { return _this.getDeclaration(n); });
         addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, function (n) { return n.right; });
+        addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, type(function (n) {
+            var type = _this.getCType(n.right);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
         addEquality(ts.isConditionalExpression, function (n) { return n.whenTrue; }, function (n) { return n.whenFalse; });
         addEquality(ts.isConditionalExpression, function (n) { return n; }, function (n) { return n.whenTrue; });
         addEquality(typeguards_1.isUnaryExpression, function (n) { return n; }, type(function (n) { return getUnaryExprResultType(n.operator, _this.getCType(n.operand)); }));
@@ -6323,12 +6384,12 @@ var TypeHelper = /** @class */ (function () {
                 var isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
                 var assigned = typeguards_1.isEqualsExpression(ident.parent) || typeguards_1.isCompoundAssignment(ident.parent);
                 if (parentFunc && parentFunc != node && !isFieldName) {
-                    var existing = closureParams.filter(function (p) { return p.node.text === ident.text; })[0];
+                    var existing = closureParams.filter(function (p) { return p.node.escapedText === ident.escapedText; })[0];
                     if (!existing)
                         closureParams.push({ assigned: assigned, node: ident, refs: [ident] });
                     else if (assigned && !existing.assigned)
                         existing.assigned = true;
-                    else
+                    if (existing)
                         existing.refs.push(ident);
                 }
             });
@@ -6360,6 +6421,13 @@ var TypeHelper = /** @class */ (function () {
         }
         // statements
         addEquality(ts.isVariableDeclaration, function (n) { return n; }, function (n) { return n.initializer; });
+        addEquality(ts.isVariableDeclaration, function (n) { return n; }, type(function (n) {
+            var type = _this.getCType(n.initializer);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
         addEquality(typeguards_1.isForOfWithSimpleInitializer, function (n) { return n.expression; }, type(function (n) { return new ArrayType(_this.getCType(n.initializer.declarations[0]) || exports.PointerVarType, 0, false); }));
         addEquality(typeguards_1.isForOfWithSimpleInitializer, function (n) { return n.initializer.declarations[0]; }, type(function (n) {
             var type = _this.getCType(n.expression);
@@ -6596,8 +6664,8 @@ var TypeHelper = /** @class */ (function () {
             for (var i_6 = 0; i_6 < closureParamCount; i_6++) {
                 closureParams.push(type1.closureParams[i_6] || type2.closureParams[i_6]);
             }
-            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced)
-                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams)), replaced: true };
+            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced || type1.needsClosureStruct != type2.needsClosureStruct)
+                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams, type1.needsClosureStruct || type2.needsClosureStruct)), replaced: true };
             else
                 return noChanges;
         }
