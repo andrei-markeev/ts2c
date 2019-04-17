@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CProgram, IScope} from '../program';
-import {ArrayType, NumberVarType, StringVarType} from '../types';
+import {ArrayType, NumberVarType, StringVarType, FuncType} from '../types';
 import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
 import {CExpression, CCondition} from './expressions';
 import {CElementAccess, CArraySize, CSimpleElementAccess} from './elementaccess';
-import {AssignmentHelper} from './assignment';
+import {AssignmentHelper, CAssignment} from './assignment';
 
 @CodeTemplate(`{statement}{breakLabel}`, ts.SyntaxKind.LabeledStatement)
 export class CLabeledStatement {
@@ -68,12 +68,30 @@ export class CEmptyStatement {
 
 @CodeTemplate(`
 {destructors}
+{#if retVarName}
+    ret = malloc(sizeof(*ret));
+    assert(ret != NULL);
+    ret->func = {expression};
+    {closureParams => ret->{this} = {this};\n}
+    return ret;
+{#else}
 return {expression};
+{/if}
 `, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement {
     public expression: CExpression;
     public destructors: CVariableDestructors;
+    public retVarName: string = null;
+    public closureParams: string[] = [];
     constructor(scope: IScope, node: ts.ReturnStatement) {
+        const type = scope.root.typeHelper.getCType(node.expression);
+        if (type instanceof FuncType && type.needsClosureStruct)
+        {
+            this.retVarName = scope.root.symbolsHelper.addTemp(node, "ret");
+            scope.variables.push(new CVariable(scope, this.retVarName, type));
+            this.closureParams = type.closureParams.map(p => p.node.text.replace(/^\*/, ""));
+            scope.root.headerFlags.malloc = true;
+        }
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
     }

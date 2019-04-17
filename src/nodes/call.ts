@@ -18,8 +18,8 @@ import { CObjectLiteralExpression } from './literals';
     /* Not supported yet: calling function that references 'this'. Use 'new'. */
 {/if}`, ts.SyntaxKind.CallExpression)
 export class CCallExpression {
-    public funcName: string = '';
-    public standardCall: CExpression = '';
+    public funcName: any = null;
+    public standardCall: CExpression = null;
     public arguments: CExpression[];
     constructor(scope: IScope, call: ts.CallExpression) {
 
@@ -34,8 +34,13 @@ export class CCallExpression {
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
-        for (let p of funcType.closureParams)
-            this.arguments.push(p.node.text.replace(/^\*/, "&"));
+        if (funcType.needsClosureStruct) {
+            this.arguments.push(this.funcName);
+            this.funcName = CodeTemplateFactory.templateToString(this.funcName) + "->func";
+        } else {
+            for (let p of funcType.closureParams)
+                this.arguments.push(p.node.text.replace(/^\*/, "&"));
+        }
     }
 }
 

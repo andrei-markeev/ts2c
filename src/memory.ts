@@ -3,7 +3,7 @@ import { TypeHelper, ArrayType, StructType, DictType, StringVarType, NumberVarTy
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp } from './typeguards';
+import { isPlusOp, isFunction } from './typeguards';
 
 type VariableScopeInfo = {
     node: ts.Node;
@@ -300,7 +300,7 @@ export class MemoryManager {
                 }
                 else if (ref.parent && ref.parent.kind == ts.SyntaxKind.ReturnStatement && !returned) {
                     returned = true;
-                    queue.push(parentNode);
+                    queue.push(ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name);
                     console.log(heapNode.getText() + " -> Found variable returned from the function!");
                     isSimple = false;
                 }

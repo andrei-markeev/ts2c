@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType, getTypeText} from '../types';
+import {FuncType, findParentSourceFile} from '../types';
 import { StandardCallHelper } from '../standard';
 import { isEqualsExpression } from '../typeguards';
 
@@ -55,7 +55,7 @@ export class CFunction implements IScope {
                 funcExprName = node.parent.left.text + "_func";
             if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
                 funcExprName = node.parent.name.text + "_func";
-            this.name = root.symbolsHelper.addTemp(node, funcExprName);
+            this.name = root.symbolsHelper.addTemp(findParentSourceFile(node), funcExprName);
         }
         const funcType = root.typeHelper.getCType(node) as FuncType;
         this.funcDecl = new CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
@@ -65,9 +65,14 @@ export class CFunction implements IScope {
         });
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
-        for (let p of funcType.closureParams) {
-            const type = root.typeHelper.getCType(p.node);
-            this.parameters.push(new CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+        if (funcType.needsClosureStruct) {
+            let closureParamVarName = root.symbolsHelper.getClosureVarName(node);
+            this.parameters.push(new CVariable(this, closureParamVarName, funcType));
+        } else {
+            for (let p of funcType.closureParams) {
+                const type = root.typeHelper.getCType(p.node);
+                this.parameters.push(new CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+            }
         }
 
         this.variables = [];

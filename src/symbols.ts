@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { TypeHelper, CType, StructType, ArrayType, findParentFunction, NumberVarType } from './types';
+import { TypeHelper, CType, StructType, ArrayType, findParentFunction, NumberVarType, FuncType } from './types';
 
 export class SymbolsHelper {
 
@@ -30,6 +30,21 @@ export class SymbolsHelper {
         }));
 
         return [structs];
+    }
+
+    public ensureClosureStruct(type: FuncType, name: string) {
+        if (!type.structName)
+            type.structName = name + "_t";
+        let i = 0;
+        const params = type.closureParams.reduce((a, p) => {
+            a[p.node.text.replace(/^\*/, "")] = { type: this.typeHelper.getCType(p.node), order: ++i };
+            return a;
+        }, {});
+        params["func"] = { type: type.getText(true), order: 0 };
+        const closureStruct = new StructType(params);
+        let found = this.findStructByType(closureStruct);
+        if (!found)
+            this.userStructs[type.structName] = closureStruct;
     }
 
     public ensureStruct(structType: StructType, name: string) {
@@ -144,5 +159,14 @@ export class SymbolsHelper {
             this.temporaryVariables[scopeId].push(proposedName);
         return proposedName;
     }
-    
+
+    private closureVarNames: { [pos: number]: string } = [];
+    public getClosureVarName(node: ts.Node) {
+        if (!this.closureVarNames[node.pos]) {
+            const name = this.addTemp(node, "closure");
+            this.closureVarNames[node.pos] = name;
+        }
+        return this.closureVarNames[node.pos];
+    }
+
 }

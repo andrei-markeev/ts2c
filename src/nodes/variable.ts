@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, TypeHelper, UniversalVarType, StringVarType } from '../types';
+import {ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, TypeHelper, UniversalVarType, StringVarType, FuncType } from '../types';
 import {AssignmentHelper, CAssignment} from './assignment';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import { CExpression } from './expressions';
@@ -249,6 +249,8 @@ export class CVariable {
             scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
+        else if (type instanceof FuncType && type.closureParams.length)
+            scope.root.symbolsHelper.ensureClosureStruct(type, name);
 
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;

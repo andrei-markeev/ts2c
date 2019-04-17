@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType} from '../types';
+import {CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, findParentFunction, FuncType} from '../types';
 import {CExpression} from './expressions';
 import { CUndefined } from './literals';
 import { CAsUniversalVar } from './typeconvert';
@@ -61,6 +61,11 @@ export class CElementAccess {
             type = scope.root.typeHelper.getCType(node);
             elementAccess = CodeTemplateFactory.createForNode(scope, node);
         }
+
+        const parentFunc = findParentFunction(node);
+        const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
+        if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(<any>elementAccess).replace(/^\*/, "");
 
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }

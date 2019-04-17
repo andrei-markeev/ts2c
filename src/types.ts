@@ -114,11 +114,19 @@ export class FuncType {
         const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.instanceType : null
     }
-    public getText() {
+    public structName: string;
+    public getText(forceFuncType:boolean = false) {
+        if (this.closureParams.length && !forceFuncType)
+            return 'struct ' + this.structName + ' *';
         let retType = getTypeText(this.returnType).replace(/ \{var\}\[\d+\]/g, "* {var}").replace(/^static /, "");
         if (retType.indexOf("{var}") == -1)
             retType += " {var}";
-        return retType.replace(" {var}", " (*{var})") + "(" + this.parameterTypes.map(t => getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, "")).join(', ') + ")";
+        return retType.replace(" {var}", " (*{var})") + "("
+            + this.parameterTypes
+                .map(t => getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, ""))
+                .concat(this.closureParams.length ? ['struct ' + this.structName + ' *'] : [])
+                .join(', ')
+            + ")";
     }
     public getBodyText() {
         const paramTypes = [].concat(this.parameterTypes);
@@ -126,13 +134,14 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType) 
             + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
-            + "[[" + this.closureParams.map(p => p.node.text).join(", ") + "]]";
+            + "[[" + this.closureParams.map(p => p.node.text).join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
     }
     constructor(
         public returnType: CType,
         public parameterTypes: CType[] = [],
         public instanceType: CType = null,
-        public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = []
+        public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = [],
+        public needsClosureStruct: boolean = false
     ) { }
 }
 
@@ -294,6 +303,13 @@ export class TypeHelper {
         // expressions
         addEquality(ts.isIdentifier, n => n, n => this.getDeclaration(n));
         addEquality(isEqualsExpression, n => n.left, n => n.right);
+        addEquality(isEqualsExpression, n => n.left, type(n => {
+            const type = this.getCType(n.right);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
         addEquality(isUnaryExpression, n => n, type(n => getUnaryExprResultType(n.operator, this.getCType(n.operand))));
@@ -443,12 +459,13 @@ export class TypeHelper {
                     const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;
                     const assigned = isEqualsExpression(ident.parent) || isCompoundAssignment(ident.parent);
                     if (parentFunc && parentFunc != node && !isFieldName) {
-                        const existing = closureParams.filter(p => p.node.text === ident.text)[0];
+                        const existing = closureParams.filter(p => p.node.escapedText === ident.escapedText)[0];
                         if (!existing)
                             closureParams.push({ assigned, node: ident, refs: [ident] });
                         else if (assigned && !existing.assigned)
                             existing.assigned = true;
-                        else
+                        
+                        if (existing)
                             existing.refs.push(ident);
                     }
                 });
@@ -474,6 +491,13 @@ export class TypeHelper {
 
         // statements
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
+        addEquality(ts.isVariableDeclaration, n => n, type(n => {
+            const type = this.getCType(n.initializer);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }))
         addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.getCType(n.initializer.declarations[0]) || PointerVarType, 0, false)));
         addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarations[0], type(n => {
             const type = this.getCType(n.expression);
@@ -737,9 +761,9 @@ export class TypeHelper {
             for (let i = 0; i < closureParamCount; i++) {
                 closureParams.push(type1.closureParams[i] || type2.closureParams[i]);
             }
-            
-            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced)
-                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams)), replaced: true };
+
+            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced || type1.needsClosureStruct != type2.needsClosureStruct)
+                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams, type1.needsClosureStruct || type2.needsClosureStruct)), replaced: true };
             else
                 return noChanges;
         }
