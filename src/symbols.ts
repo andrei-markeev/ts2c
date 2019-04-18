@@ -37,7 +37,7 @@ export class SymbolsHelper {
             type.structName = name + "_t";
         let i = 0;
         const params = type.closureParams.reduce((a, p) => {
-            a[p.node.text.replace(/^\*/, "")] = { type: this.typeHelper.getCType(p.node), order: ++i };
+            a[p.node.text] = { type: this.typeHelper.getCType(p.node), order: ++i };
             return a;
         }, {});
         params["func"] = { type: type.getText(true), order: 0 };

@@ -65,7 +65,9 @@ export class CElementAccess {
         const parentFunc = findParentFunction(node);
         const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
         if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
-            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(<any>elementAccess).replace(/^\*/, "");
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(<any>elementAccess);
+        else if (funcType && funcType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
+            elementAccess = "*" + CodeTemplateFactory.templateToString(<any>elementAccess);
 
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }

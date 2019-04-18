@@ -141,7 +141,7 @@ export class CFunctionExpression {
             const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
             const parentClosureVarName = parentFuncType && parentFuncType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
             this.closureParams = type.closureParams.map(p => {
-                const key = p.node.text.replace(/^\*/, "");
+                const key = p.node.text;
                 let value = key;
                 if (parentClosureVarName && parentFuncType.closureParams.some(p => p.node.text === key))
                     value = parentClosureVarName + "->" + key;

@@ -488,16 +488,6 @@ export class TypeHelper {
                     }
                 });
 
-            for (let p of closureParams) {
-                if (p.assigned && p.node.text.indexOf("*") != 0) {
-                    // this is admittedly a hacky way to achieve passing variable by reference
-                    // hopefully some better solution can be found later
-                    const newText = "*" + p.node.text;
-                    for (let ref of p.refs)
-                        Object.defineProperty(ref, "text", { get: () => newText });
-                }
-            }
-
             return new FuncType(VoidType, [], null, closureParams);
 
         }));

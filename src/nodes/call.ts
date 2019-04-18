@@ -42,9 +42,8 @@ export class CCallExpression {
                 const parentFunc = findParentFunction(call);
                 const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
                 const closureVarName = funcType && funcType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
-                const name = p.node.text.replace(/^\*/, "");
-                let value = name;
-                if (closureVarName && funcType.closureParams.some(p => p.node.text.replace(/^\*/, "") === name))
+                let value = p.node.text;
+                if (closureVarName && funcType.closureParams.some(p => p.node.text === value))
                     value = closureVarName + "->" + name;
                 this.arguments.push((p.assigned ? "&" : "") + value);
             }
