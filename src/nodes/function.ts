@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
 import {CVariable, CVariableDestructors, CVariableAllocation} from './variable';
 import {IScope, CProgram} from '../program';
-import {FuncType, findParentSourceFile, findParentFunction} from '../types';
+import {FuncType, findParentSourceFile, findParentFunction, getTypeText} from '../types';
 import { StandardCallHelper } from '../standard';
 import { isEqualsExpression } from '../typeguards';
 import { CExpression } from './expressions';
@@ -72,7 +72,8 @@ export class CFunction implements IScope {
         } else {
             for (let p of funcType.closureParams) {
                 const type = root.typeHelper.getCType(p.node);
-                this.parameters.push(new CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+                const ptype = p.assigned ? getTypeText(type) + "*" : type;
+                this.parameters.push(new CVariable(this, p.node.text, ptype, { removeStorageSpecifier: true }));
             }
         }
 

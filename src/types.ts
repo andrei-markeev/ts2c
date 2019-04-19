@@ -468,9 +468,12 @@ export class TypeHelper {
             nodesInFunction.filter(n => ts.isIdentifier(n))
                 .forEach((ident: ts.Identifier) => {
                     const identDecl = this.getDeclaration(ident);
-                    if (identDecl && isFunction(identDecl)) {
+                    if (identDecl && isFunction(identDecl) && !isUnder(node, identDecl)) {
                         const identDeclType = this.getCType(identDecl) as FuncType;
-                        [].push.apply(closureParams, identDeclType.closureParams);
+                        for (let param of identDeclType.closureParams) {
+                            if (!closureParams.some(p => p.node.text === param.node.text))
+                                closureParams.push(param);
+                        }
                     } else {
                         const identDeclFunc = identDecl && findParentFunction(identDecl);
                         const isFieldName = ts.isPropertyAccessExpression(ident.parent) && ident.parent.name === ident;

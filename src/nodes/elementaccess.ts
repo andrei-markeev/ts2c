@@ -22,6 +22,10 @@ export class CElementAccess {
             if (isInBoolContext(node) && type instanceof ArrayType && !type.isDynamicArray) {
                 argumentExpression = "0";
             }
+            else if (type instanceof FuncType && type.needsClosureStruct) {
+                const decl = scope.root.typeHelper.getDeclaration(node);
+                elementAccess = scope.root.memoryManager.getReservedTemporaryVarName(decl) || elementAccess;
+            }
         } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
             type = scope.root.typeHelper.getCType(propAccess.expression);
@@ -63,12 +67,12 @@ export class CElementAccess {
         }
 
         const parentFunc = findParentFunction(node);
-        const funcType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
-        if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
+        const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
+        if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
             elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(<any>elementAccess);
-        else if (funcType && funcType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
+        else if (parentFuncType && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
             elementAccess = "*" + CodeTemplateFactory.templateToString(<any>elementAccess);
-
+        
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
 }
