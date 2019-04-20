@@ -529,8 +529,10 @@ var CCallExpression = /** @class */ (function () {
             return;
         // calling function that uses "this"
         var funcType = scope.root.typeHelper.getCType(call.expression);
-        if (funcType && funcType.instanceType != null)
+        if (!funcType || funcType.instanceType != null) {
+            this.nodeText = call.getText();
             return;
+        }
         this.funcName = template_1.CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map(function (a, i) { return funcType.parameterTypes[i] === types_1.UniversalVarType ? new typeconvert_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
         if (funcType.needsClosureStruct) {
@@ -542,10 +544,9 @@ var CCallExpression = /** @class */ (function () {
                 var parentFunc = types_1.findParentFunction(call);
                 var funcType_1 = scope.root.typeHelper.getCType(parentFunc);
                 var closureVarName = funcType_1 && funcType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
-                var name_1 = p.node.text.replace(/^\*/, "");
-                var value = name_1;
-                if (closureVarName && funcType_1.closureParams.some(function (p) { return p.node.text.replace(/^\*/, "") === name_1; }))
-                    value = closureVarName + "->" + name_1;
+                var value = p.node.text;
+                if (closureVarName && funcType_1.closureParams.some(function (p) { return p.node.text === value; }))
+                    value = closureVarName + "->" + value;
                 this_1.arguments.push((p.assigned ? "&" : "") + value);
             };
             var this_1 = this;
@@ -556,7 +557,7 @@ var CCallExpression = /** @class */ (function () {
         }
     }
     CCallExpression = __decorate([
-        template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#elseif funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Not supported yet: calling function that references 'this'. Use 'new'. */\n{/if}", ts.SyntaxKind.CallExpression)
+        template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#elseif funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Unsupported function call: nodeText */\n{/if}", ts.SyntaxKind.CallExpression)
     ], CCallExpression);
     return CCallExpression;
 }());
@@ -621,6 +622,10 @@ var CElementAccess = /** @class */ (function () {
             if (typeguards_1.isInBoolContext(node) && type instanceof types_1.ArrayType && !type.isDynamicArray) {
                 argumentExpression = "0";
             }
+            else if (type instanceof types_1.FuncType && type.needsClosureStruct) {
+                var decl = scope.root.typeHelper.getDeclaration(node);
+                elementAccess = scope.root.memoryManager.getReservedTemporaryVarName(decl) || elementAccess;
+            }
         }
         else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             var propAccess = node;
@@ -662,9 +667,11 @@ var CElementAccess = /** @class */ (function () {
             elementAccess = template_1.CodeTemplateFactory.createForNode(scope, node);
         }
         var parentFunc = types_1.findParentFunction(node);
-        var funcType = scope.root.typeHelper.getCType(parentFunc);
-        if (funcType && funcType.needsClosureStruct && funcType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }); }))
-            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + template_1.CodeTemplateFactory.templateToString(elementAccess).replace(/^\*/, "");
+        var parentFuncType = scope.root.typeHelper.getCType(parentFunc);
+        if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }); }))
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + template_1.CodeTemplateFactory.templateToString(elementAccess);
+        else if (parentFuncType && parentFuncType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }) && p.assigned; }))
+            elementAccess = "*" + template_1.CodeTemplateFactory.templateToString(elementAccess);
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
     CElementAccess_1 = CElementAccess;
@@ -1364,7 +1371,8 @@ var CFunction = /** @class */ (function () {
             for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
                 var p = _a[_i];
                 var type = root.typeHelper.getCType(p.node);
-                this.parameters.push(new variable_1.CVariable(this, p.node.text, type, { removeStorageSpecifier: true }));
+                var ptype = p.assigned ? types_1.getTypeText(type) + "*" : type;
+                this.parameters.push(new variable_1.CVariable(this, p.node.text, ptype, { removeStorageSpecifier: true }));
             }
         }
         this.variables = [];
@@ -1380,7 +1388,7 @@ var CFunction = /** @class */ (function () {
             _loop_1(gcVarName);
         }
         node.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
-        if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
+        if (node.body.statements.length > 0 && node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
             this.destructors = new variable_1.CVariableDestructors(this, node);
         }
         var nodesInFunction = template_1.getAllNodesUnder(node);
@@ -1420,7 +1428,7 @@ var CFunctionExpression = /** @class */ (function () {
             var parentFuncType_1 = scope.root.typeHelper.getCType(parentFunc);
             var parentClosureVarName_1 = parentFuncType_1 && parentFuncType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
             this.closureParams = type.closureParams.map(function (p) {
-                var key = p.node.text.replace(/^\*/, "");
+                var key = p.node.text;
                 var value = key;
                 if (parentClosureVarName_1 && parentFuncType_1.closureParams.some(function (p) { return p.node.text === key; }))
                     value = parentClosureVarName_1 + "->" + key;
@@ -5455,7 +5463,7 @@ var SymbolsHelper = /** @class */ (function () {
             type.structName = name + "_t";
         var i = 0;
         var params = type.closureParams.reduce(function (a, p) {
-            a[p.node.text.replace(/^\*/, "")] = { type: _this.typeHelper.getCType(p.node), order: ++i };
+            a[p.node.text] = { type: _this.typeHelper.getCType(p.node), order: ++i };
             return a;
         }, {});
         params["func"] = { type: type.getText(true), order: 0 };
@@ -6424,9 +6432,16 @@ var TypeHelper = /** @class */ (function () {
             nodesInFunction.filter(function (n) { return ts.isIdentifier(n); })
                 .forEach(function (ident) {
                 var identDecl = _this.getDeclaration(ident);
-                if (identDecl && typeguards_1.isFunction(identDecl)) {
+                if (identDecl && typeguards_1.isFunction(identDecl) && !isUnder(node, identDecl)) {
                     var identDeclType = _this.getCType(identDecl);
-                    [].push.apply(closureParams, identDeclType.closureParams);
+                    var _loop_4 = function (param) {
+                        if (!closureParams.some(function (p) { return p.node.text === param.node.text; }))
+                            closureParams.push(param);
+                    };
+                    for (var _i = 0, _a = identDeclType.closureParams; _i < _a.length; _i++) {
+                        var param = _a[_i];
+                        _loop_4(param);
+                    }
                 }
                 else {
                     var identDeclFunc = identDecl && findParentFunction(identDecl);
@@ -6443,21 +6458,6 @@ var TypeHelper = /** @class */ (function () {
                     }
                 }
             });
-            var _loop_4 = function (p) {
-                if (p.assigned && p.node.text.indexOf("*") != 0) {
-                    // this is admittedly a hacky way to achieve passing variable by reference
-                    // hopefully some better solution can be found later
-                    var newText_1 = "*" + p.node.text;
-                    for (var _i = 0, _a = p.refs; _i < _a.length; _i++) {
-                        var ref = _a[_i];
-                        Object.defineProperty(ref, "text", { get: function () { return newText_1; } });
-                    }
-                }
-            };
-            for (var _i = 0, closureParams_1 = closureParams; _i < closureParams_1.length; _i++) {
-                var p = closureParams_1[_i];
-                _loop_4(p);
-            }
             return new FuncType(exports.VoidType, [], null, closureParams);
         }));
         var _loop_5 = function (i_4) {
