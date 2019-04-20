@@ -6579,7 +6579,7 @@ var TypeHelper = /** @class */ (function () {
             return exports.NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
             return exports.BooleanVarType;
-        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0) {
+        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0 && tsType.getProperties().every(function (s) { return /[a-zA-Z_]/.test(s.name); })) {
             var structType = this.generateStructure(tsType);
             var baseType = this.typeChecker.getBaseTypeOfLiteralType(tsType);
             var cTypeTag = baseType && baseType.symbol && baseType.symbol.getJsDocTags().filter(function (t) { return t.name == "ctype"; })[0];
