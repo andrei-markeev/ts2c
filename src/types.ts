@@ -627,7 +627,7 @@ export class TypeHelper {
             return NumberVarType;
         if (tsType.flags == ts.TypeFlags.Boolean || tsType.flags == (ts.TypeFlags.Boolean + ts.TypeFlags.Union))
             return BooleanVarType;
-        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0) {
+        if (tsType.flags & ts.TypeFlags.Object && tsType.getProperties().length > 0 && tsType.getProperties().every(s => /[a-zA-Z_]/.test(s.name))) {
             const structType = this.generateStructure(tsType);
             const baseType = this.typeChecker.getBaseTypeOfLiteralType(tsType);
             const cTypeTag = baseType && baseType.symbol && baseType.symbol.getJsDocTags().filter(t => t.name == "ctype")[0];
