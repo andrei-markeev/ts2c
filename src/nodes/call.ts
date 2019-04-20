@@ -15,12 +15,13 @@ import { CObjectLiteralExpression } from './literals';
 {#elseif funcName}
     {funcName}({arguments {, }=> {this}})
 {#else}
-    /* Not supported yet: calling function that references 'this'. Use 'new'. */
+    /* Unsupported function call: nodeText */
 {/if}`, ts.SyntaxKind.CallExpression)
 export class CCallExpression {
     public funcName: any = null;
     public standardCall: CExpression = null;
     public arguments: CExpression[];
+    public nodeText: string;
     constructor(scope: IScope, call: ts.CallExpression) {
 
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
@@ -29,8 +30,10 @@ export class CCallExpression {
 
         // calling function that uses "this"
         const funcType = scope.root.typeHelper.getCType(call.expression) as FuncType;
-        if (funcType && funcType.instanceType != null)
+        if (!funcType || funcType.instanceType != null) {
+            this.nodeText = call.getText();
             return;
+        }
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
