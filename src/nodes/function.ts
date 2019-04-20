@@ -89,7 +89,7 @@ export class CFunction implements IScope {
 
         node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
-        if (node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
+        if (node.body.statements.length > 0 && node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
             this.destructors = new CVariableDestructors(this, node);
         }
 
