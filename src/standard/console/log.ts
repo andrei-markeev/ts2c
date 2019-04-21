@@ -263,9 +263,15 @@ class CPrintf {
         else if (varType instanceof StructType) {
             this.isStruct = true;
             for (let k in varType.properties) {
-                let propAccessor = accessor + "->" + k;
                 let opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
-                this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], opts));
+                if (varType.propertyDefs[k].recursive) {
+                    const objString = "[object Object]";
+                    const stringLit = ts.createLiteral(objString);
+                    this.elementPrintfs.push(new CPrintf(scope, stringLit, objString, StringVarType, opts));
+                } else {
+                    let propAccessor = accessor + "->" + k;
+                    this.elementPrintfs.push(new CPrintf(scope, printNode, propAccessor, varType.properties[k], opts));
+                }
             }
         }
     }

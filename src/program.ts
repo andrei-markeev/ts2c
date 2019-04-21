@@ -970,6 +970,7 @@ export class CProgram implements IScope {
             while (i < nodes.length)
                 nodes.push.apply(nodes, nodes[i++].getChildren());
         }
+        nodes.sort((a, b) => a.pos - b.pos);
 
         // Post processing TypeScript AST
         for (let n of nodes) {

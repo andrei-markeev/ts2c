@@ -84,10 +84,10 @@ export class StructType {
             .reduce((acc, k) => { acc[k] = this.propertyDefs[k].type; return acc; }, {});
     }
     public getBodyText() {
-        return "{" + Object.keys(this.propertyDefs).sort().map(k => k + ": " + getTypeBodyText(this.properties[k])).join("; ") + "}";
+        return "{" + Object.keys(this.propertyDefs).sort().map(k => k + ": " + (this.propertyDefs[k].recursive ? this.getText() : getTypeBodyText(this.properties[k]))).join("; ") + "}";
     }
     constructor(
-        public propertyDefs: { [propName: string]: { type: CType, order: number } }
+        public propertyDefs: { [propName: string]: { type: CType, order: number, recursive?: boolean } }
     ) { }
 }
 
@@ -209,6 +209,16 @@ export function isUnder(refNode, node) {
     return parent;
 }
 
+export function hasType(refType, type) {
+    return refType == type
+        || refType instanceof StructType && Object.keys(refType.properties).some(k => hasType(refType.properties[k], type))
+        || refType instanceof ArrayType && hasType(refType.elementType, type)
+        || refType instanceof DictType && hasType(refType.elementType, type)
+        || refType instanceof FuncType && hasType(refType.returnType, type)
+        || refType instanceof FuncType && hasType(refType.instanceType, type)
+        || refType instanceof FuncType && refType.parameterTypes.some(pt => hasType(pt, type))
+}
+
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
 type NodeResolver<T extends ts.Node> = { getNode?: NodeFunc<T>, getType?: { (n: T): CType } };
 type Equality<T extends ts.Node> = [{ (n): n is T }, NodeFunc<T>, NodeResolver<T>];
@@ -306,63 +316,8 @@ export class TypeHelper {
                 typeEqualities.push([typeGuard, node1, node2]);
         };
 
-        // expressions
+        // left hand side
         addEquality(ts.isIdentifier, n => n, n => this.getDeclaration(n));
-        addEquality(isEqualsExpression, n => n.left, n => n.right);
-        addEquality(isEqualsExpression, n => n.left, type(n => {
-            const type = this.getCType(n.right);
-            if (type instanceof FuncType && type.closureParams.length)
-                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
-            else
-                return null;
-        }));
-        addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
-        addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
-        addEquality(isUnaryExpression, n => n, type(n => getUnaryExprResultType(n.operator, this.getCType(n.operand))));
-        addEquality(isUnaryExpression, n => n.operand, type(n => {
-            const resultType = this.getCType(n);
-            if (resultType == UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
-                return UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.mergeTypes.bind(this), this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
-        addEquality(ts.isBinaryExpression, n => n.left, type(n => {
-            const resultType = this.getCType(n);
-            const operandType = this.getCType(n.left);
-            const rightType = this.getCType(n.right);
-            if (resultType === UniversalVarType) {
-                return isCompoundAssignment(n.operatorToken) ? UniversalVarType
-                    : operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
-                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
-                    : null;
-            } else if (operandsToNumber(operandType, n.operatorToken.kind, rightType) && toNumberCanBeNaN(operandType))
-                return UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(ts.isBinaryExpression, n => n.right, type(n => {
-            const resultType = this.getCType(n);
-            const operandType = this.getCType(n.right);
-            const leftType = this.getCType(n.left);
-            if (resultType === UniversalVarType && !isLogicOp(n.operatorToken.kind)) {
-                return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
-                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
-                    : null;
-            } else if (operandsToNumber(leftType, n.operatorToken.kind, operandType) && toNumberCanBeNaN(operandType))
-                return UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
-        addEquality(ts.isParenthesizedExpression, n => n, n => n.expression);
-        addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
-        addEquality(ts.isVoidExpression, n => n.expression, type(PointerVarType));
-        addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
-        addEquality(isDeleteExpression, n => n, type(BooleanVarType));
-        addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
-    
-        // fields
         addEquality(ts.isPropertyAssignment, n => n, n => n.initializer);
         addEquality(ts.isPropertyAssignment, n => n.parent, type(n => {
             const propName = (ts.isIdentifier(n.name) || isStringLiteralAsIdentifier(n.name)) && n.name.text;
@@ -429,6 +384,61 @@ export class TypeHelper {
             }));
         }
 
+        // expressions
+        addEquality(isEqualsExpression, n => n.left, n => n.right);
+        addEquality(isEqualsExpression, n => n.left, type(n => {
+            const type = this.getCType(n.right);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
+        addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
+        addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
+        addEquality(isUnaryExpression, n => n, type(n => getUnaryExprResultType(n.operator, this.getCType(n.operand))));
+        addEquality(isUnaryExpression, n => n.operand, type(n => {
+            const resultType = this.getCType(n);
+            if (resultType == UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
+                return UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, n => n, type(n => getBinExprResultType(this.mergeTypes.bind(this), this.getCType(n.left), n.operatorToken.kind, this.getCType(n.right))));
+        addEquality(ts.isBinaryExpression, n => n.left, type(n => {
+            const resultType = this.getCType(n);
+            const operandType = this.getCType(n.left);
+            const rightType = this.getCType(n.right);
+            if (resultType === UniversalVarType) {
+                return isCompoundAssignment(n.operatorToken) ? UniversalVarType
+                    : operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
+                    : null;
+            } else if (operandsToNumber(operandType, n.operatorToken.kind, rightType) && toNumberCanBeNaN(operandType))
+                return UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, n => n.right, type(n => {
+            const resultType = this.getCType(n);
+            const operandType = this.getCType(n.right);
+            const leftType = this.getCType(n.left);
+            if (resultType === UniversalVarType && !isLogicOp(n.operatorToken.kind)) {
+                return operandType instanceof ArrayType ? new ArrayType(UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(UniversalVarType)
+                    : null;
+            } else if (operandsToNumber(leftType, n.operatorToken.kind, operandType) && toNumberCanBeNaN(operandType))
+                return UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
+        addEquality(ts.isParenthesizedExpression, n => n, n => n.expression);
+        addEquality(ts.isVoidExpression, n => n, type(UniversalVarType));
+        addEquality(ts.isVoidExpression, n => n.expression, type(PointerVarType));
+        addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
+        addEquality(isDeleteExpression, n => n, type(BooleanVarType));
+        addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
+    
         // functions
         addEquality(ts.isCallExpression, n => n.expression, n => this.getDeclaration(n));
         addEquality(ts.isCallExpression, n => n.expression, type(n => this.getCType(n) ? new FuncType(this.getCType(n), n.arguments.map(arg => this.getCType(arg))) : null));
@@ -727,9 +737,15 @@ export class TypeHelper {
             let changed = false;
             let newProps = {};
             for (let p of props) {
-                let result = this.mergeTypes(type1.properties[p], type2.properties[p]);
+                let recursive1 = type1.propertyDefs[p] && type1.propertyDefs[p].recursive;
+                let recursive2 = type2.propertyDefs[p] && type2.propertyDefs[p].recursive;
+                let result;
+                if (recursive1 || recursive2)
+                    result = { type: recursive1 ? type1 : type2, replaced: recursive1 != recursive2 };
+                else
+                    result = this.mergeTypes(type1.properties[p], type2.properties[p]);
                 let order = Math.max(type1.propertyDefs[p] ? type1.propertyDefs[p].order : 0, type2.propertyDefs[p] ? type2.propertyDefs[p].order : 0);
-                newProps[p] = { type: result.type, order: order };
+                newProps[p] = { type: result.type, order: order, recursive: type1 == result.type || type2 == result.type };
                 if (result.replaced)
                     changed = true;
             }

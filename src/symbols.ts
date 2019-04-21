@@ -25,7 +25,7 @@ export class SymbolsHelper {
             name: k,
             properties: Object.keys(this.userStructs[k].properties).map(pk => ({
                 name: pk,
-                type: this.userStructs[k].properties[pk]
+                type: this.userStructs[k].propertyDefs[pk].recursive ? this.userStructs[k] : this.userStructs[k].properties[pk]
             }))
         }));
 
@@ -62,20 +62,20 @@ export class SymbolsHelper {
     }
 
     private findStructByType(structType: StructType) {
-        let userStructCode = this.getStructureBodyString(structType.properties);
+        let userStructCode = this.getStructureBodyString(structType);
 
         for (var s in this.userStructs) {
-            if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode)
+            if (this.getStructureBodyString(this.userStructs[s]) == userStructCode)
                 return s;
         }
 
         return null;
     }
 
-    private getStructureBodyString(properties) {
+    private getStructureBodyString(structType: StructType) {
         let userStructCode = '{\n';
-        for (let propName in properties) {
-            let propType = properties[propName];
+        for (let propName in structType.properties) {
+            let propType = structType.propertyDefs[propName].recursive ? structType.getText() : structType.propertyDefs[propName].type;
             if (typeof propType === 'string') {
                 userStructCode += '    ' + propType + ' ' + propName + ';\n';
             } else if (propType instanceof ArrayType) {
