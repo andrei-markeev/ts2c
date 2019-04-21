@@ -1,5 +1,7 @@
 import * as ts from 'typescript'
-import { TypeHelper, CType, StructType, ArrayType, findParentFunction, NumberVarType, FuncType } from './types';
+import { CType, StructType, ArrayType, NumberVarType, FuncType } from './ctypes';
+import { TypeHelper } from './typehelper';
+import { findParentFunction } from './utils';
 
 export class SymbolsHelper {
 

@@ -1,9 +1,11 @@
 import * as ts from 'typescript'
-import {TypeHelper} from './types';
-import {SymbolsHelper} from './symbols';
-import {MemoryManager} from './memory';
-import {CodeTemplate, CodeTemplateFactory} from './template';
-import {CVariable, CVariableDestructors} from './nodes/variable';
+import { SyntaxKind_NaNKeyword } from './utils';
+import { CFunctionPrototype } from './nodes/function';
+import { TypeHelper } from './typehelper';
+import { SymbolsHelper } from './symbols';
+import { MemoryManager } from './memory';
+import { CodeTemplate, CodeTemplateFactory } from './template';
+import { CVariable, CVariableDestructors } from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
 import './nodes/statements';
@@ -42,8 +44,6 @@ import './standard/string/match';
 import './standard/number/number';
 
 import './standard/console/log';
-import { SyntaxKind_NaNKeyword } from './typeguards';
-import { CFunctionPrototype } from './nodes/function';
 
 export interface IScope {
     parent: IScope;

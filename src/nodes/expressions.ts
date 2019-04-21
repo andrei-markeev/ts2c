@@ -1,13 +1,13 @@
-import { AssignmentHelper } from './assignment';
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {IScope} from '../program';
-import {StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType, toNumberCanBeNaN, operandsToNumber} from '../types';
-import {CVariable} from './variable';
-import {CRegexAsString} from './regexfunc';
+import { AssignmentHelper } from './assignment';
+import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { IScope } from '../program';
+import { StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType } from '../ctypes';
+import { CVariable } from './variable';
+import { CRegexAsString } from './regexfunc';
 import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar, CAsString } from './typeconvert';
-import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp, isLogicOp, isInBoolContext, isSimpleNode } from '../typeguards';
+import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp, isLogicOp, isInBoolContext, isSimpleNode, toNumberCanBeNaN } from '../utils';
 import { CArraySize } from './elementaccess';
 import { StandardCallHelper } from '../standard';
 

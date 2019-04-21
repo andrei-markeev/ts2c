@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
-import {IScope} from './program';
-import {CType, TypeHelper} from './types';
+import { IScope } from './program';
+import { CType } from './ctypes';
+import { TypeHelper } from './typehelper';
 
 export interface IResolver {
     matchesNode(s: TypeHelper, n: ts.CallExpression, options?: IResolverMatchOptions): boolean;

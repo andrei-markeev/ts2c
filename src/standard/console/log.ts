@@ -1,12 +1,13 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../../template';
-import {CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, TypeHelper, VoidType, UniversalVarType, getTypeText} from '../../types';
-import {IScope} from '../../program';
-import {CVariable} from '../../nodes/variable';
+import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../ctypes';
+import { IScope } from '../../program';
+import { CVariable } from '../../nodes/variable';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { isSideEffectExpression } from '../../typeguards';
+import { isSideEffectExpression, getAllNodesUnder } from '../../utils';
 import { CAssignment } from '../../nodes/assignment';
 import { CString } from '../../nodes/literals';
+import { TypeHelper } from '../../typehelper';
 
 @StandardCallResolver
 class ConsoleLogResolver implements IResolver {

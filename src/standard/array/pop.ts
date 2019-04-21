@@ -1,11 +1,10 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver, IResolverMatchOptions} from '../../standard';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper, PointerVarType} from '../../types';
-import {IScope} from '../../program';
-import {CVariable} from '../../nodes/variable';
-import {CExpression} from '../../nodes/expressions';
-import {CElementAccess} from '../../nodes/elementaccess';
+import { CodeTemplate } from '../../template';
+import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
+import { ArrayType, PointerVarType } from '../../ctypes';
+import { IScope } from '../../program';
+import { CElementAccess } from '../../nodes/elementaccess';
+import { TypeHelper } from '../../typehelper';
 
 @StandardCallResolver
 class ArrayPopResolver implements IResolver {

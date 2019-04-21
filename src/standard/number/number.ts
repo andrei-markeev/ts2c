@@ -1,9 +1,10 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../standard';
-import {NumberVarType, TypeHelper, UniversalVarType} from '../../types';
-import {IScope} from '../../program';
-import {CExpression} from '../../nodes/expressions';
+import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { StandardCallResolver, IResolver } from '../../standard';
+import { NumberVarType, UniversalVarType } from '../../ctypes';
+import { IScope } from '../../program';
+import { CExpression } from '../../nodes/expressions';
+import { TypeHelper } from '../../typehelper';
 
 @StandardCallResolver
 class NumberCallResolver implements IResolver {

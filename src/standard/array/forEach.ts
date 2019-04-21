@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
-import {ArrayType, StringVarType, NumberVarType, TypeHelper} from '../../types';
-import {CElementAccess} from '../../nodes/elementaccess';
-import {CExpression} from '../../nodes/expressions';
-import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {CVariable} from '../../nodes/variable';
-import {IScope, CProgram} from '../../program';
-import {StandardCallResolver, IResolver} from '../../standard';
+import { ArrayType, NumberVarType } from '../../ctypes';
+import { CElementAccess } from '../../nodes/elementaccess';
+import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CVariable } from '../../nodes/variable';
+import { IScope, CProgram } from '../../program';
+import { StandardCallResolver, IResolver } from '../../standard';
+import { TypeHelper } from '../../typehelper';
 
 @StandardCallResolver
 class ArrayForEachResolver implements IResolver {

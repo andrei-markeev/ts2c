@@ -1,11 +1,12 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../../template';
-import {StandardCallResolver, IResolver} from '../../standard';
-import {ArrayType, NumberVarType, TypeHelper, BooleanVarType} from '../../types';
-import {IScope} from '../../program';
-import {CVariable} from '../../nodes/variable';
-import {CElementAccess} from '../../nodes/elementaccess';
+import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { StandardCallResolver, IResolver } from '../../standard';
+import { ArrayType, NumberVarType, BooleanVarType } from '../../ctypes';
+import { IScope } from '../../program';
+import { CVariable } from '../../nodes/variable';
+import { CElementAccess } from '../../nodes/elementaccess';
 import { CBinaryExpression } from '../../nodes/expressions';
+import { TypeHelper } from '../../typehelper';
 
 @StandardCallResolver
 class ArrayIndexOfResolver implements IResolver {

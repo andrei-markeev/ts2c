@@ -39,14 +39,6 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
     };
 }
 
-export function getAllNodesUnder(node) {
-    let i = 0;
-    const nodes = [node];
-    while (i < nodes.length)
-        nodes.push.apply(nodes, nodes[i++].getChildren());
-    return nodes;
-}
-
 /** Returns: [code, statements] */
 function processTemplate(template: string, args: any): [string, string] {
 

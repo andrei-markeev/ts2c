@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
-import {IScope} from '../program';
-import {ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType, findParentFunction} from '../types';
-import {CVariable, CVariableAllocation} from './variable';
-import {CAssignment} from './assignment';
-import {CRegexSearchFunction} from './regexfunc';
+import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { IScope } from '../program';
+import { ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType } from '../ctypes';
+import { CVariable, CVariableAllocation } from './variable';
+import { CAssignment } from './assignment';
+import { CRegexSearchFunction } from './regexfunc';
 import { CExpression } from './expressions';
 import { CAsUniversalVar } from './typeconvert';
 

@@ -1,11 +1,12 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
-import {CProgram, IScope} from '../program';
-import {ArrayType, NumberVarType, StringVarType, FuncType, findParentFunction} from '../types';
-import {CVariable, CVariableDeclaration, CVariableDestructors} from './variable';
-import {CExpression, CCondition} from './expressions';
-import {CElementAccess, CArraySize, CSimpleElementAccess} from './elementaccess';
-import {AssignmentHelper, CAssignment} from './assignment';
+import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CProgram, IScope} from '../program';
+import { ArrayType, NumberVarType, StringVarType } from '../ctypes';
+import { CVariable, CVariableDeclaration, CVariableDestructors } from './variable';
+import { CExpression, CCondition } from './expressions';
+import { CElementAccess, CArraySize, CSimpleElementAccess } from './elementaccess';
+import { AssignmentHelper } from './assignment';
+import { getAllNodesUnder } from '../utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, ts.SyntaxKind.LabeledStatement)
 export class CLabeledStatement {

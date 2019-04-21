@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import {CodeTemplate, CodeTemplateFactory} from '../template';
 import {IScope} from '../program';
-import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types';
+import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../ctypes';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import { CAsUniversalVar } from './typeconvert';

@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory, getAllNodesUnder} from '../template';
-import {CVariable, CVariableDestructors, CVariableAllocation} from './variable';
-import {IScope, CProgram} from '../program';
-import {FuncType, findParentSourceFile, findParentFunction, getTypeText} from '../types';
+import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
+import { IScope, CProgram } from '../program';
+import { FuncType, getTypeText } from '../ctypes';
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression } from '../typeguards';
+import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction } from '../utils';
 import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
