@@ -2687,6 +2687,7 @@ var CProgram = /** @class */ (function () {
             while (i_1 < nodes.length)
                 nodes.push.apply(nodes, nodes[i_1++].getChildren());
         }
+        nodes.sort(function (a, b) { return a.pos - b.pos; });
         // Post processing TypeScript AST
         for (var _a = 0, nodes_1 = nodes; _a < nodes_1.length; _a++) {
             var n = nodes_1[_a];
@@ -4537,9 +4538,16 @@ var CPrintf = /** @class */ (function () {
         else if (varType instanceof types_1.StructType) {
             this.isStruct = true;
             for (var k in varType.properties) {
-                var propAccessor = accessor + "->" + k;
                 var opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
-                this.elementPrintfs.push(new CPrintf_1(scope, printNode, propAccessor, varType.properties[k], opts));
+                if (varType.propertyDefs[k].recursive) {
+                    var objString = "[object Object]";
+                    var stringLit = ts.createLiteral(objString);
+                    this.elementPrintfs.push(new CPrintf_1(scope, stringLit, objString, types_1.StringVarType, opts));
+                }
+                else {
+                    var propAccessor = accessor + "->" + k;
+                    this.elementPrintfs.push(new CPrintf_1(scope, printNode, propAccessor, varType.properties[k], opts));
+                }
             }
         }
     }
@@ -5452,7 +5460,7 @@ var SymbolsHelper = /** @class */ (function () {
             name: k,
             properties: Object.keys(_this.userStructs[k].properties).map(function (pk) { return ({
                 name: pk,
-                type: _this.userStructs[k].properties[pk]
+                type: _this.userStructs[k].propertyDefs[pk].recursive ? _this.userStructs[k] : _this.userStructs[k].properties[pk]
             }); })
         }); });
         return [structs];
@@ -5485,17 +5493,17 @@ var SymbolsHelper = /** @class */ (function () {
             this.arrayStructs.push(elementType);
     };
     SymbolsHelper.prototype.findStructByType = function (structType) {
-        var userStructCode = this.getStructureBodyString(structType.properties);
+        var userStructCode = this.getStructureBodyString(structType);
         for (var s in this.userStructs) {
-            if (this.getStructureBodyString(this.userStructs[s].properties) == userStructCode)
+            if (this.getStructureBodyString(this.userStructs[s]) == userStructCode)
                 return s;
         }
         return null;
     };
-    SymbolsHelper.prototype.getStructureBodyString = function (properties) {
+    SymbolsHelper.prototype.getStructureBodyString = function (structType) {
         var userStructCode = '{\n';
-        for (var propName in properties) {
-            var propType = properties[propName];
+        for (var propName in structType.properties) {
+            var propType = structType.propertyDefs[propName].recursive ? structType.getText() : structType.propertyDefs[propName].type;
             if (typeof propType === 'string') {
                 userStructCode += '    ' + propType + ' ' + propName + ';\n';
             }
@@ -6042,7 +6050,7 @@ var StructType = /** @class */ (function () {
     });
     StructType.prototype.getBodyText = function () {
         var _this = this;
-        return "{" + Object.keys(this.propertyDefs).sort().map(function (k) { return k + ": " + getTypeBodyText(_this.properties[k]); }).join("; ") + "}";
+        return "{" + Object.keys(this.propertyDefs).sort().map(function (k) { return k + ": " + (_this.propertyDefs[k].recursive ? _this.getText() : getTypeBodyText(_this.properties[k])); }).join("; ") + "}";
     };
     return StructType;
 }());
@@ -6176,6 +6184,16 @@ function isUnder(refNode, node) {
     return parent;
 }
 exports.isUnder = isUnder;
+function hasType(refType, type) {
+    return refType == type
+        || refType instanceof StructType && Object.keys(refType.properties).some(function (k) { return hasType(refType.properties[k], type); })
+        || refType instanceof ArrayType && hasType(refType.elementType, type)
+        || refType instanceof DictType && hasType(refType.elementType, type)
+        || refType instanceof FuncType && hasType(refType.returnType, type)
+        || refType instanceof FuncType && hasType(refType.instanceType, type)
+        || refType instanceof FuncType && refType.parameterTypes.some(function (pt) { return hasType(pt, type); });
+}
+exports.hasType = hasType;
 var TypeHelper = /** @class */ (function () {
     function TypeHelper(typeChecker, allNodes) {
         this.typeChecker = typeChecker;
@@ -6263,64 +6281,8 @@ var TypeHelper = /** @class */ (function () {
             else
                 typeEqualities.push([typeGuard, node1, node2]);
         };
-        // expressions
+        // left hand side
         addEquality(ts.isIdentifier, function (n) { return n; }, function (n) { return _this.getDeclaration(n); });
-        addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, function (n) { return n.right; });
-        addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, type(function (n) {
-            var type = _this.getCType(n.right);
-            if (type instanceof FuncType && type.closureParams.length)
-                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
-            else
-                return null;
-        }));
-        addEquality(ts.isConditionalExpression, function (n) { return n.whenTrue; }, function (n) { return n.whenFalse; });
-        addEquality(ts.isConditionalExpression, function (n) { return n; }, function (n) { return n.whenTrue; });
-        addEquality(typeguards_1.isUnaryExpression, function (n) { return n; }, type(function (n) { return getUnaryExprResultType(n.operator, _this.getCType(n.operand)); }));
-        addEquality(typeguards_1.isUnaryExpression, function (n) { return n.operand; }, type(function (n) {
-            var resultType = _this.getCType(n);
-            if (resultType == exports.UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
-                return exports.UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(ts.isBinaryExpression, function (n) { return n; }, type(function (n) { return getBinExprResultType(_this.mergeTypes.bind(_this), _this.getCType(n.left), n.operatorToken.kind, _this.getCType(n.right)); }));
-        addEquality(ts.isBinaryExpression, function (n) { return n.left; }, type(function (n) {
-            var resultType = _this.getCType(n);
-            var operandType = _this.getCType(n.left);
-            var rightType = _this.getCType(n.right);
-            if (resultType === exports.UniversalVarType) {
-                return typeguards_1.isCompoundAssignment(n.operatorToken) ? exports.UniversalVarType
-                    : operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
-                        : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
-                            : null;
-            }
-            else if (operandsToNumber(operandType, n.operatorToken.kind, rightType) && toNumberCanBeNaN(operandType))
-                return exports.UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(ts.isBinaryExpression, function (n) { return n.right; }, type(function (n) {
-            var resultType = _this.getCType(n);
-            var operandType = _this.getCType(n.right);
-            var leftType = _this.getCType(n.left);
-            if (resultType === exports.UniversalVarType && !typeguards_1.isLogicOp(n.operatorToken.kind)) {
-                return operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
-                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
-                        : null;
-            }
-            else if (operandsToNumber(leftType, n.operatorToken.kind, operandType) && toNumberCanBeNaN(operandType))
-                return exports.UniversalVarType;
-            else
-                return null;
-        }));
-        addEquality(typeguards_1.isNullOrUndefinedOrNaN, function (n) { return n; }, type(exports.UniversalVarType));
-        addEquality(ts.isParenthesizedExpression, function (n) { return n; }, function (n) { return n.expression; });
-        addEquality(ts.isVoidExpression, function (n) { return n; }, type(exports.UniversalVarType));
-        addEquality(ts.isVoidExpression, function (n) { return n.expression; }, type(exports.PointerVarType));
-        addEquality(ts.isTypeOfExpression, function (n) { return n; }, type(exports.StringVarType));
-        addEquality(typeguards_1.isDeleteExpression, function (n) { return n; }, type(exports.BooleanVarType));
-        addEquality(typeguards_1.isDeleteExpression, function (n) { return n.expression.expression; }, type(function (n) { return new DictType(exports.UniversalVarType); }));
-        // fields
         addEquality(ts.isPropertyAssignment, function (n) { return n; }, function (n) { return n.initializer; });
         addEquality(ts.isPropertyAssignment, function (n) { return n.parent; }, type(function (n) {
             var propName = (ts.isIdentifier(n.name) || typeguards_1.isStringLiteralAsIdentifier(n.name)) && n.name.text;
@@ -6389,6 +6351,62 @@ var TypeHelper = /** @class */ (function () {
         for (var i_1 = 0; i_1 < 10; i_1++) {
             _loop_1(i_1);
         }
+        // expressions
+        addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, function (n) { return n.right; });
+        addEquality(typeguards_1.isEqualsExpression, function (n) { return n.left; }, type(function (n) {
+            var type = _this.getCType(n.right);
+            if (type instanceof FuncType && type.closureParams.length)
+                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+            else
+                return null;
+        }));
+        addEquality(ts.isConditionalExpression, function (n) { return n.whenTrue; }, function (n) { return n.whenFalse; });
+        addEquality(ts.isConditionalExpression, function (n) { return n; }, function (n) { return n.whenTrue; });
+        addEquality(typeguards_1.isUnaryExpression, function (n) { return n; }, type(function (n) { return getUnaryExprResultType(n.operator, _this.getCType(n.operand)); }));
+        addEquality(typeguards_1.isUnaryExpression, function (n) { return n.operand; }, type(function (n) {
+            var resultType = _this.getCType(n);
+            if (resultType == exports.UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
+                return exports.UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, function (n) { return n; }, type(function (n) { return getBinExprResultType(_this.mergeTypes.bind(_this), _this.getCType(n.left), n.operatorToken.kind, _this.getCType(n.right)); }));
+        addEquality(ts.isBinaryExpression, function (n) { return n.left; }, type(function (n) {
+            var resultType = _this.getCType(n);
+            var operandType = _this.getCType(n.left);
+            var rightType = _this.getCType(n.right);
+            if (resultType === exports.UniversalVarType) {
+                return typeguards_1.isCompoundAssignment(n.operatorToken) ? exports.UniversalVarType
+                    : operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
+                        : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
+                            : null;
+            }
+            else if (operandsToNumber(operandType, n.operatorToken.kind, rightType) && toNumberCanBeNaN(operandType))
+                return exports.UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(ts.isBinaryExpression, function (n) { return n.right; }, type(function (n) {
+            var resultType = _this.getCType(n);
+            var operandType = _this.getCType(n.right);
+            var leftType = _this.getCType(n.left);
+            if (resultType === exports.UniversalVarType && !typeguards_1.isLogicOp(n.operatorToken.kind)) {
+                return operandType instanceof ArrayType ? new ArrayType(exports.UniversalVarType, 0, true)
+                    : operandType instanceof StructType || operandType instanceof DictType ? new DictType(exports.UniversalVarType)
+                        : null;
+            }
+            else if (operandsToNumber(leftType, n.operatorToken.kind, operandType) && toNumberCanBeNaN(operandType))
+                return exports.UniversalVarType;
+            else
+                return null;
+        }));
+        addEquality(typeguards_1.isNullOrUndefinedOrNaN, function (n) { return n; }, type(exports.UniversalVarType));
+        addEquality(ts.isParenthesizedExpression, function (n) { return n; }, function (n) { return n.expression; });
+        addEquality(ts.isVoidExpression, function (n) { return n; }, type(exports.UniversalVarType));
+        addEquality(ts.isVoidExpression, function (n) { return n.expression; }, type(exports.PointerVarType));
+        addEquality(ts.isTypeOfExpression, function (n) { return n; }, type(exports.StringVarType));
+        addEquality(typeguards_1.isDeleteExpression, function (n) { return n; }, type(exports.BooleanVarType));
+        addEquality(typeguards_1.isDeleteExpression, function (n) { return n.expression.expression; }, type(function (n) { return new DictType(exports.UniversalVarType); }));
         // functions
         addEquality(ts.isCallExpression, function (n) { return n.expression; }, function (n) { return _this.getDeclaration(n); });
         addEquality(ts.isCallExpression, function (n) { return n.expression; }, type(function (n) { return _this.getCType(n) ? new FuncType(_this.getCType(n), n.arguments.map(function (arg) { return _this.getCType(arg); })) : null; }));
@@ -6669,9 +6687,15 @@ var TypeHelper = /** @class */ (function () {
             var newProps = {};
             for (var _i = 0, props_1 = props; _i < props_1.length; _i++) {
                 var p = props_1[_i];
-                var result = this.mergeTypes(type1.properties[p], type2.properties[p]);
+                var recursive1 = type1.propertyDefs[p] && type1.propertyDefs[p].recursive;
+                var recursive2 = type2.propertyDefs[p] && type2.propertyDefs[p].recursive;
+                var result = void 0;
+                if (recursive1 || recursive2)
+                    result = { type: recursive1 ? type1 : type2, replaced: recursive1 != recursive2 };
+                else
+                    result = this.mergeTypes(type1.properties[p], type2.properties[p]);
                 var order = Math.max(type1.propertyDefs[p] ? type1.propertyDefs[p].order : 0, type2.propertyDefs[p] ? type2.propertyDefs[p].order : 0);
-                newProps[p] = { type: result.type, order: order };
+                newProps[p] = { type: result.type, order: order, recursive: type1 == result.type || type2 == result.type };
                 if (result.replaced)
                     changed = true;
             }
