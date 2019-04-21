@@ -522,7 +522,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
     struct js_var str_to_int16_t(const char * str) {
         struct js_var v;
         const char *p = str;
@@ -603,7 +603,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_number || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
 
     struct js_var js_var_to_number(struct js_var v)
     {
