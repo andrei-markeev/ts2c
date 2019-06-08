@@ -15,7 +15,7 @@ transpiles to the following C code:
 #include <stdio.h>
 
 int main() {
-    printf("Hello world!\n");
+    puts("Hello world!\n");
     return 0;
 }
 ```
@@ -52,11 +52,11 @@ int main(void) {
     obj->key = "hello";
     obj->newKey = "test";
 
-    printf("{ ");
+    puts("{ ");
     printf("key: \"%s\"", obj->key);
-    printf(", ");
+    puts(", ");
     printf("newKey: \"%s\"", obj->newKey);
-    printf(" }\n");
+    puts(" }\n");
 
     free(obj);
 
