@@ -130,7 +130,7 @@ interface PrintfOptions {
 
 @CodeTemplate(`
 {#if isStringLiteral}
-    puts("{PREFIX}{accessor}{POSTFIX}");
+    printf("%s", "{PREFIX}{accessor}{POSTFIX}");
 {#elseif isCString && quoted}
     printf("{PREFIX}\\"%s\\"{POSTFIX}", {accessor});
 {#elseif isCString}
@@ -140,22 +140,22 @@ interface PrintfOptions {
 {#elseif isInteger}
     printf("{PREFIX}%d{POSTFIX}", {accessor});
 {#elseif isBoolean && !PREFIX && !POSTFIX}
-    puts({accessor} ? "true" : "false");
+    printf("%s", {accessor} ? "true" : "false");
 {#elseif isBoolean && (PREFIX || POSTFIX)}
     printf("{PREFIX}%s{POSTFIX}", {accessor} ? "true" : "false");
 {#elseif isDict}
-    puts("{PREFIX}{ ");
+    printf("%s", "{PREFIX}{ ");
     {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {accessor}->index->size; {iteratorVarName}++) {
     {INDENT}    if ({iteratorVarName} != 0)
-    {INDENT}        puts(", ");
+    {INDENT}        printf("%s", ", ");
     {INDENT}    printf("\\"%s\\": ", {accessor}->index->data[{iteratorVarName}]);
     {INDENT}    {elementPrintfs}
     {INDENT}}
-    {INDENT}puts(" }{POSTFIX}");
+    {INDENT}printf("%s", " }{POSTFIX}");
 {#elseif isStruct}
-    puts("{PREFIX}{ ");
-    {INDENT}{elementPrintfs {    puts(", ");\n    }=> {this}}
-    {INDENT}puts(" }{POSTFIX}");
+    printf("%s", "{PREFIX}{ ");
+    {INDENT}{elementPrintfs {    printf("%s", ", ");\n    }=> {this}}
+    {INDENT}printf("%s", " }{POSTFIX}");
 {#elseif isStaticArray && elementFormatString && +arraySize==1}
     printf("{PREFIX}[ {elementFormatString} ]{POSTFIX}", {accessor}[0]);
 {#elseif isStaticArray && elementFormatString && +arraySize==2}
@@ -163,13 +163,13 @@ interface PrintfOptions {
 {#elseif isStaticArray && elementFormatString && +arraySize==3}
     printf("{PREFIX}[ {elementFormatString}, {elementFormatString}, {elementFormatString} ]{POSTFIX}", {accessor}[0], {accessor}[1], {accessor}[2]);
 {#elseif isArray}
-    puts("{PREFIX}[ ");
+    printf("%s", "{PREFIX}[ ");
     {INDENT}for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {
     {INDENT}    if ({iteratorVarName} != 0)
-    {INDENT}        puts(", ");
+    {INDENT}        printf("%s", ", ");
     {INDENT}    {elementPrintfs}
     {INDENT}}
-    {INDENT}puts(" ]{POSTFIX}");
+    {INDENT}printf("%s", " ]{POSTFIX}");
 {#elseif isUniversalVar && quoted}
     printf({accessor}.type == JS_VAR_STRING ? "{PREFIX}\\"%s\\"{POSTFIX}" : "{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
     {INDENT}if ({needDisposeVarName})
