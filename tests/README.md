@@ -5,4 +5,4 @@ Integration tests transpile TypeScript code using TS2C, build resulting C file u
 using valgrind, comparing program output with contents of the corresponding .res.expect files.
 
 To run tests, use `npm test`.
-To skip valgrind (it typically works only on Linux), use `npm run test-without-valgrind`.
+To skip valgrind (it typically works only on Linux), use `npm run test-no-valgrind`.
