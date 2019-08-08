@@ -15,7 +15,7 @@ import { CObjectLiteralExpression } from './literals';
 {#elseif funcName}
     {funcName}({arguments {, }=> {this}})
 {#else}
-    /* Unsupported function call: nodeText */
+    /* Unsupported function call: {nodeText} */
 {/if}`, ts.SyntaxKind.CallExpression)
 export class CCallExpression {
     public funcName: any = null;

@@ -15,6 +15,7 @@ import './nodes/literals';
 import './nodes/function';
 
 import './standard/global/parseInt';
+import './standard/global/isNaN';
 
 import './standard/array/forEach';
 import './standard/array/push';
@@ -77,6 +78,7 @@ class HeaderFlags {
     js_var_plus: boolean = false;
     js_var_compute: boolean = false;
     js_var_get: boolean = false;
+    js_var_isnan: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;
@@ -112,7 +114,7 @@ class HeaderFlags {
     || headerFlags.str_substring
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
     || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus
-    || headerFlags.js_var_lessthan}
+    || headerFlags.js_var_lessthan || headerFlags.dict_find_pos}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
@@ -146,14 +148,15 @@ class HeaderFlags {
     #define TRUE 1
     #define FALSE 0
 {/if}
-{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t}
+{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_isnan}
     typedef unsigned char uint8_t;
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
      headerFlags.str_int16_t_cmp || headerFlags.str_pos || headerFlags.str_len ||
      headerFlags.str_char_code_at || headerFlags.str_substring || headerFlags.str_slice ||
      headerFlags.regex || headerFlags.str_to_int16_t || headerFlags.array_string_t ||
-     headerFlags.try_catch || headerFlags.parse_int16_t }
+     headerFlags.try_catch || headerFlags.parse_int16_t || headerFlags.js_var_from  ||
+     headerFlags.str_int16_t_cat || headerFlags.js_var_isnan}
     typedef short int16_t;
 {/if}
 {#if headerFlags.uint16_t || headerFlags.js_var_compute}
@@ -434,7 +437,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var || headerFlags.str_to_int16_t}
+{#if headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_from || headerFlags.js_var_isnan}
     enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
     struct js_var {
         enum js_var_type type;
@@ -443,7 +446,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
@@ -879,6 +882,12 @@ class HeaderFlags {
         return result;
     }
 
+{/if}
+
+{#if headerFlags.js_var_isnan}
+    uint8_t js_var_isnan(struct js_var v) {
+        return js_var_to_number(v).type == JS_VAR_NAN;
+    }
 {/if}
 
 {userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
