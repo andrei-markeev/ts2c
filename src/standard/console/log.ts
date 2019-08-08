@@ -54,10 +54,9 @@ class CConsoleLog {
             
             let stringLit = '';
             nodeExpressions = nodeExpressions.reduce((a, c) => {
-                if (ts.isStringLiteral(c.node)) {
-                    c.node.text = c.node.text.replace(/%/g, "%%");
+                if (ts.isStringLiteral(c.node))
                     stringLit += CodeTemplateFactory.templateToString(<any>new CString(scope, c.node)).slice(1, -1);
-                } else {
+                else {
                     a.push(c);
                     c.prefix = stringLit;
                     stringLit = '';
@@ -88,15 +87,14 @@ class CConsoleLog {
                     printfs.push(new CAssignment(scope, tempVarName, null, tempVarType, <ts.Expression>node, false));
                     accessor = tempVarName;
                 }
-                else if (ts.isStringLiteral(node)) {
-                    node.text = node.text.replace(/%/g, "%%");
-                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1);
-                } else
+                else if (ts.isStringLiteral(node))
+                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1).replace(/%/g, "%%");
+                else
                     accessor = CodeTemplateFactory.templateToString(CodeTemplateFactory.createForNode(scope, node));
 
                 let options = {
-                    prefix: (i > 0 && j == 0 ? " " : "") + prefix,
-                    postfix: postfix + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
+                    prefix: (i > 0 && j == 0 ? " " : "") + prefix.replace(/%/g, "%%"),
+                    postfix: postfix.replace(/%/g, "%%") + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
                 };
                 printfs.push(new CPrintf(scope, node, accessor, type, options));
             }
