@@ -88,13 +88,13 @@ class CConsoleLog {
                     accessor = tempVarName;
                 }
                 else if (ts.isStringLiteral(node))
-                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1);
+                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1).replace(/%/g, "%%");
                 else
                     accessor = CodeTemplateFactory.templateToString(CodeTemplateFactory.createForNode(scope, node));
 
                 let options = {
-                    prefix: (i > 0 && j == 0 ? " " : "") + prefix,
-                    postfix: postfix + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
+                    prefix: (i > 0 && j == 0 ? " " : "") + prefix.replace(/%/g, "%%"),
+                    postfix: postfix.replace(/%/g, "%%") + (i == printNodes.length - 1 && j == nodeExpressions.length - 1 ? "\\n" : "")
                 };
                 printfs.push(new CPrintf(scope, node, accessor, type, options));
             }

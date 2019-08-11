@@ -111,7 +111,7 @@ class HeaderFlags {
 @CodeTemplate(`
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
     || headerFlags.str_pos || headerFlags.str_rpos || headerFlags.array_str_cmp
-    || headerFlags.str_substring
+    || headerFlags.str_substring || headerFlags.dict_find_pos
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
     || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus
     || headerFlags.js_var_lessthan || headerFlags.dict_find_pos}
