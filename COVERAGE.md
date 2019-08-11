@@ -115,7 +115,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] ~~eval~~  _(will not be implemented)_
      - [x] **parseInt** _(partial: radix parameter not supported)_
      - [ ] parseFloat
-     - [ ] isNaN
+     - [x] **isNaN**
      - [ ] isFinite
      - [ ] decodeURI
      - [ ] decodeURIComponent
