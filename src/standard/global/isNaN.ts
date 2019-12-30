@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { BooleanVarType } from '../../ctypes';
+import { BooleanVarType, UniversalVarType } from '../../ctypes';
 import { IScope } from '../../program';
 import { CAsUniversalVar } from '../../nodes/typeconvert';
 import { TypeHelper } from '../../typehelper';
@@ -10,6 +10,9 @@ import { TypeHelper } from '../../typehelper';
 class IsNaNResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
         return call.expression.kind === ts.SyntaxKind.Identifier && call.expression.getText() === "isNaN";
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
+        return [ UniversalVarType ];
     }
     public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
         return BooleanVarType;
