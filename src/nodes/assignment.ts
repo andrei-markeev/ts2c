@@ -57,6 +57,9 @@ export class AssignmentHelper {
     {accessor}->data[{argumentExpression}] = {expression}{CR}
 {#elseif isStaticArray}
     {accessor}[{argumentExpression}] = {expression}{CR}
+{#elseif isUniversalVar}
+    if ({accessor}.type == JS_VAR_DICT)
+        DICT_SET(((struct dict_js_var_t *){accessor}.data), {argumentExpression}, {expression})
 {#else}
     /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */{CR}
 {/if}`
@@ -72,6 +75,7 @@ export class CAssignment {
     public isStruct: boolean = false;
     public isDict: boolean = false;
     public isNewExpression: boolean = false;
+    public isUniversalVar: boolean = false;
     public assignmentRemoved: boolean = false;
     public expression: CExpression;
     public nodeText: string;
@@ -83,6 +87,7 @@ export class CAssignment {
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
+        this.isUniversalVar = type === UniversalVarType;
         this.nodeText = right.getText();
 
         let argType = type;
@@ -111,7 +116,7 @@ export class CAssignment {
             let arrLiteral = <ts.ArrayLiteralExpression>right;
             this.arrayLiteralSize = arrLiteral.elements.length;
             this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
-        } else if (argType == UniversalVarType) {
+        } else if (!this.isUniversalVar && argType == UniversalVarType) {
             this.expression = new CAsUniversalVar(scope, right);
         } else
             this.expression = CodeTemplateFactory.createForNode(scope, right);

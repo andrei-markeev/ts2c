@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { CType, StructType, ArrayType, NumberVarType, FuncType } from './ctypes';
+import { CType, StructType, ArrayType, NumberVarType, FuncType, PointerVarType } from './ctypes';
 import { TypeHelper } from './typehelper';
 import { findParentFunction } from './utils';
 
@@ -27,7 +27,7 @@ export class SymbolsHelper {
             name: k,
             properties: Object.keys(this.userStructs[k].properties).map(pk => ({
                 name: pk,
-                type: this.userStructs[k].propertyDefs[pk].recursive ? this.userStructs[k] : this.userStructs[k].properties[pk]
+                type: this.userStructs[k].properties[pk]
             }))
         }));
 
@@ -77,7 +77,7 @@ export class SymbolsHelper {
     private getStructureBodyString(structType: StructType) {
         let userStructCode = '{\n';
         for (let propName in structType.properties) {
-            let propType = structType.propertyDefs[propName].recursive ? structType.getText() : structType.propertyDefs[propName].type;
+            let propType = structType.propertyDefs[propName].type;
             if (typeof propType === 'string') {
                 userStructCode += '    ' + propType + ' ' + propName + ';\n';
             } else if (propType instanceof ArrayType) {

@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 
 import { StandardCallHelper } from './standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isRelationalOp, isEqualityOp, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, findParentSourceFile, getAllNodesUnder } from './utils';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, findParentSourceFile, getAllNodesUnder, isFieldAssignment } from './utils';
 import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, VoidType, getTypeBodyText } from './ctypes';
 
 type NodeFunc<T extends ts.Node> = { (n: T): ts.Node };
@@ -12,7 +12,8 @@ export class TypeHelper {
 
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
     private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
-    private typeOfNodeDict: { [id: string]: { node: ts.Node, type: CType } } = {};
+    private typeOfNodeDict: { [id: string]: { type: CType } } = {};
+    private circularAssignments: { [pos: number]: { node: ts.Node, propChain: string[] } } = {};
 
     constructor(private typeChecker: ts.TypeChecker, private allNodes: ts.Node[]) { }
 
@@ -90,7 +91,7 @@ export class TypeHelper {
     public inferTypes() {
 
         const type = <T extends ts.Node>(t: { (n: T): CType } | string): NodeResolver<T> => ({ getType: typeof (t) === "string" ? _ => t : t });
-        const struct = (prop: string, pos: number, elemType: CType = PointerVarType): StructType => new StructType({ [prop]: { type: elemType, order: pos } });
+        const struct = (prop: string, pos: number, elemType: CType = PointerVarType, recursive: boolean = false): StructType => new StructType({ [prop]: { type: elemType, order: pos, recursive } });
 
         let typeEqualities: Equality<any>[] = [];
 
@@ -170,13 +171,20 @@ export class TypeHelper {
         }
 
         // expressions
-        addEquality(isEqualsExpression, n => n.left, n => n.right);
+        addEquality(isEqualsExpression, n => n.left, n => this.circularAssignments[n.pos] ? null : n.right);
         addEquality(isEqualsExpression, n => n.left, type(n => {
             const type = this.getCType(n.right);
             if (type instanceof FuncType && type.closureParams.length)
                 return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
             else
                 return null;
+        }));
+        addEquality(isFieldAssignment, n => n.left.expression, type(n => {
+            if (!this.circularAssignments[n.pos])
+                return null;
+            return isFieldElementAccess(n.left) ? struct(n.left.argumentExpression.getText().slice(1, -1), n.left.pos, PointerVarType, true)
+                : isFieldPropertyAccess(n.left) ? struct(n.left.name.text, n.left.pos, PointerVarType, true)
+                : null;
         }));
         addEquality(ts.isConditionalExpression, n => n.whenTrue, n => n.whenFalse);
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
@@ -321,7 +329,46 @@ export class TypeHelper {
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
         addEquality(ts.isCatchClause, n => n.variableDeclaration, type(StringVarType));
 
+        this.findCircularAssignments();
         this.resolveTypes(typeEqualities);
+    }
+
+    private findCircularAssignments() {
+        this.circularAssignments = {};
+        const assignments = {};
+        this.allNodes.forEach(node => {
+            if (isEqualsExpression(node)) {
+                let right = node.right;
+                const rightProps = [];
+                while (isFieldPropertyAccess(right) || isFieldElementAccess(right)) {
+                    right = right.expression;
+                    if (isFieldPropertyAccess(right))
+                        rightProps.unshift(right.name.text);
+                    else if (isFieldElementAccess(right))
+                        rightProps.unshift(right.argumentExpression.getText().slice(1, -1));
+                }
+                let left = node.left;
+                const leftProps = [];
+                while (isFieldPropertyAccess(left) || isFieldElementAccess(left)) {
+                    left = left.expression;
+                    if (isFieldPropertyAccess(left))
+                        leftProps.unshift(left.name.text);
+                    else if (isFieldElementAccess(left))
+                        leftProps.unshift(left.argumentExpression.getText().slice(1, -1));
+                }
+
+                const symbolRight = this.typeChecker.getSymbolAtLocation(right);
+                const symbolLeft = this.typeChecker.getSymbolAtLocation(left);
+                if (symbolRight && symbolLeft) {
+                    const key = symbolLeft.valueDeclaration.pos + "->" + leftProps.map(p => p + "->").join("");
+                    const value = symbolRight.valueDeclaration.pos + "->" + rightProps.map(p => p + "->").join("");
+                    if (key.indexOf(value) === 0 || assignments[value] && assignments[value].some(a => key.indexOf(a) === 0))
+                        this.circularAssignments[node.pos] = { node: symbolLeft.valueDeclaration, propChain: leftProps };
+                    assignments[key] = (assignments[key] || []).concat(value);
+                }
+            }
+        });
+        console.log(Object.keys(this.circularAssignments));
     }
 
     private resolveTypes(typeEqualities: Equality<any>[]) {
@@ -356,7 +403,7 @@ export class TypeHelper {
                         changed = true;
                     this.setNodeType(node1, type);
                     if (node2)
-                        this.setNodeType(node2, type);
+                        this.propagateNodeType(node1, node2);
                 }
             }
         } while (changed);
@@ -388,8 +435,21 @@ export class TypeHelper {
     }
 
     private setNodeType(n, t) {
-        if (n && t)
-            this.typeOfNodeDict[n.pos + "_" + n.end] = { node: n, type: t };
+        if (n && t) {
+            const key = n.pos + "_" + n.end;
+            if (!this.typeOfNodeDict[key])
+                this.typeOfNodeDict[key] = { type: t };
+            else
+                this.typeOfNodeDict[key].type = t;
+        }
+    }
+    private propagateNodeType(from, to) {
+        const typeToKeep = this.typeOfNodeDict[from.pos + "_" + from.end];
+        const typeToRemove = this.typeOfNodeDict[to.pos + "_" + to.end];
+        this.typeOfNodeDict[to.pos + "_" + to.end] = typeToRemove;
+        for (let key in this.typeOfNodeDict)
+            if (this.typeOfNodeDict[key] === typeToRemove)
+                this.typeOfNodeDict[key] = typeToKeep;
     }
 
     public getDeclaration(n: ts.Node) {
@@ -405,6 +465,9 @@ export class TypeHelper {
         let type = this.typesDict[typeBodyText];
         if (type instanceof ArrayType)
             type.capacity = Math.max(type.capacity, t.capacity);
+        if (type instanceof StructType)
+            for (let pk in type.propertyDefs)
+                type.propertyDefs[pk].recursive = type.propertyDefs[pk].recursive || t.propertyDefs[pk].recursive;
         if (!type)
             type = this.typesDict[typeBodyText] = t;
         return type;
@@ -522,15 +585,11 @@ export class TypeHelper {
             let changed = false;
             let newProps = {};
             for (let p of props) {
-                let recursive1 = type1.propertyDefs[p] && type1.propertyDefs[p].recursive;
-                let recursive2 = type2.propertyDefs[p] && type2.propertyDefs[p].recursive;
-                let result;
-                if (recursive1 || recursive2)
-                    result = { type: recursive1 ? type1 : type2, replaced: recursive1 != recursive2 };
-                else
-                    result = this.mergeTypes(type1.properties[p], type2.properties[p]);
+                let recursive1 = type1.propertyDefs[p] ? type1.propertyDefs[p].recursive : false;
+                let recursive2 = type2.propertyDefs[p] ? type2.propertyDefs[p].recursive : false;
+                let result = recursive1 || recursive2 ? { type: PointerVarType, replaced: recursive1 != recursive2 } : this.mergeTypes(type1.properties[p], type2.properties[p]);
                 let order = Math.max(type1.propertyDefs[p] ? type1.propertyDefs[p].order : 0, type2.propertyDefs[p] ? type2.propertyDefs[p].order : 0);
-                newProps[p] = { type: result.type, order: order, recursive: type1 == result.type || type2 == result.type };
+                newProps[p] = { type: result.type, order: order, recursive: recursive1 || recursive2 };
                 if (result.replaced)
                     changed = true;
             }

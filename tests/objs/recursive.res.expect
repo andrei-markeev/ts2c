@@ -1,1 +1,1 @@
-{ test: [object Object] }
+{ test: { hello: "world", test2: [object Object] } }

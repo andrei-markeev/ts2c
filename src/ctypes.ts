@@ -82,7 +82,7 @@ export class StructType {
             .reduce((acc, k) => { acc[k] = this.propertyDefs[k].type; return acc; }, {});
     }
     public getBodyText() {
-        return "{" + Object.keys(this.propertyDefs).sort().map(k => k + ": " + (this.propertyDefs[k].recursive ? this.getText() : getTypeBodyText(this.properties[k]))).join("; ") + "}";
+        return "{" + Object.keys(this.propertyDefs).sort().map(k => k + ": " + getTypeBodyText(this.properties[k])).join("; ") + "}";
     }
     constructor(
         public propertyDefs: { [propName: string]: { type: CType, order: number, recursive?: boolean } }

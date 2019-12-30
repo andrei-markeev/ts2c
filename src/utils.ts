@@ -2,6 +2,9 @@ import * as ts from 'typescript';
 import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType } from './ctypes';
 import { TypeHelper } from './typehelper';
 
+export interface FieldAssignmentExpression extends ts.BinaryExpression {
+    left: ts.PropertyAccessExpression | ts.ElementAccessExpression;
+}
 export interface MethodCallExpression extends ts.CallExpression {
     expression: ts.PropertyAccessExpression;
 }
@@ -25,6 +28,9 @@ export function isNode(n): n is ts.Node {
 }
 export function isEqualsExpression(n): n is ts.BinaryExpression {
     return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
+}
+export function isFieldAssignment(n): n is FieldAssignmentExpression {
+    return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken && (isFieldElementAccess(n.left) || isFieldPropertyAccess(n.left));
 }
 export function isMethodCall(n): n is MethodCallExpression {
     return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
