@@ -1,12 +1,12 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { ArrayType, RegexVarType, StringVarType } from '../../ctypes';
+import { ArrayType, RegexVarType, StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 export class StringMatchResolver implements IResolver {

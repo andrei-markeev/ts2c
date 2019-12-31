@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { IScope } from '../program';
-import { ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType } from '../ctypes';
+import { ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType } from '../types/ctypes';
 import { CVariable, CVariableAllocation } from './variable';
 import { CAssignment } from './assignment';
 import { CRegexSearchFunction } from './regexfunc';

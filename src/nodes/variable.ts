@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { IScope } from '../program';
-import { ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, UniversalVarType, FuncType } from '../ctypes';
+import { ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, UniversalVarType, FuncType } from '../types/ctypes';
 import { AssignmentHelper, CAssignment } from './assignment';
 import { CElementAccess, CSimpleElementAccess } from './elementaccess';
-import { isNode } from '../utils';
-import { TypeHelper } from '../typehelper';
+import { isNode } from '../types/utils';
+import { TypeHelper } from '../types/typehelper';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)

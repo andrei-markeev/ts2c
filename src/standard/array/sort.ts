@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
 import { CodeTemplate } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
-import { ArrayType, StringVarType, NumberVarType, PointerVarType } from '../../ctypes';
+import { ArrayType, StringVarType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CElementAccess } from '../../nodes/elementaccess';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class ArraySortResolver implements IResolver {

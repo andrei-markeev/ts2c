@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { BooleanVarType, UniversalVarType } from '../../ctypes';
+import { BooleanVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CAsUniversalVar } from '../../nodes/typeconvert';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class IsNaNResolver implements IResolver {

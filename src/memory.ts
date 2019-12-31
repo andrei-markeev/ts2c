@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
-import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType } from './ctypes';
+import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile } from './utils';
-import { TypeHelper } from './typehelper';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile } from './types/utils';
+import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
     node: ts.Node;

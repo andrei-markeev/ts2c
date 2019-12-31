@@ -1,9 +1,9 @@
 import * as ts from 'typescript';
-import { StringVarType, CType, UniversalVarType, NumberVarType, BooleanVarType, ArrayType, StructType, DictType } from "../ctypes";
+import { StringVarType, CType, UniversalVarType, NumberVarType, BooleanVarType, ArrayType, StructType, DictType } from "../types/ctypes";
 import { CodeTemplate, CodeTemplateFactory } from "../template";
 import { CExpression } from "./expressions";
 import { IScope } from "../program";
-import { isNode } from "../utils";
+import { isNode } from "../types/utils";
 import { CArraySize, CSimpleElementAccess } from "./elementaccess";
 import { CVariable } from "./variable";
 

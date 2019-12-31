@@ -1,7 +1,7 @@
 import * as ts from 'typescript'
-import { SyntaxKind_NaNKeyword } from './utils';
+import { SyntaxKind_NaNKeyword } from './types/utils';
 import { CFunctionPrototype } from './nodes/function';
-import { TypeHelper } from './typehelper';
+import { TypeHelper } from './types/typehelper';
 import { SymbolsHelper } from './symbols';
 import { MemoryManager } from './memory';
 import { CodeTemplate, CodeTemplateFactory } from './template';

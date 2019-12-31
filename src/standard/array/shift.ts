@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
 import { CodeTemplate } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
-import { ArrayType, PointerVarType } from '../../ctypes';
+import { ArrayType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CElementAccess } from '../../nodes/elementaccess';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class ArrayShiftResolver implements IResolver {

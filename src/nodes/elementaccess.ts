@@ -1,11 +1,11 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { IScope } from '../program';
-import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../ctypes';
+import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../types/ctypes';
 import { CExpression } from './expressions';
 import { CUndefined } from './literals';
 import { CAsUniversalVar } from './typeconvert';
-import { isInBoolContext, findParentFunction } from '../utils';
+import { isInBoolContext, findParentFunction } from '../types/utils';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])

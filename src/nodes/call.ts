@@ -4,9 +4,9 @@ import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
-import { FuncType, UniversalVarType } from '../ctypes';
+import { FuncType, UniversalVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
-import { isNullOrUndefined, findParentFunction } from '../utils';
+import { isNullOrUndefined, findParentFunction } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
 
 @CodeTemplate(`

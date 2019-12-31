@@ -2,9 +2,9 @@ import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';
-import { FuncType, getTypeText } from '../ctypes';
+import { FuncType, getTypeText } from '../types/ctypes';
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction } from '../utils';
+import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction } from '../types/utils';
 import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)

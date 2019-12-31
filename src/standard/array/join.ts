@@ -1,13 +1,13 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { ArrayType, StringVarType, NumberVarType } from '../../ctypes';
+import { ArrayType, StringVarType, NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CString } from '../../nodes/literals';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from '../../nodes/elementaccess';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class ArrayConcatResolver implements IResolver {

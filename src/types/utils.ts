@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType } from './ctypes';
-import { TypeHelper } from './typehelper';
+import { TypeMerger } from './merge';
 
 export interface FieldAssignmentExpression extends ts.BinaryExpression {
     left: ts.PropertyAccessExpression | ts.ElementAccessExpression;
@@ -148,7 +148,7 @@ export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: 
         || isRelationalOp(op) && (leftType !== StringVarType || rightType !== StringVarType);
 }
 
-export function getBinExprResultType(mergeTypes: TypeHelper["mergeTypes"], leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftType: CType, op: ts.SyntaxKind, rightType: CType) {
     if (op === ts.SyntaxKind.EqualsToken)
         return rightType;
     if (isRelationalOp(op) || isEqualityOp(op) || op === ts.SyntaxKind.InKeyword || op === ts.SyntaxKind.InstanceOfKeyword)

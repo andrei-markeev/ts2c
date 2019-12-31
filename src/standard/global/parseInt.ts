@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { NumberVarType } from '../../ctypes';
+import { NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CExpression } from '../../nodes/expressions';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class ParseIntResolver implements IResolver {

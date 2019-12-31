@@ -1,9 +1,9 @@
 import * as ts from 'typescript';
 import { CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { StringVarType } from '../../ctypes';
+import { StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
-import { TypeHelper } from '../../typehelper';
+import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver
 class StringToStringResolver implements IResolver {
