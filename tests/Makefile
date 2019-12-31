@@ -50,24 +50,13 @@ endif
 
 all: $(RES) $(ELF) $(C)
 
-coverage/%: %.ts
-	cd .. && istanbul cover --print none --report=json --dir tests/$@ ts2c.js -- tests/$<
-coverage/coverage-final.json: $(COVER)
-	istanbul report json
-coverage/html/index.html: coverage/coverage-final.json
-	cd .. && "./node_modules/.bin/remap-istanbul" -i tests/coverage/coverage-final.json -o tests/coverage/html -t html
-
-cover: coverage/html/index.html
-
 clean:
 ifeq ($(target), Windows)
 	del /s *.exe
 	del /s *.res
 	del /s *.c
-	del coverage
 else
 	rm -f **/*.elf
 	rm -f **/*.res
 	rm -f **/*.c
-	rm -rf coverage
 endif

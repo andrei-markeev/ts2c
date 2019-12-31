@@ -4,6 +4,7 @@
 *.js.map
 *.plist
 *.res
+.nyc_output
 .vscode/.browse.*
 .vscode/ipch
 .vscode/c_cpp_properties.json
