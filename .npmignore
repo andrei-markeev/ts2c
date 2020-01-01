@@ -3,4 +3,4 @@ ts2c.bundle.js
 *.js.map
 .vscode
 tests
-calc_conformance.js
+scripts
