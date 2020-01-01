@@ -47,8 +47,8 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
     - [x] **Argument list**
     - [x] **Function expression `function() {` ... `}`**
  - [x] **Postfix expressions**
-    - [x] **`--`** _(only numbers)_
-    - [x] **`++`** _(only numbers)_
+    - [x] **`--`**
+    - [x] **`++`**
  - [x] **Unary operators**
     - [x] **`delete`**
     - [x] **`void`**

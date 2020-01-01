@@ -548,6 +548,10 @@ class CInExpression {
 @CodeTemplate(`
 {#if isCompound}
     ({operand} = {before}{operand}{after})
+{#elseif incrementBy && isPostfix}
+    js_var_dict_inc({operand}, {argumentExpr}, {incrementBy}, TRUE)
+{#elseif incrementBy}
+    js_var_dict_inc({operand}, {argumentExpr}, {incrementBy}, FALSE)
 {#else}
     {before}{operand}{after}
 {/if}`, [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
@@ -555,10 +559,13 @@ class CUnaryExpression {
     public before: string = "";
     public operand: CExpression;
     public after: string = "";
+    public argumentExpr: CExpression = null;
+    public incrementBy: string = "";
     public isPostfix: boolean;
     public isCompound: boolean = false;
     constructor(scope: IScope, node: ts.PostfixUnaryExpression | ts.PrefixUnaryExpression) {
-        this.isPostfix = node.kind == ts.SyntaxKind.PostfixUnaryExpression;
+        this.isPostfix = ts.isPostfixUnaryExpression(node);
+        const isTopExpressionOfStatement = ts.isExpressionStatement(node.parent);
 
         const type = scope.root.typeHelper.getCType(node.operand);
         if (node.operator === ts.SyntaxKind.PlusToken)
@@ -580,48 +587,69 @@ class CUnaryExpression {
         } else if (node.operator === ts.SyntaxKind.ExclamationToken) {
             this.before = "!";
             this.operand = new CCondition(scope, node.operand);
-        } else if (node.operator === ts.SyntaxKind.PlusPlusToken) {
+        } else if (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) {
+            const plus = node.operator === ts.SyntaxKind.PlusPlusToken;
+            let accessObj = null, isDict = false;
+            if ((ts.isPropertyAccessExpression(node.operand) || ts.isElementAccessExpression(node.operand))) {
+                this.argumentExpr = CodeTemplateFactory.createForNode(scope, ts.isPropertyAccessExpression(node.operand) ? node.operand.name : node.operand.argumentExpression);
+                accessObj = node.operand.expression;
+                isDict = scope.root.typeHelper.getCType(accessObj) instanceof DictType;
+            }
             if (this.isPostfix) {
-                if (toNumberCanBeNaN(type))
-                    this.operand = `/* not supported expression ${node.getText()} */`;
-                else {
-                    this.operand = new CAsNumber(scope, node.operand);
-                    this.after = "++";
+                if (!isDict && (type === NumberVarType || type === BooleanVarType)) {
+                    this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
+                    this.after = plus ? "++" : "--";
+                } else if (isDict) {
+                    this.operand = CodeTemplateFactory.createForNode(scope, accessObj);
+                    this.incrementBy = plus ? "1" : "-1";
+                    scope.root.headerFlags.js_var_dict_inc = true;
+                } else if (type === UniversalVarType) {
+                    this.before = "js_var_inc(&";
+                    this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
+                    this.after = ", " + (plus ? "1" : "-1") + ")";
+                    scope.root.headerFlags.js_var_inc = true;
+                } else {
+                    this.operand = "/* expression is not yet supported " + node.getText() + " */";
                 }
             } else {
-                if (toNumberCanBeNaN(type)) {
+                if (!isDict && (type === NumberVarType || type === BooleanVarType)) {
+                    this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
+                    this.before = plus ? "++" : "--";
+                } else if (!isDict && !toNumberCanBeNaN(type)) {
+                    this.isCompound = true;
+                    this.operand = new CAsNumber(scope, node.operand);
+                    this.after = plus ? " + 1" : " - 1";
+                } else if (isTopExpressionOfStatement) {
+                    const applyOperation = plus ? ts.createAdd : ts.createSubtract
+                    const binExpr = applyOperation(node.operand, ts.createNumericLiteral("1"));
+                    binExpr.parent = node;
+                    binExpr.getText = () => node.operand.getText() + (plus ? "+" : "-") + "1";
+                    binExpr.operatorToken.getText = () => plus ? "+" : "-";
+                    binExpr.right.getText = () => "1";
+                    scope.root.typeHelper.registerSyntheticNode(binExpr, UniversalVarType);
+                    this.operand = AssignmentHelper.create(scope, node.operand, binExpr);
+                } else if (!isDict && plus) {
                     this.isCompound = true;
                     this.before = "js_var_plus(js_var_to_number(";
                     this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
                     this.after = "), js_var_from_int16_t(1))";
                     scope.root.headerFlags.js_var_plus = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
-                } else {
-                    this.before = "++";
-                    this.operand = new CAsNumber(scope, node.operand);
-                }
-            }
-        } else if (node.operator === ts.SyntaxKind.MinusMinusToken) {
-            if (this.isPostfix) {
-                if (toNumberCanBeNaN(type))
-                    this.operand = `/* not supported expression ${node.getText()} */`;
-                else {
-                    this.operand = new CAsNumber(scope, node.operand);
-                    this.after = "--";
-                }
-            } else {
-                if (toNumberCanBeNaN(type)) {
+                } else if (!isDict && !plus) {
                     this.isCompound = true;
-                    this.before = "js_var_compute(";
+                    this.before = "js_var_compute(js_var_to_number(";
                     this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = ", JS_VAR_MINUS, js_var_from_int16_t(1))";
+                    this.after = "), JS_VAR_MINUS, js_var_from_int16_t(1))";
                     scope.root.headerFlags.js_var_compute = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
                 } else {
-                    this.before = "--";
-                    this.operand = new CAsNumber(scope, node.operand);
+                    this.operand = CodeTemplateFactory.createForNode(scope, accessObj);
+                    this.incrementBy = plus ? "1" : "-1";
+                    scope.root.headerFlags.js_var_dict_inc = true;
                 }
             }
+        } else {
+            this.operand = `/* not supported unary expression ${node.getText()} */`;
         }
     }
 }

@@ -88,7 +88,7 @@ export class CAssignment {
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
         this.isUniversalVar = type === UniversalVarType;
-        this.nodeText = right.getText();
+        this.nodeText = right.pos < 0 ? "(synthetized node)" : right.getText();
 
         let argType = type;
         let argAccessor = accessor;

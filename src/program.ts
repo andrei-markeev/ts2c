@@ -79,6 +79,8 @@ class HeaderFlags {
     js_var_compute: boolean = false;
     js_var_get: boolean = false;
     js_var_isnan: boolean = false;
+    js_var_dict_inc: boolean = false;
+    js_var_inc: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;
@@ -119,12 +121,14 @@ class HeaderFlags {
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
     || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus
-    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch}
+    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch
+    || headerFlags.js_var_dict_inc}
     #include <stdlib.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
     || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus 
-    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch}
+    || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch
+    || headerFlags.js_var_dict_inc}
     #include <assert.h>
 {/if}
 {#if headerFlags.printf || headerFlags.parse_int16_t}
@@ -144,11 +148,11 @@ class HeaderFlags {
     {includes => #include <{this}>\n}
 {/if}
 
-{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove }
+{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove || headerFlags.js_var_dict_inc }
     #define TRUE 1
     #define FALSE 0
 {/if}
-{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_isnan}
+{#if headerFlags.bool || headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_isnan || headerFlags.js_var_dict_inc}
     typedef unsigned char uint8_t;
 {/if}
 {#if headerFlags.int16_t || headerFlags.js_var || headerFlags.array ||
@@ -437,7 +441,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_from || headerFlags.js_var_isnan}
+{#if headerFlags.js_var || headerFlags.str_to_int16_t || headerFlags.js_var_from || headerFlags.js_var_isnan || headerFlags.js_var_dict_inc}
     enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
     struct js_var {
         enum js_var_type type;
@@ -446,7 +450,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_dict_inc || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
@@ -454,7 +458,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_get || headerFlags.try_catch}
+{#if headerFlags.array_string_t || headerFlags.js_var_dict || headerFlags.js_var_dict_inc || headerFlags.js_var_get || headerFlags.try_catch}
     struct array_string_t {
         int16_t size;
         int16_t capacity;
@@ -462,14 +466,14 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.js_var_dict}
+{#if headerFlags.js_var_dict || headerFlags.js_var_dict_inc}
     struct dict_js_var_t {
         struct array_string_t *index;
         struct array_js_var_t *values;
     };
 {/if}
 
-{#if headerFlags.js_var_from || headerFlags.js_var_get}
+{#if headerFlags.js_var_from || headerFlags.js_var_get || headerFlags.js_var_dict_inc}
     struct js_var js_var_from(enum js_var_type type) {
         struct js_var v;
         v.type = type;
@@ -488,7 +492,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_from_int16_t}
+{#if headerFlags.js_var_from_int16_t || headerFlags.js_var_dict_inc}
     struct js_var js_var_from_int16_t(int16_t n) {
         struct js_var v;
         v.type = JS_VAR_INT16;
@@ -525,7 +529,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan || headerFlags.js_var_dict_inc}
     struct js_var str_to_int16_t(const char * str) {
         struct js_var v;
         const char *p = str;
@@ -606,7 +610,7 @@ class HeaderFlags {
     }
 {/if}
 
-{#if headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
+{#if headerFlags.js_var_to_number || headerFlags.js_var_get || headerFlags.js_var_eq || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan || headerFlags.js_var_dict_inc}
 
     struct js_var js_var_to_number(struct js_var v)
     {
@@ -689,6 +693,48 @@ class HeaderFlags {
     #define THROW(x) longjmp(err_jmp[--err_i], x)
     struct array_string_t * err_defs;
     #define END_TRY err_defs->size--; } }
+{/if}
+
+{#if headerFlags.js_var_dict_inc}
+    struct js_var js_var_dict_inc(struct dict_js_var_t * dict, const char * key, int16_t by, uint8_t is_postfix) {
+        struct js_var value;
+        int16_t pos;
+
+        pos = dict_find_pos(dict->index->data, dict->index->size, key);
+        if (pos < 0) {
+            pos = -pos - 1;
+            ARRAY_INSERT(dict->index, pos, key);
+            ARRAY_INSERT(dict->values, pos, js_var_from(JS_VAR_NAN));
+            return js_var_from(JS_VAR_NAN);
+        } else {
+            value = js_var_to_number(dict->values->data[pos]);
+            if (value.type == JS_VAR_NAN) {
+                dict->values->data[pos] = value;
+                return value;
+            } else {
+                value.number += by;
+                dict->values->data[pos] = value;
+                if (is_postfix)
+                    value.number -= by;
+                return value;
+            }
+        }
+    }
+{/if}
+
+{#if headerFlags.js_var_inc}
+    struct js_var js_var_inc(struct js_var * v, int16_t by) {
+        struct js_var result;
+
+        result = js_var_to_number(*v);
+        if (result.type == JS_VAR_INT16) {
+            (*v).type = JS_VAR_INT16;
+            (*v).number = result.number + by;
+            (*v).data = NULL;
+        } else
+            (*v).type = JS_VAR_NAN;
+        return result;
+    }
 {/if}
 
 {#if headerFlags.js_var_get}

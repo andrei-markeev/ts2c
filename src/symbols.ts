@@ -107,7 +107,7 @@ export class SymbolsHelper {
             "js_var_type", "js_var", "array_js_var_t", "dict_js_var_t",
             "js_var_from", "js_var_from_int16_t", "js_var_from_uint8_t", "js_var_from_str", "js_var_from_dict",
             "str_to_int16_t", "js_var_to_str", "js_var_to_number", "js_var_to_bool", "js_var_to_undefined",
-            "js_var_typeof", "js_var_eq", "js_var_op", "js_var_compute",
+            "js_var_typeof", "js_var_dict_inc", "js_var_get", "js_var_eq", "js_var_op", "js_var_compute",
             "regex_clear_matches", "regex_match",
             "gc_main", "gc_i", "gc_j"
         ]

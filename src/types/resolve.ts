@@ -128,8 +128,12 @@ export class TypeResolver {
         addEquality(ts.isConditionalExpression, n => n, n => n.whenTrue);
         addEquality(isUnaryExpression, n => n, type(n => getUnaryExprResultType(n.operator, this.typeHelper.getCType(n.operand))));
         addEquality(isUnaryExpression, n => n.operand, type(n => {
+            if (n.operator !== ts.SyntaxKind.PlusPlusToken && n.operator !== ts.SyntaxKind.MinusMinusToken)
+                return null;
             const resultType = this.typeHelper.getCType(n);
-            if (resultType == UniversalVarType && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken))
+            const accessObjType = (ts.isPropertyAccessExpression(n.operand) || ts.isElementAccessExpression(n.operand)) && this.typeHelper.getCType(n.operand.expression);
+            const isDictAccessor = accessObjType instanceof DictType;
+            if (resultType == UniversalVarType || toNumberCanBeNaN(resultType) || isDictAccessor)
                 return UniversalVarType;
             else
                 return null;
