@@ -1,6 +1,8 @@
+.nyc_output
 ts2c.bundle.js
 *.ts
 *.js.map
 .vscode
 tests
+sputniktests
 scripts
