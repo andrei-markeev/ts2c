@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
@@ -41,11 +41,12 @@ class ConsoleLogResolver implements IResolver {
     {/if}
 {/statements}
 {printfCall}`)
-class CConsoleLog {
-    public printfCalls: any[] = [];
-    public printfCall: any = null;
+class CConsoleLog extends CTemplateBase {
+    public printfCalls: CPrintf[] = [];
+    public printfCall: CPrintf = null;
 
     constructor(scope: IScope, node: ts.CallExpression) {
+        super();
         let printfs = [];
         let printNodes = node.arguments;
         for (let i = 0; i < printNodes.length; i++) {
@@ -55,7 +56,7 @@ class CConsoleLog {
             let stringLit = '';
             nodeExpressions = nodeExpressions.reduce((a, c) => {
                 if (ts.isStringLiteral(c.node))
-                    stringLit += CodeTemplateFactory.templateToString(<any>new CString(scope, c.node)).slice(1, -1);
+                    stringLit += CodeTemplateFactory.templateToString(new CString(scope, c.node)).slice(1, -1);
                 else {
                     a.push(c);
                     c.prefix = stringLit;
@@ -88,7 +89,7 @@ class CConsoleLog {
                     accessor = tempVarName;
                 }
                 else if (ts.isStringLiteral(node))
-                    accessor = CodeTemplateFactory.templateToString(<any>new CString(scope, node)).slice(1, -1).replace(/%/g, "%%");
+                    accessor = CodeTemplateFactory.templateToString(new CString(scope, node)).slice(1, -1).replace(/%/g, "%%");
                 else
                     accessor = CodeTemplateFactory.templateToString(CodeTemplateFactory.createForNode(scope, node));
 

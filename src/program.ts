@@ -1,10 +1,11 @@
 import * as ts from 'typescript'
 import { SyntaxKind_NaNKeyword } from './types/utils';
-import { CFunctionPrototype } from './nodes/function';
+import { CFunctionPrototype, CFunction } from './nodes/function';
+import { CRegexSearchFunction } from './nodes/regexfunc';
 import { TypeHelper } from './types/typehelper';
 import { SymbolsHelper } from './symbols';
 import { MemoryManager } from './memory';
-import { CodeTemplate, CodeTemplateFactory } from './template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from './template';
 import { CVariable, CVariableDestructors } from './nodes/variable';
 
 // these imports are here only because it is necessary to run decorators
@@ -51,7 +52,7 @@ export interface IScope {
     func: IScope;
     root: CProgram;
     variables: CVariable[];
-    statements: any[];
+    statements: ( CTemplateBase | string )[];
 }
 
 class HeaderFlags {
@@ -1003,8 +1004,8 @@ export class CProgram implements IScope {
     public func = this;
     public includes: string[] = [];
     public variables: CVariable[] = [];
-    public statements: any[] = [];
-    public functions: any[] = [];
+    public statements: (CTemplateBase | string)[] = [];
+    public functions: (CFunction | CRegexSearchFunction)[] = [];
     public functionPrototypes: CFunctionPrototype[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;

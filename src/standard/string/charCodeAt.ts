@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType, NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -43,12 +43,13 @@ class StringCharCodeAtResolver implements IResolver {
 {#if !topExpressionOfStatement}
     str_char_code_at({strAccess}, {position})
 {/if}`)
-class CStringSearch
+class CStringSearch extends CTemplateBase
 {
     public topExpressionOfStatement: boolean;
     public strAccess: CElementAccess;
     public position: CExpression;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {

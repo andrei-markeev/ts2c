@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -29,9 +29,10 @@ class ParseIntResolver implements IResolver {
 }
 
 @CodeTemplate(`parse_int16_t({arguments {, }=> {this}})`)
-class CParseInt {
+class CParseInt extends CTemplateBase {
     public arguments: CExpression[];
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         this.arguments = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
         scope.root.headerFlags.parse_int16_t = true;
     }

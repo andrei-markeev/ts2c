@@ -1,7 +1,7 @@
 import {IScope} from '../program';
-import {CodeTemplate} from '../template';
+import {CodeTemplate, CTemplateBase} from '../template';
 import {CString} from './literals';
-import {RegexBuilder, RegexMachine, RegexState, RegexStateTransition} from '../regex';
+import {RegexBuilder, RegexMachine, RegexState, RegexStateTransition, isRangeCondition} from '../regex';
 import {CExpression} from './expressions';
 
 @CodeTemplate(`
@@ -68,7 +68,7 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
 }
 struct regex_struct_t {regexName} = { {templateString}, {regexName}_search };
 `)
-export class CRegexSearchFunction {
+export class CRegexSearchFunction extends CTemplateBase {
     public hasChars: boolean;
     public finals: string[];
     public templateString: CString;
@@ -76,13 +76,14 @@ export class CRegexSearchFunction {
     public groupNumber: number = 0;
     public gcVarName: string;
     constructor(scope: IScope, template: string, public regexName: string, regexMachine: RegexMachine = null) {
+        super();
         this.templateString = new CString(scope, template.replace(/\\/g,'\\\\').replace(/"/g, '\\"'));
         if (/\/[a-z]+$/.test(template))
             throw new Error("Flags not supported in regex literals yet (" + template + ").");
         regexMachine = regexMachine || RegexBuilder.build(template.slice(1, -1));
         let max = (arr, func) => arr && arr.reduce((acc, t) => Math.max(acc, func(t), 0), 0) || 0;
         this.groupNumber = max(regexMachine.states, s => max(s.transitions, t => max(t.startGroup, g => g)));
-        this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || c.condition.fromChar || c.condition.tokens.length > 0)).length > 0;
+        this.hasChars = regexMachine.states.filter(s => s && s.transitions.filter(c => typeof c.condition == "string" || isRangeCondition(c.condition) || c.condition.tokens.length > 0)).length > 0;
         for (let s = 0; s < regexMachine.states.length; s++) {
             if (regexMachine.states[s] == null || regexMachine.states[s].transitions.length == 0)
                 continue;
@@ -110,11 +111,12 @@ export class CRegexSearchFunction {
 {/if}
         }
 `)
-class CStateBlock {
-    public conditions: any[] = [];
+class CStateBlock extends CTemplateBase {
+    public conditions: CharCondition[] = [];
     public groupsToReset: string[] = [];
     public final: boolean;
     constructor(scope: IScope, public stateNumber: string, state: RegexState, public groupNumber: number) {
+        super();
         this.final = state.final;
         let allGroups = [];
         state.transitions.forEach(t => allGroups = allGroups.concat(t.startGroup || []).concat(t.endGroup || []));
@@ -137,7 +139,7 @@ class CStateBlock {
 {#else}
                 if (ch == '{ch}'{fixedConditions}) {nextCode}
 {/if}`)
-class CharCondition {
+class CharCondition extends CTemplateBase {
     public anyCharExcept: boolean = false;
     public anyChar: boolean = false;
     public charClass: boolean = false;
@@ -147,6 +149,7 @@ class CharCondition {
     public fixedConditions: string = '';
     public nextCode;
     constructor(tr: RegexStateTransition, groupN: number) {
+        super();
         if (tr.fixedStart)
             this.fixedConditions = " && iterator == 0";
         else if (tr.fixedEnd)
@@ -154,14 +157,14 @@ class CharCondition {
         
         if (typeof tr.condition === "string")
             this.ch = tr.condition.replace('\\','\\\\').replace("'","\\'");
-        else if (tr.condition.fromChar) {
+        else if (isRangeCondition(tr.condition)) {
             this.charClass = true;
             this.chFrom = tr.condition.fromChar;
             this.ch = tr.condition.toChar;
         }
         else if (tr.condition.tokens.length) {
             this.anyCharExcept = true;
-            this.except = tr.condition.tokens.map(ch => ch.replace('\\','\\\\').replace("'","\\'"));
+            this.except = tr.condition.tokens.map(ch => (<string>ch).replace('\\','\\\\').replace("'","\\'"));
         } else
             this.anyChar = true;
 
@@ -178,6 +181,6 @@ class CharCondition {
 }
 
 @CodeTemplate(`{expression}.str`)
-export class CRegexAsString {
-    constructor (public expression: CExpression) { }
+export class CRegexAsString extends CTemplateBase {
+    constructor (public expression: CExpression) { super(); }
 }

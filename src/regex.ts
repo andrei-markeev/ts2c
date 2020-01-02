@@ -4,16 +4,18 @@ export interface RegexMachine {
 
 export interface RegexState {
     transitions: RegexStateTransition[];
-    final: boolean;
+    final?: boolean;
 }
 
+type RangeCondition = { fromChar: string, toChar: string };
 export interface RegexStateTransition {
-    condition: any;
+    condition: string | RangeCondition | RegexToken;
     next: number;
     fixedStart: boolean;
     fixedEnd: boolean;
     startGroup: number[];
     endGroup: number[];
+    final?: boolean;
 }
 
 interface Transition {
@@ -51,6 +53,7 @@ Array.prototype["removeDuplicates"] = function () {
 
 function isStartGroup(t): t is ComplexRegexToken { return t && !!t.startGroup || false; }
 function isEndGroup(t): t is ComplexRegexToken { return t && !!t.endGroup || false; }
+export function isRangeCondition(t): t is RangeCondition { return t && !!t.fromChar && !!t.toChar || false };
 
 class RegexParser {
 
@@ -223,7 +226,7 @@ export class RegexBuilder {
     static normalize(transitions: Transition[], finalStates: number[]) {
         if (!transitions.length)
             return [];
-        let states = [];
+        let states: RegexState[] = [];
 
         for (let finalState of finalStates) {
             if (transitions.map(t => t.fromState).indexOf(finalState) == -1) {
@@ -294,7 +297,7 @@ export class RegexBuilder {
                 let condition = { fromChar: charTransitions[0].condition, toChar: charTransitions[0].condition };
                 for (let i = 1; i <= charTransitions.length; i++) {
                     if (i < charTransitions.length
-                        && charTransitions[i].condition.charCodeAt(0) == charTransitions[i - 1].condition.charCodeAt(0) + 1
+                        && (<string>charTransitions[i].condition).charCodeAt(0) == (<string>charTransitions[i - 1].condition).charCodeAt(0) + 1
                         && charTransitions[i].next == charTransitions[i - 1].next
                         && charTransitions[i].fixedStart == charTransitions[i - 1].fixedStart
                         && charTransitions[i].fixedEnd == charTransitions[i - 1].fixedEnd

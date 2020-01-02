@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType, NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -48,7 +48,7 @@ class StringConcatResolver implements IResolver {
 {#if !topExpressionOfStatement}
     {tempVarName}
 {/if}`)
-class CStringConcat {
+class CStringConcat extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public indexVarName: string;
@@ -56,6 +56,8 @@ class CStringConcat {
     public concatValues: CConcatValue[] = [];
     public sizes: CGetSize[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
+
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.expression);
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
@@ -65,7 +67,7 @@ class CStringConcat {
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, "char *"));
             let args = call.arguments.map(a => ({ node: a, template: CodeTemplateFactory.createForNode(scope, a) }));
-            let toConcatenate = [{node: <ts.Node>propAccess.expression, template: this.varAccess}].concat(args);
+            let toConcatenate = [{node: <ts.Node>propAccess.expression, template: this.varAccess as CExpression}].concat(args);
             this.sizes = toConcatenate.map(a => new CGetSize(scope, a.node, a.template))
             this.concatValues = toConcatenate.map(a => new CConcatValue(scope, this.tempVarName, a.node, a.template))
         }

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
 import { ArrayType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -55,12 +55,13 @@ class ArrayUnshiftResolver implements IResolver {
 {#else}
     {tempVarName}
 {/if}`)
-class CArrayUnshift {
+class CArrayUnshift extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public varAccess: CElementAccess = null;
     public unshiftValues: CUnshiftValue[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.expression);
         let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
@@ -77,6 +78,6 @@ class CArrayUnshift {
 }
 
 @CodeTemplate(`ARRAY_INSERT({varAccess}, 0, {value});\n`)
-class CUnshiftValue {
-    constructor(scope: IScope, public varAccess: CElementAccess, public value: CExpression) { }
+class CUnshiftValue extends CTemplateBase {
+    constructor(scope: IScope, public varAccess: CElementAccess, public value: CExpression) { super() }
 }

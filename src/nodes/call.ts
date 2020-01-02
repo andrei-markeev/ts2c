@@ -1,10 +1,10 @@
 import * as ts from 'typescript';
 import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
-import { FuncType, UniversalVarType } from '../types/ctypes';
+import { FuncType, UniversalVarType, StructType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
 import { isNullOrUndefined, findParentFunction } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
@@ -17,12 +17,13 @@ import { CObjectLiteralExpression } from './literals';
 {#else}
     /* Unsupported function call: {nodeText} */
 {/if}`, ts.SyntaxKind.CallExpression)
-export class CCallExpression {
-    public funcName: any = null;
+export class CCallExpression extends CTemplateBase {
+    public funcName: CExpression = null;
     public standardCall: CExpression = null;
     public arguments: CExpression[];
     public nodeText: string;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
 
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
         if (this.standardCall)
@@ -65,13 +66,15 @@ export class CCallExpression {
 {#else}
     /* Unsupported 'new' expression {nodeText} */
 {/if}`, ts.SyntaxKind.NewExpression)
-export class CNew {
+export class CNew extends CTemplateBase {
     public funcName: CExpression = "";
     public arguments: CExpression[];
     public allocator: CVariableAllocation | string = ""; 
     public expression: CExpression = "";
     public nodeText: string;
     constructor(scope: IScope, node: ts.NewExpression) {
+        super();
+
         const decl = scope.root.typeHelper.getDeclaration(node.expression);
         if (decl && ts.isIdentifier(node.expression)) {
             const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
@@ -86,8 +89,9 @@ export class CNew {
             this.allocator = new CVariableAllocation(scope, varName, funcType.instanceType, node);
         } else if (ts.isIdentifier(node.expression) && node.expression.text === "Object") {
             if (node.arguments.length === 0 || isNullOrUndefined(node.arguments[0])) {
-                const objLiteral: any = node;
-                objLiteral.properties = [];
+                const objLiteral = ts.createObjectLiteral();
+                objLiteral.parent = node;
+                scope.root.typeHelper.registerSyntheticNode(objLiteral, PointerVarType);
                 this.expression = new CObjectLiteralExpression(scope, objLiteral);
             }
         }

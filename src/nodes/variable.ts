@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, UniversalVarType, FuncType } from '../types/ctypes';
 import { AssignmentHelper, CAssignment } from './assignment';
@@ -9,30 +9,33 @@ import { TypeHelper } from '../types/typehelper';
 
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
-export class CVariableStatement {
+export class CVariableStatement extends CTemplateBase {
     public declarations: CVariableDeclaration[];
     constructor(scope: IScope, node: ts.VariableStatement)
     {
-        this.declarations = node.declarationList.declarations.map(d => CodeTemplateFactory.createForNode(scope, d));
+        super();
+        this.declarations = node.declarationList.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
     }
 }
 
 @CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableDeclarationList)
-export class CVariableDeclarationList {
+export class CVariableDeclarationList extends CTemplateBase {
     public declarations: CVariableDeclaration[];
     constructor(scope: IScope, node: ts.VariableDeclarationList)
     {
-        this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d));
+        super();
+        this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
     }
 }
 
 
 @CodeTemplate(`{initializer}`, ts.SyntaxKind.VariableDeclaration)
-export class CVariableDeclaration {
+export class CVariableDeclaration extends CTemplateBase {
     public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
+        super();
         const name = varDecl.name.getText();
         const type = scope.root.typeHelper.getCType(varDecl.name);
         if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
@@ -71,7 +74,7 @@ export class CVariableDeclaration {
     ARRAY_PUSH({gcVarName}, (void *){varName});
 {/if}
 `)
-export class CVariableAllocation {
+export class CVariableAllocation extends CTemplateBase {
     public isArray: boolean;
     public needAllocateArray: boolean;
     public initialCapacity: number;
@@ -81,6 +84,7 @@ export class CVariableAllocation {
     public gcVarName: string;
     constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: ts.Node)
     {
+        super();
         this.needAllocateArray = varType instanceof ArrayType && varType.isDynamicArray;
         this.needAllocateStruct = varType instanceof StructType || varType instanceof FuncType && varType.needsClosureStruct;
         this.needAllocateDict = varType instanceof DictType;
@@ -106,40 +110,6 @@ export class CVariableAllocation {
             scope.root.headerFlags.gc_iterator = true;
     }
 
-}
-
-@CodeTemplate(`
-{#statements}
-    {#if gcVarName}
-        {varName} = {inlineCall};
-        ARRAY_PUSH({gcVarName}, (void *){varName});
-    {/if}
-{/statements}
-{#if gcVarName}
-    {varName}
-{#elseif reused}
-    {inlineCall}
-{#else}
-    ({varName} = {inlineCall})
-{/if}`)
-export class CTempVarReplacement {
-    public varName: string;
-    public reused: boolean;
-    public gcVarName: string;
-    constructor(scope: IScope, node: ts.Node, public inlineCall: any, public type: CType)
-    {
-        this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-        this.reused = scope.root.memoryManager.variableWasReused(node);
-        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-
-        if (!this.reused)
-            scope.variables.push(new CVariable(scope, this.varName, type));
-
-        if (this.gcVarName) {
-            scope.root.headerFlags.array = true;
-            scope.root.headerFlags.gc_iterator = true;
-        }
-    }
 }
 
 @CodeTemplate(`
@@ -183,7 +153,7 @@ export class CTempVarReplacement {
     {/if}
 {/statements}`
 )
-export class CVariableDestructors {
+export class CVariableDestructors extends CTemplateBase {
     public gcVarName: string = null;
     public gcArraysVarName: string = null;
     public gcArraysCVarName: string = null;
@@ -191,6 +161,7 @@ export class CVariableDestructors {
     public destructors: string[];
     public arrayDestructors: string[] = [];
     constructor(scope: IScope, node: ts.Node) {
+        super();
         let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (let gc of gcVarNames)
         {
@@ -235,7 +206,7 @@ interface CVariableOptions {
     initializer?: string;
 }
 
-export class CVariable {
+export class CVariable extends CTemplateBase {
     private static: boolean;
     private arraysToPointers: boolean;
     private initializer: string;
@@ -243,6 +214,7 @@ export class CVariable {
     private typeHelper: TypeHelper;
 
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
+        super();
         const type = isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
 
         if (type instanceof StructType)

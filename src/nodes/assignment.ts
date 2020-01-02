@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import {CodeTemplate, CodeTemplateFactory} from '../template';
+import {CodeTemplate, CodeTemplateFactory, CTemplateBase} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types/ctypes';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
@@ -64,7 +64,7 @@ export class AssignmentHelper {
     /* Unsupported assignment {accessor}[{argumentExpression}] = {nodeText} */{CR}
 {/if}`
 )
-export class CAssignment {
+export class CAssignment extends CTemplateBase {
     public isObjLiteralAssignment: boolean = false;
     public objInitializers: CAssignment[];
     public isArrayLiteralAssignment: boolean = false;
@@ -81,6 +81,7 @@ export class CAssignment {
     public nodeText: string;
     public CR: string;
     constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression, inline: boolean = false) {
+        super();
         this.CR = inline ? "" : ";\n";
         this.isNewExpression = right.kind === ts.SyntaxKind.NewExpression;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;

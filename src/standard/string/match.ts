@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, RegexVarType, StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -52,7 +52,7 @@ export class StringMatchResolver implements IResolver {
 {#if !topExpressionOfStatement}
     {matchArrayVarName}
 {/if}`)
-class CStringMatch
+class CStringMatch extends CTemplateBase
 {
     public topExpressionOfStatement: boolean = false;
     public regexVar: CExpression;
@@ -60,6 +60,7 @@ class CStringMatch
     public matchArrayVarName: string;
     public gcVarName: string = null;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         scope.root.headerFlags.str_substring = true;
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate } from '../../template';
+import { CodeTemplate, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
 import { ArrayType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -38,11 +38,12 @@ class ArrayPopResolver implements IResolver {
 }
 
 @CodeTemplate(`ARRAY_POP({varAccess})`)
-class CArrayPop {
+class CArrayPop extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public varAccess: CElementAccess = null;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.expression);
         scope.root.headerFlags.array = true;

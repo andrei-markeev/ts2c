@@ -1,11 +1,12 @@
 import * as ts from 'typescript';
 import { ArrayType, NumberVarType } from '../../types/ctypes';
 import { CElementAccess } from '../../nodes/elementaccess';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CVariable } from '../../nodes/variable';
 import { IScope, CProgram } from '../../program';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { TypeHelper } from '../../types/typehelper';
+import { CExpression } from '../../nodes/expressions';
 
 @StandardCallResolver
 class ArrayForEachResolver implements IResolver {
@@ -40,12 +41,12 @@ for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++
     {statements {    }=> {this}}
 }
 `)
-class CArrayForEach implements IScope {
+class CArrayForEach extends CTemplateBase implements IScope {
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public iteratorFnAccess: CElementAccess = null;
     public iteratorVarName: string;
     public arraySize: string = '';
@@ -54,6 +55,7 @@ class CArrayForEach implements IScope {
     public paramName: string;
 
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
@@ -61,7 +63,7 @@ class CArrayForEach implements IScope {
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
 
-        this.varAccess = CodeTemplateFactory.templateToString(<any>new CElementAccess(scope, propAccess.expression));
+        this.varAccess = CodeTemplateFactory.templateToString(new CElementAccess(scope, propAccess.expression));
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
         this.arraySize = objType.isDynamicArray ? this.varAccess + "->size" : objType.capacity + "";

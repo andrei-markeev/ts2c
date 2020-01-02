@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../types/ctypes';
 import { CExpression } from './expressions';
@@ -9,11 +9,12 @@ import { isInBoolContext, findParentFunction } from '../types/utils';
 
 
 @CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
-export class CElementAccess {
+export class CElementAccess extends CTemplateBase {
     public simpleAccessor: CSimpleElementAccess;
     constructor(scope: IScope, node: ts.Node) {
+        super();
         let type: CType = null;
-        let elementAccess: CElementAccess | string = null;
+        let elementAccess: CExpression = null;
         let argumentExpression: CExpression = null
 
         if (ts.isIdentifier(node)) {
@@ -69,9 +70,9 @@ export class CElementAccess {
         const parentFunc = findParentFunction(node);
         const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
         if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
-            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(<any>elementAccess);
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(elementAccess);
         else if (parentFuncType && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
-            elementAccess = "*" + CodeTemplateFactory.templateToString(<any>elementAccess);
+            elementAccess = "*" + CodeTemplateFactory.templateToString(elementAccess);
         
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
@@ -99,7 +100,7 @@ export class CElementAccess {
 {#else}
     /* Unsupported element access scenario: {elementAccess} {argumentExpression} */
 {/if}`)
-export class CSimpleElementAccess {
+export class CSimpleElementAccess extends CTemplateBase {
     public isSimpleVar: boolean;
     public isDynamicArray: boolean = false;
     public isStaticArray: boolean = false;
@@ -110,6 +111,7 @@ export class CSimpleElementAccess {
     public nullValue: CExpression = "0";
     public isUniversalAccess: boolean = false;
     constructor(scope: IScope, type: CType, public elementAccess: CElementAccess | CSimpleElementAccess | CExpression | string, public argumentExpression: CExpression) {
+        super();
         this.isSimpleVar = typeof type === 'string' && type != UniversalVarType && type != PointerVarType;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
@@ -135,9 +137,10 @@ export class CSimpleElementAccess {
 {#else}
     {arrayCapacity}
 {/if}`)
-export class CArraySize {
+export class CArraySize extends CTemplateBase {
     public arrayCapacity: string;
     constructor(scope: IScope, public varAccess: CExpression, public type: ArrayType) {
+        super();
         this.arrayCapacity = type.capacity+"";
     }
 }

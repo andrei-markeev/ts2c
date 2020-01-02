@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate } from '../../template';
+import { CodeTemplate, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
 import { ArrayType, StringVarType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -51,12 +51,13 @@ class ArraySortResolver implements IResolver {
 {#elseif arrayOfStrings}
     qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);
 {/if}`)
-class CArraySort {
+class CArraySort extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess = null;
     public arrayOfInts: boolean = false;
     public arrayOfStrings: boolean = false;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);

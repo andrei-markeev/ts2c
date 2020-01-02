@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType, NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -37,12 +37,13 @@ class StringIndexOfResolver implements IResolver {
 {#if !topExpressionOfStatement}
     str_rpos({stringAccess}, {arg1})
 {/if}`)
-class CStringIndexOf
+class CStringIndexOf extends CTemplateBase
 {
     public topExpressionOfStatement: boolean;
     public arg1: CExpression;
     public stringAccess: CElementAccess;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {

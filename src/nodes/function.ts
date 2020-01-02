@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';
 import { FuncType, getTypeText } from '../types/ctypes';
@@ -8,11 +8,12 @@ import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentF
 import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
-export class CFunctionPrototype {
+export class CFunctionPrototype extends CTemplateBase {
     public returnType: string;
     public name: string;
     public parameters: CVariable[] = [];
     constructor(scope: IScope, node: ts.FunctionDeclaration) {
+        super();
         const funcType = scope.root.typeHelper.getCType(node) as FuncType;
         this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
 
@@ -35,18 +36,20 @@ export class CFunctionPrototype {
 
     {destructors}
 }`)
-export class CFunction implements IScope {
+export class CFunction extends CTemplateBase implements IScope {
     public parent: IScope;
     public func = this;
     public funcDecl: CVariable;
     public name: string;
     public parameters: CVariable[] = [];
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
 
     constructor(public root: CProgram, node: ts.FunctionDeclaration | ts.FunctionExpression) {
+        super();
+
         this.parent = root;
 
         this.name = node.name && node.name.text;
@@ -94,7 +97,7 @@ export class CFunction implements IScope {
         }
 
         const nodesInFunction = getAllNodesUnder(node);
-        const declaredFunctionNames = root.functions.concat(root.functionPrototypes).map(f => f.name);
+        const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
         nodesInFunction.filter(n => ts.isCallExpression(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
             .forEach((c: ts.CallExpression) => {
                 if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
@@ -117,7 +120,7 @@ export class CFunction implements IScope {
     {/if}
 {/statements}
 {expression}`, [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
-export class CFunctionExpression {
+export class CFunctionExpression extends CTemplateBase {
     public name: string;
     public expression: string = '';
     
@@ -127,6 +130,7 @@ export class CFunctionExpression {
     public closureParams: { key: string, value: CExpression }[];
 
     constructor(scope: IScope, node: ts.FunctionExpression | ts.FunctionDeclaration) {
+        super();
         const func = new CFunction(scope.root, node);
         scope.root.functions.push(func);
         this.name = func.name;

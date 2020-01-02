@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
 import { ArrayType, NumberVarType, PointerVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -56,12 +56,13 @@ class ArrayPushResolver implements IResolver {
 {#else}
     {tempVarName}
 {/if}`)
-class CArrayPush {
+class CArrayPush extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public varAccess: CElementAccess = null;
     public pushValues: CPushValue[] = [];
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         const propAccess = <ts.PropertyAccessExpression>call.expression;
         const type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);

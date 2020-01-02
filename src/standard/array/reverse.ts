@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate } from '../../template';
+import { CodeTemplate, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
 import { ArrayType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -52,13 +52,14 @@ class ArraySortResolver implements IResolver {
 {#if !topExpressionOfStatement}
     {varAccess}
 {/if}`)
-class CArrayReverse {
+class CArrayReverse extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess = null;
     public iteratorVar1: string;
     public iteratorVar2: string;
     public tempVarName: string;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);

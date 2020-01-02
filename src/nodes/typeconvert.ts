@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { StringVarType, CType, UniversalVarType, NumberVarType, BooleanVarType, ArrayType, StructType, DictType } from "../types/ctypes";
-import { CodeTemplate, CodeTemplateFactory } from "../template";
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from "../template";
 import { CExpression } from "./expressions";
 import { IScope } from "../program";
 import { isNode } from "../types/utils";
@@ -23,7 +23,7 @@ import { CVariable } from "./variable";
 {#else}
     /** converting {expression} to js_var is not supported yet */
 {/if}`)
-export class CAsUniversalVar {
+export class CAsUniversalVar extends CTemplateBase {
     public isUniversalVar: boolean;
     public isString: boolean;
     public isNumber: boolean;
@@ -32,6 +32,7 @@ export class CAsUniversalVar {
     public isDict: boolean;
     public expression: CExpression;
     constructor (scope: IScope, expr: ts.Node | CExpression, type?: CType) {
+        super();
         this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
 
@@ -70,7 +71,7 @@ export class CAsUniversalVar {
 {#else}
     js_var_from(JS_VAR_NAN)
 {/if}`)
-export class CAsNumber {
+export class CAsNumber extends CTemplateBase {
     public expression: CExpression;
     public isNumber: boolean;
     public isString: boolean;
@@ -79,6 +80,7 @@ export class CAsNumber {
     public isSingleElementStaticArray: boolean = false;
     public arrayFirstElementAsNumber: CExpression;
     constructor(scope: IScope, expr: ts.Node | CExpression, public type?: CType) {
+        super();
         this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
 
@@ -135,7 +137,7 @@ export class CAsNumber {
 {#else}
     "[object Object]"
 {/if}`)
-export class CAsString {
+export class CAsString extends CTemplateBase {
     public arg: CExpression;
     public isNumberLiteral: boolean;
     public isNumber: boolean;
@@ -149,6 +151,7 @@ export class CAsString {
     public arrayStrLen: CAsString_Length;
     public arrayElementCat: CAsString_Concat;
     constructor(scope: IScope, node: ts.Node) {
+        super();
         const type = scope.root.typeHelper.getCType(node);
         this.arg = CodeTemplateFactory.createForNode(scope, node);
         this.isNumberLiteral = ts.isNumericLiteral(node);
@@ -209,7 +212,7 @@ export class CAsString {
 {#else}
     15
 {/if}`)
-export class CAsString_Length {
+export class CAsString_Length extends CTemplateBase {
     public isNumber: boolean;
     public isString: boolean;
     public isBoolean: boolean;
@@ -226,6 +229,7 @@ export class CAsString_Length {
     public lengthVarName: string;
     public iteratorVarName: string;
     constructor(scope: IScope, node: ts.Node, public arg: CExpression, public type: CType) {
+        super();
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;
@@ -281,7 +285,7 @@ export class CAsString_Length {
     strcat({buf}, "[object Object]");
 {/if}
 `)
-export class CAsString_Concat {
+export class CAsString_Concat extends CTemplateBase {
     public isNumber: boolean;
     public isString: boolean;
     public isBoolean: boolean;
@@ -293,6 +297,7 @@ export class CAsString_Concat {
     public arrayElementCat: CAsString_Concat;
     public arraySize: CArraySize;
     constructor(scope: IScope, node: ts.Node, public buf: CExpression, public arg: CExpression, public type: CType) {
+        super();
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;

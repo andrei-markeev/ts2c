@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType, NumberVarType, RegexVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -43,12 +43,13 @@ class StringSearchResolver implements IResolver {
 {#if !topExpressionOfStatement}
     {regexVar}.func({argAccess}, FALSE).index
 {/if}`)
-class CStringSearch
+class CStringSearch extends CTemplateBase
 {
     public topExpressionOfStatement: boolean;
     public regexVar: CExpression;
     public argAccess: CElementAccess;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {

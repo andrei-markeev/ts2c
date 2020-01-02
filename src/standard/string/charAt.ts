@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -47,12 +47,13 @@ class StringCharAtResolver implements IResolver {
 {#elseif !topExpressionOfStatement && start == null}
     /* Error: parameter expected for charAt */
 {/if}`)
-class CStringCharAt {
+class CStringCharAt extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public varAccess: CElementAccess = null;
     public start: CExpression = null;
     public tempVarName: string;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.expression);
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;

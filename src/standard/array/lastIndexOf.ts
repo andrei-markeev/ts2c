@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, NumberVarType, BooleanVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -57,7 +57,7 @@ class ArrayLastIndexOfResolver implements IResolver {
 {#if !topExpressionOfStatement}
     {tempVarName}
 {/if}`)
-class CArrayLastIndexOf {
+class CArrayLastIndexOf extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public iteratorVarName: string;
@@ -65,6 +65,7 @@ class CArrayLastIndexOf {
     public staticArraySize: string = '';
     public varAccess: CElementAccess = null;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         let propAccess = <ts.PropertyAccessExpression>call.expression;
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);

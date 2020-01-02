@@ -2,21 +2,27 @@ import {IScope} from './program';
 
 interface INode { kind: number, getText(): string };
 
-var nodeKindTemplates: { [kind: string]: { new (scope: IScope, node: INode): any } } = {};
+export class CTemplateBase {
+    new(scope: IScope, node: INode) { };
+    resolve(): string { return "" }
+}
+type CTemplateBaseConstructor = CTemplateBase["new"];
+
+var nodeKindTemplates: { [kind: string]: CTemplateBaseConstructor } = {};
 
 export class CodeTemplateFactory {
-    public static createForNode(scope: IScope, node: INode) {
-        return nodeKindTemplates[node.kind] && new nodeKindTemplates[node.kind](scope, node)
-            || "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
+    public static createForNode(scope: IScope, node: INode): string | CTemplateBase {
+        return nodeKindTemplates[node.kind] ? new nodeKindTemplates[node.kind](scope, node)
+            : "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
     }
-    public static templateToString(template: string | { resolve: () => string }) {
+    public static templateToString(template: string | CTemplateBase) {
         return typeof(template) === "string" ? template : template.resolve();
     }
 }
 
 export function CodeTemplate(tempString: string, nodeKind?: number | number[]): ClassDecorator {
-    return function (target: Function) {
-        let newConstructor = function (scope: IScope, ...rest: any[]) {
+    return function (target: CTemplateBaseConstructor) {
+        const newConstructor = function (scope: IScope, node: INode) {
             let self = this;
             let retValue = target.apply(self, arguments);
             let [code, statements] = processTemplate(tempString, self);
@@ -30,17 +36,19 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
 
         if (nodeKind) {
             if (typeof nodeKind === 'number')
-                nodeKindTemplates[nodeKind] = <any>newConstructor;
+                nodeKindTemplates[nodeKind] = newConstructor;
             else
                 for (let nk of nodeKind)
-                    nodeKindTemplates[nk] = <any>newConstructor;
+                    nodeKindTemplates[nk] = newConstructor;
         }
-        return <any>newConstructor;
-    };
+
+        return newConstructor;
+
+    } as ClassDecorator;
 }
 
 /** Returns: [code, statements] */
-function processTemplate(template: string, args: any): [string, string] {
+function processTemplate(template: string, args: string | CTemplateBase): [string, string] {
 
     let statements = "";
     if (template.indexOf("{#statements}") > -1) {

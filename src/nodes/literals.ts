@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType } from '../types/ctypes';
 import { CVariable, CVariableAllocation } from './variable';
@@ -14,10 +14,11 @@ import { CAsUniversalVar } from './typeconvert';
 {#else}
     {expression}
 {/if}`, ts.SyntaxKind.ArrayLiteralExpression)
-class CArrayLiteralExpression {
+class CArrayLiteralExpression extends CTemplateBase {
     public expression: string;
     public universalWrapper: boolean = false;
     constructor(scope: IScope, node: ts.ArrayLiteralExpression) {
+        super();
         let arrSize = node.elements.length;
         let type = scope.root.typeHelper.getCType(node);
         if (type === UniversalVarType) {
@@ -84,7 +85,7 @@ class CArrayLiteralExpression {
 {#else}
     {expression}
 {/if}`, ts.SyntaxKind.ObjectLiteralExpression)
-export class CObjectLiteralExpression {
+export class CObjectLiteralExpression extends CTemplateBase {
     public expression: string = '';
     public isStruct: boolean;
     public isDict: boolean;
@@ -92,6 +93,7 @@ export class CObjectLiteralExpression {
     public allocator: CVariableAllocation;
     public initializers: CAssignment[];
     constructor(scope: IScope, node: ts.ObjectLiteralExpression) {
+        super();
         let type = scope.root.typeHelper.getCType(node);
         if (type === UniversalVarType) {
             type = new DictType(UniversalVarType);
@@ -124,9 +126,10 @@ export class CObjectLiteralExpression {
 var regexNames = {};
 
 @CodeTemplate(`{expression}`, ts.SyntaxKind.RegularExpressionLiteral)
-class CRegexLiteralExpression {
+class CRegexLiteralExpression extends CTemplateBase {
     public expression: string = '';
     constructor(scope: IScope, node: ts.RegularExpressionLiteral) {
+        super();
         let template = node.text;
         if (!regexNames[template]) {
             regexNames[template] = scope.root.symbolsHelper.addTemp(null, "regex");
@@ -138,10 +141,11 @@ class CRegexLiteralExpression {
 }
 
 @CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
-export class CString {
+export class CString extends CTemplateBase {
     public value: CExpression;
     public universalWrapper: boolean = false;
     constructor(scope: IScope, nodeOrString: ts.StringLiteral | string) {
+        super();
         let s = typeof nodeOrString === 'string' ? '"' + nodeOrString + '"' : nodeOrString.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
         if (s.indexOf("'") == 0)
@@ -166,9 +170,10 @@ export class CNumber {
 }
 
 @CodeTemplate(`{value}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
-export class CBoolean {
+export class CBoolean extends CTemplateBase {
     public value: CExpression;
     constructor(scope: IScope, node: ts.Node) {
+        super();
         this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
@@ -177,27 +182,30 @@ export class CBoolean {
 }
 
 @CodeTemplate(`js_var_from(JS_VAR_NULL)`, ts.SyntaxKind.NullKeyword)
-export class CNull {
+export class CNull extends CTemplateBase {
     constructor(scope: IScope) {
+        super();
         scope.root.headerFlags.js_var_from = true;
     }
 }
 
 @CodeTemplate(`js_var_from(JS_VAR_UNDEFINED)`, ts.SyntaxKind.UndefinedKeyword)
-export class CUndefined {
+export class CUndefined extends CTemplateBase {
     constructor(scope: IScope) {
+        super();
         scope.root.headerFlags.js_var_from = true;
     }
 }
 
 @CodeTemplate(`js_var_from(JS_VAR_NAN)`, ts.SyntaxKind.Count + 1)
-export class CNaN {
+export class CNaN extends CTemplateBase {
     constructor(scope: IScope, node: ts.Node) {
+        super();
         scope.root.headerFlags.js_var_from = true;
     }
 }
 
 @CodeTemplate(`this`, ts.SyntaxKind.ThisKeyword)
-export class CThis {
-    constructor(scope: IScope, node: ts.Node) { }
+export class CThis extends CTemplateBase {
+    constructor(scope: IScope, node: ts.Node) { super(); }
 }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { AssignmentHelper } from './assignment';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { StringVarType, RegexVarType, NumberVarType, UniversalVarType, BooleanVarType, ArrayType, StructType, DictType } from '../types/ctypes';
 import { CVariable } from './variable';
@@ -11,7 +11,7 @@ import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEquali
 import { CArraySize } from './elementaccess';
 import { StandardCallHelper } from '../standard';
 
-export interface CExpression { }
+export type CExpression = string | CTemplateBase;
 
 @CodeTemplate(`
 {#if universalWrapper}
@@ -23,12 +23,13 @@ export interface CExpression { }
 {#else}
     {expression}
 {/if}`)
-export class CCondition {
+export class CCondition extends CTemplateBase {
     public universalWrapper: boolean = false;
     public isString: boolean = false;
     public expression: CExpression;
     public expressionIsIdentifier: boolean = false;
     constructor(scope: IScope, node: ts.Expression) {
+        super();
         this.expression = CodeTemplateFactory.createForNode(scope, node);
         this.expressionIsIdentifier = ts.isIdentifier(node);
         const type = scope.root.typeHelper.getCType(node);
@@ -46,13 +47,14 @@ export class CCondition {
 {#else}
     /* unsupported expression {nodeText} */
 {/if}`, ts.SyntaxKind.BinaryExpression)
-export class CBinaryExpression {
+export class CBinaryExpression extends CTemplateBase {
     public expression: CExpression = null;
     public operator: string;
     public left: CExpression;
     public right: CExpression;
     public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         if (node.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
             this.expression = AssignmentHelper.create(scope, node.left, node.right, true);
             return;
@@ -72,7 +74,7 @@ export class CBinaryExpression {
         if (node.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken) {
             const left = CodeTemplateFactory.createForNode(scope, node.left);
             const right = new CPlusExpression(scope, node);
-            this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(<any>right) + ")";
+            this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(right) + ")";
         }
         if (isNumberOp(node.operatorToken.kind) || isIntegerOp(node.operatorToken.kind)) {
             this.expression = new CArithmeticExpression(scope, node);
@@ -113,7 +115,7 @@ export class CBinaryExpression {
 {#else}
     {condition} ? {whenTrue} : {whenFalse}
 {/if}`)
-class CLogicExpession {
+class CLogicExpession extends CTemplateBase {
     public isBoolContext: boolean;
     public operator: string;
     public left: CExpression;
@@ -124,6 +126,7 @@ class CLogicExpession {
     public whenTrue: CExpression;
     public whenFalse: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         const type = scope.root.typeHelper.getCType(node);
         
         if (type === UniversalVarType) {
@@ -180,7 +183,7 @@ class CLogicExpession {
 {#else}
     /* unsupported arithmetic expression {nodeText} */
 {/if}`)
-class CArithmeticExpression {
+class CArithmeticExpression extends CTemplateBase {
     public isCompoundAssignment;
     public operator: string = null;
     public computeOperation: string = null;
@@ -188,6 +191,7 @@ class CArithmeticExpression {
     public right: CExpression;
     public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         let leftType = scope.root.typeHelper.getCType(node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
         this.isCompoundAssignment = isCompoundAssignment(node.operatorToken);
@@ -227,7 +231,7 @@ class CArithmeticExpression {
                 || node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
             {
                 this.operator = ">>";
-                const leftAsString = CodeTemplateFactory.templateToString(this.left as any);
+                const leftAsString = CodeTemplateFactory.templateToString(this.left);
                 this.left = "((uint16_t)" + leftAsString + ")";
                 if (node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
                     this.left = leftAsString + " = " + this.left;
@@ -249,7 +253,7 @@ class CArithmeticExpression {
 {#else}
     /* unsupported relational expression {nodeText} */
 {/if}`)
-class CRelationalExpression {
+class CRelationalExpression extends CTemplateBase {
     public operator: string = null;
     public universalCondition: string = null;
     public stringCondition: string = null;
@@ -257,6 +261,7 @@ class CRelationalExpression {
     public right: CExpression;
     public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         let leftType = scope.root.typeHelper.getCType(node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
         
@@ -315,7 +320,7 @@ class CRelationalExpression {
 {#else}
     /* unsupported equality expression {nodeText} */
 {/if}`)
-class CEqualityExpression {
+class CEqualityExpression extends CTemplateBase {
     public expression: string = null;
     public operator: string = null;
     public stringCondition: string = null;
@@ -326,6 +331,7 @@ class CEqualityExpression {
     public right: CExpression;
     public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         const leftType = scope.root.typeHelper.getCType(node.left);
         const rightType = scope.root.typeHelper.getCType(node.right);
 
@@ -395,7 +401,7 @@ class CEqualityExpression {
 {#elseif isUniversalVar}
     js_var_plus({left}, {right})
 {/if}`)
-class CPlusExpression {
+class CPlusExpression extends CTemplateBase {
     public addNumbers: boolean = false;
     public isUniversalVar: boolean = false;
     public replacedWithVar: boolean = false;
@@ -408,6 +414,7 @@ class CPlusExpression {
     public strlen_left: CExpression;
     public strlen_right: CExpression;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         let leftType = scope.root.typeHelper.getCType(node.left);
         this.left = CodeTemplateFactory.createForNode(scope, node.left);
         let rightType = scope.root.typeHelper.getCType(node.right);
@@ -478,7 +485,7 @@ class CPlusExpression {
 {#else}
     /* unsupported 'in' expression {nodeText} */
 {/if}`)
-class CInExpression {
+class CInExpression extends CTemplateBase {
     public isArray: boolean = false;
     public arraySize: CArraySize;
     public isStruct: boolean = false;
@@ -492,6 +499,7 @@ class CInExpression {
     public tmpVarName: string = null;
     public nodeText: string;
     constructor(scope: IScope, node: ts.BinaryExpression) {
+        super();
         const type = scope.root.typeHelper.getCType(node.right);
         this.obj = CodeTemplateFactory.createForNode(scope, node.right);
         if (type instanceof ArrayType) {
@@ -555,7 +563,7 @@ class CInExpression {
 {#else}
     {before}{operand}{after}
 {/if}`, [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
-class CUnaryExpression {
+class CUnaryExpression extends CTemplateBase {
     public before: string = "";
     public operand: CExpression;
     public after: string = "";
@@ -564,6 +572,7 @@ class CUnaryExpression {
     public isPostfix: boolean;
     public isCompound: boolean = false;
     constructor(scope: IScope, node: ts.PostfixUnaryExpression | ts.PrefixUnaryExpression) {
+        super();
         this.isPostfix = ts.isPostfixUnaryExpression(node);
         const isTopExpressionOfStatement = ts.isExpressionStatement(node.parent);
 
@@ -655,11 +664,12 @@ class CUnaryExpression {
 }
 
 @CodeTemplate(`{condition} ? {whenTrue} : {whenFalse}`, ts.SyntaxKind.ConditionalExpression)
-class CTernaryExpression {
+class CTernaryExpression extends CTemplateBase {
     public condition: CExpression;
     public whenTrue: CExpression;
     public whenFalse: CExpression;
     constructor(scope: IScope, node: ts.ConditionalExpression) {
+        super();
         this.condition = CodeTemplateFactory.createForNode(scope, node.condition);
         this.whenTrue = CodeTemplateFactory.createForNode(scope, node.whenTrue);
         this.whenFalse = CodeTemplateFactory.createForNode(scope, node.whenFalse);
@@ -667,9 +677,10 @@ class CTernaryExpression {
 }
 
 @CodeTemplate(`({expression})`, ts.SyntaxKind.ParenthesizedExpression)
-class CGroupingExpression {
+class CGroupingExpression extends CTemplateBase {
     public expression: CExpression;
     constructor(scope: IScope, node: ts.ParenthesizedExpression) {
+        super();
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
     }
 }
@@ -686,13 +697,14 @@ class CGroupingExpression {
 {#else}
     "object"
 {/if}`, ts.SyntaxKind.TypeOfExpression)
-class CTypeOf {
+class CTypeOf extends CTemplateBase {
     expression: CExpression;
     isUniversalVar: boolean;
     isNumber: boolean;
     isBoolean: boolean;
     isString: boolean;
     constructor(scope: IScope, node: ts.TypeOfExpression) {
+        super();
         const type = scope.root.typeHelper.getCType(node.expression);
         this.isUniversalVar = type === UniversalVarType;
         this.isString = type === StringVarType;
@@ -708,9 +720,10 @@ class CTypeOf {
 }
 
 @CodeTemplate(`js_var_to_undefined({expression})`, ts.SyntaxKind.VoidExpression)
-class CVoid {
+class CVoid extends CTemplateBase {
     public expression: CExpression;
     constructor(scope: IScope, node: ts.TypeOfExpression) {
+        super();
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         scope.root.headerFlags.js_var = true;
         scope.root.headerFlags.js_var_to_undefined = true;
@@ -729,12 +742,13 @@ class CVoid {
 {#if !topExpressionOfStatement}
     TRUE
 {/if}`, ts.SyntaxKind.DeleteExpression)
-class CDelete {
+class CDelete extends CTemplateBase {
     public dict: CExpression;
     public argExpression: CExpression;
     public tempVarName: string;
     public topExpressionOfStatement: boolean;
     constructor(scope: IScope, node: ts.DeleteExpression) {
+        super();
         this.topExpressionOfStatement = node.parent.kind == ts.SyntaxKind.ExpressionStatement;
         this.dict = (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))
             && CodeTemplateFactory.createForNode(scope, node.expression.expression);

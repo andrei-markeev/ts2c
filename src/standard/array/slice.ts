@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -61,7 +61,7 @@ class ArraySliceResolver implements IResolver {
 {#else}
     {tempVarName}
 {/if}`)
-class CArraySlice {
+class CArraySlice extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
     public iteratorVarName: string = '';
@@ -76,6 +76,7 @@ class CArraySlice {
     public simpleSliceSize: number = 0;
     public simpleSliceStart: number = 0;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         if (this.topExpressionOfStatement)
             return;

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { BooleanVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -32,9 +32,10 @@ class IsNaNResolver implements IResolver {
 }
 
 @CodeTemplate(`js_var_isnan({argument})`)
-class CIsNaN {
+class CIsNaN extends CTemplateBase {
     public argument: CAsUniversalVar = null;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
         this.argument = new CAsUniversalVar(scope, call.arguments[0]);
         scope.root.headerFlags.js_var_isnan = true;
         scope.root.headerFlags.js_var_to_number = true;

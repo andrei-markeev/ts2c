@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CProgram, IScope} from '../program';
 import { ArrayType, NumberVarType, StringVarType } from '../types/ctypes';
 import { CVariable, CVariableDeclaration, CVariableDestructors } from './variable';
@@ -9,10 +9,11 @@ import { AssignmentHelper } from './assignment';
 import { getAllNodesUnder } from '../types/utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, ts.SyntaxKind.LabeledStatement)
-export class CLabeledStatement {
+export class CLabeledStatement extends CTemplateBase {
     public statement: CExpression;
     public breakLabel: string;
     constructor(scope: IScope, node: ts.LabeledStatement) {
+        super();
         const nodes = getAllNodesUnder(node);
         this.breakLabel = nodes.some(n => ts.isBreakStatement(n) && n.label.text === node.label.text)
             ? " " + node.label.text + "_break:"
@@ -43,9 +44,10 @@ export class CLabeledStatement {
     break;
 {/if}
 `, ts.SyntaxKind.BreakStatement)
-export class CBreakStatement {
+export class CBreakStatement extends CTemplateBase {
     public label: string;
     constructor(scope: IScope, node: ts.BreakStatement) {
+        super();
         this.label = node.label && node.label.text + "_break";
     }
 }
@@ -56,9 +58,10 @@ export class CBreakStatement {
     continue;
 {/if}
 `, ts.SyntaxKind.ContinueStatement)
-export class CContinueStatement {
+export class CContinueStatement extends CTemplateBase {
     public label: string;
     constructor(scope: IScope, node: ts.BreakStatement) {
+        super();
         this.label = node.label && node.label.text + "_continue";
     }
 }
@@ -71,12 +74,13 @@ export class CEmptyStatement {
 {destructors}
 return {expression};
 `, ts.SyntaxKind.ReturnStatement)
-export class CReturnStatement {
+export class CReturnStatement extends CTemplateBase {
     public expression: CExpression;
     public destructors: CVariableDestructors;
     public retVarName: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
     constructor(scope: IScope, node: ts.ReturnStatement) {
+        super();
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
     }
@@ -90,12 +94,13 @@ if ({condition})
     {elseBlock}
 {/if}
 `, ts.SyntaxKind.IfStatement)
-export class CIfStatement {
+export class CIfStatement extends CTemplateBase {
     public condition: CExpression;
     public thenBlock: CBlock;
     public elseBlock: CBlock;
     public hasElseBlock: boolean;
     constructor(scope: IScope, node: ts.IfStatement) {
+        super();
         this.condition = new CCondition(scope, node.expression);
         this.thenBlock = new CBlock(scope, node.thenStatement);
         this.hasElseBlock = !!node.elseStatement;
@@ -112,13 +117,14 @@ switch ({switch}) {
     {cases {    }=> {this}\n}
 }
 `, ts.SyntaxKind.SwitchStatement)
-export class CSwitchStatement {
+export class CSwitchStatement extends CTemplateBase {
     public nonIntegral: boolean;
     public expression: CExpression;
     public switch: CExpression;
     public cases: CSwitchCaseClause[];
     public values: CExpression[];
     constructor(scope: IScope, node: ts.SwitchStatement) {
+        super();
         const exprType = scope.root.typeHelper.getCType(node.expression);
         this.nonIntegral = exprType != NumberVarType;
 
@@ -143,15 +149,16 @@ export class CSwitchStatement {
 {/if}
         {statements {        }=> {this}}
 `)
-class CSwitchCaseClause implements IScope {
+class CSwitchCaseClause extends CTemplateBase implements IScope {
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
     public value: CExpression;
     public defaultClause: boolean;
     constructor(scope: IScope, clause: ts.CaseOrDefaultClause, index: number) {
+        super();
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
@@ -169,9 +176,10 @@ class CSwitchCaseClause implements IScope {
 }
 
 @CodeTemplate(`!strcmp({expression}, {value}) ? {index}`)
-class CSwitchCaseCompare {
+class CSwitchCaseCompare extends CTemplateBase {
     public value: CExpression;
     constructor(scope: IScope, public expression: CExpression, clause: ts.CaseClause, public index: number) {
+        super();
         this.value = CodeTemplateFactory.createForNode(scope, clause.expression);
     }
 }
@@ -188,12 +196,13 @@ class CSwitchCaseCompare {
     while ({condition})
     {block}
 {/if}`, ts.SyntaxKind.WhileStatement)
-export class CWhileStatement {
+export class CWhileStatement extends CTemplateBase {
     public condition: CExpression;
     public block: CBlock;
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     constructor(scope: IScope, node: ts.WhileStatement, public continueLabel?: string) {
+        super();
         this.block = new CBlock(scope, node.statement);
         this.variables = this.block.variables;
         this.statements = this.block.statements;
@@ -213,12 +222,13 @@ export class CWhileStatement {
     {block}
     while ({condition});
 {/if}`, ts.SyntaxKind.DoStatement)
-export class CDoWhileStatement {
+export class CDoWhileStatement extends CTemplateBase {
     public condition: CExpression;
     public block: CBlock;
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     constructor(scope: IScope, node: ts.DoStatement, public continueLabel?: string) {
+        super();
         this.block = new CBlock(scope, node.statement);
         this.variables = this.block.variables;
         this.statements = this.block.statements;
@@ -242,15 +252,16 @@ export class CDoWhileStatement {
     for ({init};{condition};{increment})
     {block}
 {/if}`, ts.SyntaxKind.ForStatement)
-export class CForStatement {
+export class CForStatement extends CTemplateBase {
     public init: CExpression;
     public condition: CExpression;
     public increment: CExpression;
     public block: CBlock;
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public varDecl: CVariableDeclaration = null;
     constructor(scope: IScope, node: ts.ForStatement, public continueLabel?: string) {
+        super();
         this.block = new CBlock(scope, node.statement);
         this.variables = this.block.variables;
         this.statements = this.block.statements;
@@ -285,11 +296,11 @@ export class CForStatement {
     }
 {/if}
 `, ts.SyntaxKind.ForOfStatement)
-export class CForOfStatement implements IScope {
+export class CForOfStatement extends CTemplateBase implements IScope {
     public init: CExpression;
     public iteratorVarName: string;
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
@@ -297,6 +308,7 @@ export class CForOfStatement implements IScope {
     public arraySize: CArraySize;
     public cast: string = "";
     constructor(scope: IScope, node: ts.ForOfStatement, public continueLabel?: string) {
+        super();
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
@@ -342,9 +354,9 @@ export class CForOfStatement implements IScope {
     }
 {/if}
 `, ts.SyntaxKind.ForInStatement)
-export class CForInStatement implements IScope {
+export class CForInStatement extends CTemplateBase implements IScope {
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
@@ -352,6 +364,7 @@ export class CForInStatement implements IScope {
     public varAccess: CElementAccess;
     public init: CElementAccess | string;
     constructor(scope: IScope, node: ts.ForInStatement, public continueLabel?: string) {
+        super();
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
@@ -381,10 +394,11 @@ export class CForInStatement implements IScope {
 }
 
 @CodeTemplate(`{expression}{SemicolonCR}`, ts.SyntaxKind.ExpressionStatement)
-export class CExpressionStatement {
+export class CExpressionStatement extends CTemplateBase {
     public expression: CExpression;
     public SemicolonCR: string = ';\n';
     constructor(scope: IScope, node: ts.ExpressionStatement) {
+        super();
         if (node.expression.kind == ts.SyntaxKind.BinaryExpression) {
             let binExpr = <ts.BinaryExpression>node.expression;
             if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
@@ -411,13 +425,14 @@ export class CExpressionStatement {
 {#if statements.length == 0 && variables.length == 0}
         /* no statements */;
 {/if}`, ts.SyntaxKind.Block)
-export class CBlock implements IScope {
+export class CBlock extends CTemplateBase implements IScope {
     public variables: CVariable[] = [];
-    public statements: any[] = [];
+    public statements: CExpression[] = [];
     public parent: IScope;
     public func: IScope;
     public root: CProgram;
     constructor(scope: IScope, node: ts.Statement) {
+        super();
         this.parent = scope;
         this.func = scope.func;
         this.root = scope.root;
@@ -430,11 +445,12 @@ export class CBlock implements IScope {
 }
 
 @CodeTemplate(``, ts.SyntaxKind.ImportDeclaration)
-export class CImport {
+export class CImport extends CTemplateBase {
     public externalInclude: boolean;
     public moduleName: string;
     public nodeText: string;
     constructor(scope: IScope, node: ts.ImportDeclaration) {
+        super();
         let moduleName = (<ts.StringLiteral>node.moduleSpecifier).text;
         this.externalInclude = moduleName.indexOf('ts2c-target') == 0;
         if (this.externalInclude) {
@@ -459,12 +475,13 @@ CATCH
 {finallyBlock}
 END_TRY
 `, ts.SyntaxKind.TryStatement)
-export class CTryStatement {
+export class CTryStatement extends CTemplateBase {
     public tryBlock: CBlock;
     public catchBlock: CBlock | string;
     public finallyBlock: CBlock | string;
     public catchVarName: string;
     constructor(scope: IScope, node: ts.TryStatement) {
+        super();
         this.tryBlock = new CBlock(scope, node.tryBlock);
         this.catchBlock = node.catchClause ? new CBlock(scope, node.catchClause.block) : "";
         this.finallyBlock = node.finallyBlock ? new CBlock(scope, node.finallyBlock) : "";
@@ -481,9 +498,10 @@ export class CTryStatement {
 {/statements}
 THROW(err_defs->size);
 `, ts.SyntaxKind.ThrowStatement)
-export class CThrowStatement {
+export class CThrowStatement extends CTemplateBase {
     public value: CExpression;
     constructor(scope: IScope, node: ts.ThrowStatement) {
+        super();
         this.value = CodeTemplateFactory.createForNode(scope, node.expression);
         scope.root.headerFlags.try_catch = true;
     }

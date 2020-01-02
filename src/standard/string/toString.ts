@@ -4,6 +4,7 @@ import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { TypeHelper } from '../../types/typehelper';
+import { CElementAccess } from '../../nodes/elementaccess';
 
 @StandardCallResolver
 class StringToStringResolver implements IResolver {
@@ -18,7 +19,7 @@ class StringToStringResolver implements IResolver {
         return StringVarType;
     }
     public createTemplate(scope: IScope, node: ts.CallExpression) {
-        return CodeTemplateFactory.createForNode(scope, <ts.PropertyAccessExpression>node.expression);
+        return CodeTemplateFactory.createForNode(scope, <ts.PropertyAccessExpression>node.expression) as CElementAccess;
     }
     public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
         return false;

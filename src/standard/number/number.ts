@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { CodeTemplate, CodeTemplateFactory } from '../../template';
+import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { NumberVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
@@ -35,10 +35,12 @@ class NumberCallResolver implements IResolver {
 {#else}
     {arg}
 {/if}`)
-class CNumberCall {
+class CNumberCall extends CTemplateBase {
     public call: string = "";
     public arg: CExpression;
     constructor(scope: IScope, call: ts.CallExpression) {
+        super();
+
         this.arg = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
 
         const type = scope.root.typeHelper.getCType(call.arguments[0]);

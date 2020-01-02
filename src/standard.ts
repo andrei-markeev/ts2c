@@ -2,6 +2,7 @@ import * as ts from 'typescript';
 import { IScope } from './program';
 import { CType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
+import { CTemplateBase } from './template';
 
 export interface IResolver {
     matchesNode(s: TypeHelper, n: ts.CallExpression, options?: IResolverMatchOptions): boolean;
@@ -10,7 +11,7 @@ export interface IResolver {
     returnType(s: TypeHelper, n: ts.CallExpression): CType;
     needsDisposal(s: TypeHelper, n: ts.CallExpression): boolean;
     getTempVarName(s: TypeHelper, n: ts.CallExpression): string;
-    createTemplate(s: IScope, n: ts.CallExpression): any;
+    createTemplate(s: IScope, n: ts.CallExpression): CTemplateBase;
     getEscapeNode(s: TypeHelper, n: ts.CallExpression): ts.Node;
 }
 
@@ -19,7 +20,7 @@ export interface IResolverMatchOptions {
 }
 
 var standardCallResolvers: IResolver[] = [];
-export function StandardCallResolver(target: any)
+export function StandardCallResolver(target: { new(): IResolver })
 {
     standardCallResolvers.push(new target());
 }
