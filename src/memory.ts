@@ -342,9 +342,11 @@ export class MemoryManager {
             varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else if (ts.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
-        else if (isFunction(heapNode))
-            varName = this.symbolsHelper.addTemp(findParentSourceFile(heapNode), heapNode.name ? heapNode.name.text + "_func" : "func");
-        else
+        else if (isFunction(heapNode)) {
+            const maybePropertyName = ts.isPropertyAssignment(heapNode.parent) && ts.isIdentifier(heapNode.parent.name) ? heapNode.parent.name.text + "_closure" : "closure";
+            const name = heapNode.name ? heapNode.name.text + "_closure" : maybePropertyName;
+            varName = this.symbolsHelper.addTemp(findParentSourceFile(heapNode), name);
+        } else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 
         let vnode = heapNode;

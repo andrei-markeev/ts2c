@@ -59,6 +59,8 @@ export class CFunction extends CTemplateBase implements IScope {
                 funcExprName = node.parent.left.text + "_func";
             if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
                 funcExprName = node.parent.name.text + "_func";
+            if (ts.isPropertyAssignment(node.parent) && ts.isIdentifier(node.parent.name))
+                funcExprName = node.parent.name.text + "_func";
             this.name = root.symbolsHelper.addTemp(findParentSourceFile(node), funcExprName);
         }
         const funcType = root.typeHelper.getCType(node) as FuncType;

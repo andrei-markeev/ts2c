@@ -132,7 +132,7 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType) 
             + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
-            + "[[" + this.closureParams.map(p => p.node.text).join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
+            + "[[" + this.closureParams.map(p => p.node.text + "(" + p.refs.map(r => r.pos).join(",") + ")").join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
     }
     constructor(
         public returnType: CType,
