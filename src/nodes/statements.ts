@@ -71,16 +71,30 @@ export class CEmptyStatement {
 }
 
 @CodeTemplate(`
-{destructors}
-return {expression};
+{
+    {returnTypeAndVar} = {expression};
+    {destructors}
+    return {returnTemp};
+}
 `, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement extends CTemplateBase {
     public expression: CExpression;
     public destructors: CVariableDestructors;
     public retVarName: string = null;
+    public returnTypeAndVar: string = null;
+    public returnTemp: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
     constructor(scope: IScope, node: ts.ReturnStatement) {
         super();
+        this.returnTemp = scope.root.symbolsHelper.addTemp(node, 'returnVal');
+        let returnType = scope.root.typeHelper.getCType(node.expression);
+        let fakeVar = new CVariable(scope, '__fake', returnType, { removeStorageSpecifier: true, arraysToPointers: true });;
+        let fakeVarType = fakeVar.resolve().slice(0, -6).trim();
+        this.returnTypeAndVar = fakeVarType;
+        if (this.returnTypeAndVar.indexOf('{var}') == -1) {
+            this.returnTypeAndVar += ' {var}';
+        }
+        this.returnTypeAndVar = this.returnTypeAndVar.replace('{var}', this.returnTemp);
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
     }
