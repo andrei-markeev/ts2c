@@ -1,6 +1,14 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.ts2c = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 (function (global){
 "use strict";
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
+    }
+    return t;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 var ts = (typeof window !== "undefined" ? window['ts'] : typeof global !== "undefined" ? global['ts'] : null);
 var ctypes_1 = require("./types/ctypes");
@@ -34,13 +42,13 @@ var MemoryManager = /** @class */ (function () {
                     {
                         var type = this.typeHelper.getCType(node);
                         if (type && type instanceof ctypes_1.ArrayType && type.isDynamicArray || type === ctypes_1.UniversalVarType)
-                            this.scheduleNodeDisposal(node, type !== ctypes_1.UniversalVarType);
+                            this.scheduleNodeDisposal(node, { canReuse: type !== ctypes_1.UniversalVarType });
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
                     {
                         var type = this.typeHelper.getCType(node);
-                        this.scheduleNodeDisposal(node, type !== ctypes_1.UniversalVarType);
+                        this.scheduleNodeDisposal(node, { canReuse: type !== ctypes_1.UniversalVarType });
                     }
                     break;
                 case ts.SyntaxKind.BinaryExpression:
@@ -57,7 +65,7 @@ var MemoryManager = /** @class */ (function () {
                                     n = n.parent;
                                 var isInConsoleLog = ts.isCallExpression(n.parent) && n.parent.expression.getText() == "console.log";
                                 if (!isInConsoleLog && (utils_1.toPrimitive(leftType) == ctypes_1.StringVarType || utils_1.toPrimitive(rightType) == ctypes_1.StringVarType))
-                                    this.scheduleNodeDisposal(binExpr, false);
+                                    this.scheduleNodeDisposal(binExpr, { canReuse: false });
                             }
                         }
                         if (binExpr.operatorToken.kind === ts.SyntaxKind.InKeyword
@@ -80,12 +88,12 @@ var MemoryManager = /** @class */ (function () {
                 case ts.SyntaxKind.FunctionExpression:
                 case ts.SyntaxKind.FunctionDeclaration:
                     {
+                        var type = this.typeHelper.getCType(node);
                         var parentFunc = utils_1.findParentFunction(node.parent);
-                        if (parentFunc) {
-                            var type = this.typeHelper.getCType(node);
-                            if (type instanceof ctypes_1.FuncType && type.needsClosureStruct)
-                                this.scheduleNodeDisposal(node);
-                        }
+                        if (parentFunc && type instanceof ctypes_1.FuncType && type.needsClosureStruct)
+                            this.scheduleNodeDisposal(node, { subtype: "closure" });
+                        else if (type instanceof ctypes_1.FuncType && type.scopeType)
+                            this.scheduleNodeDisposal(node, { subtype: "scope", canReuse: false });
                     }
                     break;
             }
@@ -175,10 +183,10 @@ var MemoryManager = /** @class */ (function () {
             return node.parent.name;
         return null;
     };
-    MemoryManager.prototype.scheduleNodeDisposal = function (heapNode, canReuse) {
-        if (canReuse === void 0) { canReuse = true; }
+    MemoryManager.prototype.scheduleNodeDisposal = function (heapNode, options) {
+        options = __assign({ canReuse: true, subtype: null }, options);
         var isTemp = true;
-        if (canReuse) {
+        if (options.canReuse) {
             var existingVariable = this.tryReuseExistingVariable(heapNode);
             isTemp = existingVariable == null;
             if (!isTemp) {
@@ -195,7 +203,8 @@ var MemoryManager = /** @class */ (function () {
         var scopeTree = {};
         scopeTree[topScope] = true;
         var queue = [heapNode];
-        queue.push();
+        if (options.subtype === "scope")
+            queue = this.getStartNodesForTrekingFunctionScope(heapNode);
         var visited = {};
         while (queue.length > 0) {
             var node = queue.shift();
@@ -206,6 +215,9 @@ var MemoryManager = /** @class */ (function () {
                 var decl = this.typeHelper.getDeclaration(node);
                 if (decl)
                     refs = this.references[decl.pos] || refs;
+            }
+            else if (ts.isFunctionDeclaration(node)) {
+                refs = this.references[node.pos] || refs;
             }
             var returned = false;
             for (var _i = 0, refs_1 = refs; _i < refs_1.length; _i++) {
@@ -238,9 +250,13 @@ var MemoryManager = /** @class */ (function () {
                     console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");
                     queue.push(ref.parent);
                 }
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ParenthesizedExpression) {
+                    console.log(heapNode.getText() + " -> Found parenthesized expression.");
+                    queue.push(ref.parent);
+                }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     var call = ref.parent;
-                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
+                    if (ts.isIdentifier(call.expression) && call.expression === ref) {
                         console.log(heapNode.getText() + " -> Found function call!");
                         if (topScope !== "main") {
                             var funcNode = utils_1.findParentFunction(call);
@@ -252,6 +268,11 @@ var MemoryManager = /** @class */ (function () {
                             scopeTree[topScope] = targetScope;
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
+                    }
+                    else if (call.expression === ref) {
+                        console.log(heapNode.getText() + " -> Found function expression call!");
+                        isSimple = false;
+                        queue.push(call);
                     }
                     else {
                         var decl = this.typeHelper.getDeclaration(call.expression);
@@ -317,8 +338,12 @@ var MemoryManager = /** @class */ (function () {
             varName = this.symbolsHelper.addTemp(heapNode, standard_1.StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
         else if (ts.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
-        else if (utils_1.isFunction(heapNode))
-            varName = this.symbolsHelper.addTemp(utils_1.findParentSourceFile(heapNode), heapNode.name ? heapNode.name.text + "_func" : "func");
+        else if (utils_1.isFunction(heapNode)) {
+            var suffix = options.subtype || "tmp";
+            var maybePropertyName = ts.isPropertyAssignment(heapNode.parent) && ts.isIdentifier(heapNode.parent.name) ? heapNode.parent.name.text + "_" + suffix : suffix;
+            var name_1 = heapNode.name ? heapNode.name.text + "_" + suffix : maybePropertyName;
+            varName = this.symbolsHelper.addTemp(utils_1.findParentSourceFile(heapNode), name_1);
+        }
         else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
         var vnode = heapNode;
@@ -345,6 +370,17 @@ var MemoryManager = /** @class */ (function () {
             this.scopes[sc] = this.scopes[sc] || [];
             this.scopes[sc].push(scopeInfo);
         }
+    };
+    MemoryManager.prototype.getStartNodesForTrekingFunctionScope = function (func) {
+        var allNodesInFunc = utils_1.getAllNodesInFunction(func);
+        var startNodes = [];
+        for (var _i = 0, allNodesInFunc_1 = allNodesInFunc; _i < allNodesInFunc_1.length; _i++) {
+            var node = allNodesInFunc_1[_i];
+            var type = this.typeHelper.getCType(node);
+            if (type instanceof ctypes_1.FuncType && type.needsClosureStruct)
+                startNodes.push(node);
+        }
+        return startNodes;
     };
     MemoryManager.prototype.addIfFoundInAssignment = function (varIdent, ref, queue) {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
@@ -385,6 +421,16 @@ exports.MemoryManager = MemoryManager;
 },{"./standard":14,"./standard/string/match":37,"./types/ctypes":44,"./types/utils":49}],2:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -432,29 +478,30 @@ var AssignmentHelper = /** @class */ (function () {
     return AssignmentHelper;
 }());
 exports.AssignmentHelper = AssignmentHelper;
-var CAssignment = /** @class */ (function () {
+var CAssignment = /** @class */ (function (_super) {
+    __extends(CAssignment, _super);
     function CAssignment(scope, accessor, argumentExpression, type, right, inline) {
         if (inline === void 0) { inline = false; }
-        var _this = this;
-        this.accessor = accessor;
-        this.argumentExpression = argumentExpression;
-        this.isObjLiteralAssignment = false;
-        this.isArrayLiteralAssignment = false;
-        this.isDynamicArray = false;
-        this.isStaticArray = false;
-        this.isStruct = false;
-        this.isDict = false;
-        this.isNewExpression = false;
-        this.isUniversalVar = false;
-        this.assignmentRemoved = false;
-        this.CR = inline ? "" : ";\n";
-        this.isNewExpression = right.kind === ts.SyntaxKind.NewExpression;
-        this.isDynamicArray = type instanceof ctypes_1.ArrayType && type.isDynamicArray;
-        this.isStaticArray = type instanceof ctypes_1.ArrayType && !type.isDynamicArray;
-        this.isDict = type instanceof ctypes_1.DictType;
-        this.isStruct = type instanceof ctypes_1.StructType;
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
-        this.nodeText = right.pos < 0 ? "(synthetized node)" : right.getText();
+        var _this = _super.call(this) || this;
+        _this.accessor = accessor;
+        _this.argumentExpression = argumentExpression;
+        _this.isObjLiteralAssignment = false;
+        _this.isArrayLiteralAssignment = false;
+        _this.isDynamicArray = false;
+        _this.isStaticArray = false;
+        _this.isStruct = false;
+        _this.isDict = false;
+        _this.isNewExpression = false;
+        _this.isUniversalVar = false;
+        _this.assignmentRemoved = false;
+        _this.CR = inline ? "" : ";\n";
+        _this.isNewExpression = right.kind === ts.SyntaxKind.NewExpression;
+        _this.isDynamicArray = type instanceof ctypes_1.ArrayType && type.isDynamicArray;
+        _this.isStaticArray = type instanceof ctypes_1.ArrayType && !type.isDynamicArray;
+        _this.isDict = type instanceof ctypes_1.DictType;
+        _this.isStruct = type instanceof ctypes_1.StructType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.nodeText = right.pos < 0 ? "(synthetized node)" : right.getText();
         var argType = type;
         var argAccessor = accessor;
         if (argumentExpression) {
@@ -466,9 +513,9 @@ var CAssignment = /** @class */ (function () {
         }
         var isTempVar = !!scope.root.memoryManager.getReservedTemporaryVarName(right);
         if (right.kind == ts.SyntaxKind.ObjectLiteralExpression && !isTempVar) {
-            this.isObjLiteralAssignment = true;
+            _this.isObjLiteralAssignment = true;
             var objLiteral = right;
-            this.objInitializers = objLiteral.properties
+            _this.objInitializers = objLiteral.properties
                 .filter(function (p) { return p.kind == ts.SyntaxKind.PropertyAssignment; })
                 .map(function (p) { return p; })
                 .map(function (p) {
@@ -477,22 +524,23 @@ var CAssignment = /** @class */ (function () {
             });
         }
         else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression && !isTempVar) {
-            this.isArrayLiteralAssignment = true;
+            _this.isArrayLiteralAssignment = true;
             var arrLiteral = right;
-            this.arrayLiteralSize = arrLiteral.elements.length;
-            this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment_1(scope, argAccessor, "" + i, argType, e); });
+            _this.arrayLiteralSize = arrLiteral.elements.length;
+            _this.arrInitializers = arrLiteral.elements.map(function (e, i) { return new CAssignment_1(scope, argAccessor, "" + i, argType, e); });
         }
-        else if (!this.isUniversalVar && argType == ctypes_1.UniversalVarType) {
-            this.expression = new typeconvert_1.CAsUniversalVar(scope, right);
+        else if (!_this.isUniversalVar && argType == ctypes_1.UniversalVarType) {
+            _this.expression = new typeconvert_1.CAsUniversalVar(scope, right);
         }
         else
-            this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
-        if (this.argumentExpression == null) {
-            var expr = typeof this.expression == "string" ? this.expression : this.expression && this.expression["resolve"] && this.expression["resolve"]();
-            var acc = typeof this.accessor == "string" ? this.accessor : this.accessor && this.accessor["resolve"] && this.accessor["resolve"]();
+            _this.expression = template_1.CodeTemplateFactory.createForNode(scope, right);
+        if (_this.argumentExpression == null) {
+            var expr = typeof _this.expression == "string" ? _this.expression : _this.expression && _this.expression["resolve"] && _this.expression["resolve"]();
+            var acc = typeof _this.accessor == "string" ? _this.accessor : _this.accessor && _this.accessor["resolve"] && _this.accessor["resolve"]();
             if (expr == '' || acc == expr || "((void *)" + acc + ")" == expr)
-                this.assignmentRemoved = true;
+                _this.assignmentRemoved = true;
         }
+        return _this;
     }
     CAssignment_1 = CAssignment;
     CAssignment = CAssignment_1 = __decorate([
@@ -500,13 +548,23 @@ var CAssignment = /** @class */ (function () {
     ], CAssignment);
     return CAssignment;
     var CAssignment_1;
-}());
+}(template_1.CTemplateBase));
 exports.CAssignment = CAssignment;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../template":43,"../types/ctypes":44,"./elementaccess":4,"./typeconvert":10}],3:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -522,24 +580,26 @@ var ctypes_1 = require("../types/ctypes");
 var typeconvert_1 = require("./typeconvert");
 var utils_1 = require("../types/utils");
 var literals_1 = require("./literals");
-var CCallExpression = /** @class */ (function () {
+var CCallExpression = /** @class */ (function (_super) {
+    __extends(CCallExpression, _super);
     function CCallExpression(scope, call) {
-        this.funcName = null;
-        this.standardCall = null;
-        this.standardCall = standard_1.StandardCallHelper.createTemplate(scope, call);
-        if (this.standardCall)
-            return;
+        var _this = _super.call(this) || this;
+        _this.funcName = null;
+        _this.standardCall = null;
+        _this.standardCall = standard_1.StandardCallHelper.createTemplate(scope, call);
+        if (_this.standardCall)
+            return _this;
         // calling function that uses "this"
         var funcType = scope.root.typeHelper.getCType(call.expression);
         if (!funcType || funcType.instanceType != null) {
-            this.nodeText = call.getText();
-            return;
+            _this.nodeText = call.getText();
+            return _this;
         }
-        this.funcName = template_1.CodeTemplateFactory.createForNode(scope, call.expression);
-        this.arguments = call.arguments.map(function (a, i) { return funcType.parameterTypes[i] === ctypes_1.UniversalVarType ? new typeconvert_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
+        _this.funcName = template_1.CodeTemplateFactory.createForNode(scope, call.expression);
+        _this.arguments = call.arguments.map(function (a, i) { return funcType.parameterTypes[i] === ctypes_1.UniversalVarType ? new typeconvert_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
         if (funcType.needsClosureStruct) {
-            this.arguments.push(this.funcName);
-            this.funcName = template_1.CodeTemplateFactory.templateToString(this.funcName) + "->func";
+            _this.arguments.push(_this.funcName);
+            _this.funcName = template_1.CodeTemplateFactory.templateToString(_this.funcName) + "->func";
         }
         else {
             var _loop_1 = function (p) {
@@ -548,7 +608,7 @@ var CCallExpression = /** @class */ (function () {
                 var closureVarName = funcType_1 && funcType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
                 var value = p.node.text;
                 if (closureVarName && funcType_1.closureParams.some(function (p) { return p.node.text === value; }))
-                    value = closureVarName + "->" + value;
+                    value = closureVarName + "->scope->" + value;
                 this_1.arguments.push((p.assigned ? "&" : "") + value);
             };
             var this_1 = this;
@@ -557,49 +617,64 @@ var CCallExpression = /** @class */ (function () {
                 _loop_1(p);
             }
         }
+        return _this;
     }
     CCallExpression = __decorate([
         template_1.CodeTemplate("\n{#if standardCall}\n    {standardCall}\n{#elseif funcName}\n    {funcName}({arguments {, }=> {this}})\n{#else}\n    /* Unsupported function call: {nodeText} */\n{/if}", ts.SyntaxKind.CallExpression)
     ], CCallExpression);
     return CCallExpression;
-}());
+}(template_1.CTemplateBase));
 exports.CCallExpression = CCallExpression;
-var CNew = /** @class */ (function () {
+var CNew = /** @class */ (function (_super) {
+    __extends(CNew, _super);
     function CNew(scope, node) {
-        this.funcName = "";
-        this.allocator = "";
-        this.expression = "";
+        var _this = _super.call(this) || this;
+        _this.funcName = "";
+        _this.allocator = "";
+        _this.expression = "";
         var decl = scope.root.typeHelper.getDeclaration(node.expression);
         if (decl && ts.isIdentifier(node.expression)) {
             var funcType = scope.root.typeHelper.getCType(decl);
-            this.funcName = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
-            this.arguments = node.arguments.map(function (arg) { return template_1.CodeTemplateFactory.createForNode(scope, arg); });
+            _this.funcName = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+            _this.arguments = node.arguments.map(function (arg) { return template_1.CodeTemplateFactory.createForNode(scope, arg); });
             var varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
                 scope.variables.push(new variable_1.CVariable(scope, varName, funcType.instanceType));
-            this.arguments.unshift(varName);
-            this.allocator = new variable_1.CVariableAllocation(scope, varName, funcType.instanceType, node);
+            _this.arguments.unshift(varName);
+            _this.allocator = new variable_1.CVariableAllocation(scope, varName, funcType.instanceType, node);
         }
         else if (ts.isIdentifier(node.expression) && node.expression.text === "Object") {
             if (node.arguments.length === 0 || utils_1.isNullOrUndefined(node.arguments[0])) {
-                var objLiteral = node;
-                objLiteral.properties = [];
-                this.expression = new literals_1.CObjectLiteralExpression(scope, objLiteral);
+                var objLiteral = ts.createObjectLiteral();
+                objLiteral.parent = node;
+                scope.root.typeHelper.registerSyntheticNode(objLiteral, ctypes_1.PointerVarType);
+                _this.expression = new literals_1.CObjectLiteralExpression(scope, objLiteral);
             }
         }
-        this.nodeText = node.getText();
+        _this.nodeText = node.getText();
+        return _this;
     }
     CNew = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {allocator}\n{/statements}\n{#if funcName}\n    {funcName}({arguments {, }=> {this}})\n{#elseif expression}\n    {expression}\n{#else}\n    /* Unsupported 'new' expression {nodeText} */\n{/if}", ts.SyntaxKind.NewExpression)
     ], CNew);
     return CNew;
-}());
+}(template_1.CTemplateBase));
 exports.CNew = CNew;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../standard":14,"../template":43,"../types/ctypes":44,"../types/utils":49,"./literals":7,"./typeconvert":10,"./variable":11}],4:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -613,13 +688,17 @@ var ctypes_1 = require("../types/ctypes");
 var literals_1 = require("./literals");
 var typeconvert_1 = require("./typeconvert");
 var utils_1 = require("../types/utils");
-var CElementAccess = /** @class */ (function () {
+var CElementAccess = /** @class */ (function (_super) {
+    __extends(CElementAccess, _super);
     function CElementAccess(scope, node) {
+        var _this = _super.call(this) || this;
         var type = null;
         var elementAccess = null;
         var argumentExpression = null;
+        var isScopeVariable = false;
         if (ts.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
+            isScopeVariable = scope.root.typeHelper.isScopeVariable(node);
             elementAccess = node.text;
             if (utils_1.isInBoolContext(node) && type instanceof ctypes_1.ArrayType && !type.isDynamicArray) {
                 argumentExpression = "0";
@@ -632,8 +711,10 @@ var CElementAccess = /** @class */ (function () {
         else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             var propAccess = node;
             type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (ts.isIdentifier(propAccess.expression))
+            if (ts.isIdentifier(propAccess.expression)) {
                 elementAccess = propAccess.expression.text;
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(propAccess.expression);
+            }
             else
                 elementAccess = new CElementAccess_1(scope, propAccess.expression);
             if (type === ctypes_1.UniversalVarType) {
@@ -648,8 +729,10 @@ var CElementAccess = /** @class */ (function () {
         else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
             var elemAccess = node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (ts.isIdentifier(elemAccess.expression))
+            if (ts.isIdentifier(elemAccess.expression)) {
                 elementAccess = elemAccess.expression.text;
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(elemAccess.expression);
+            }
             else
                 elementAccess = new CElementAccess_1(scope, elemAccess.expression);
             if (type === ctypes_1.UniversalVarType)
@@ -671,10 +754,13 @@ var CElementAccess = /** @class */ (function () {
         var parentFunc = utils_1.findParentFunction(node);
         var parentFuncType = scope.root.typeHelper.getCType(parentFunc);
         if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }); }))
-            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + template_1.CodeTemplateFactory.templateToString(elementAccess);
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->scope->" + template_1.CodeTemplateFactory.templateToString(elementAccess);
         else if (parentFuncType && parentFuncType.closureParams.some(function (p) { return p.refs.some(function (r) { return r.pos === node.pos; }) && p.assigned; }))
             elementAccess = "*" + template_1.CodeTemplateFactory.templateToString(elementAccess);
-        this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
+        else if (isScopeVariable)
+            elementAccess = scope.root.symbolsHelper.getScopeVarName(parentFunc) + "->" + template_1.CodeTemplateFactory.templateToString(elementAccess);
+        _this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
+        return _this;
     }
     CElementAccess_1 = CElementAccess;
     CElementAccess = CElementAccess_1 = __decorate([
@@ -682,58 +768,74 @@ var CElementAccess = /** @class */ (function () {
     ], CElementAccess);
     return CElementAccess;
     var CElementAccess_1;
-}());
+}(template_1.CTemplateBase));
 exports.CElementAccess = CElementAccess;
-var CSimpleElementAccess = /** @class */ (function () {
+var CSimpleElementAccess = /** @class */ (function (_super) {
+    __extends(CSimpleElementAccess, _super);
     function CSimpleElementAccess(scope, type, elementAccess, argumentExpression) {
-        this.elementAccess = elementAccess;
-        this.argumentExpression = argumentExpression;
-        this.isDynamicArray = false;
-        this.isStaticArray = false;
-        this.isStruct = false;
-        this.isDict = false;
-        this.isString = false;
-        this.nullValue = "0";
-        this.isUniversalAccess = false;
-        this.isSimpleVar = typeof type === 'string' && type != ctypes_1.UniversalVarType && type != ctypes_1.PointerVarType;
-        this.isDynamicArray = type instanceof ctypes_1.ArrayType && type.isDynamicArray;
-        this.isStaticArray = type instanceof ctypes_1.ArrayType && !type.isDynamicArray;
-        this.arrayCapacity = type instanceof ctypes_1.ArrayType && !type.isDynamicArray && type.capacity + "";
-        this.isDict = type instanceof ctypes_1.DictType;
-        this.isStruct = type instanceof ctypes_1.StructType;
+        var _this = _super.call(this) || this;
+        _this.elementAccess = elementAccess;
+        _this.argumentExpression = argumentExpression;
+        _this.isDynamicArray = false;
+        _this.isStaticArray = false;
+        _this.isStruct = false;
+        _this.isDict = false;
+        _this.isString = false;
+        _this.nullValue = "0";
+        _this.isUniversalAccess = false;
+        _this.isSimpleVar = typeof type === 'string' && type != ctypes_1.UniversalVarType && type != ctypes_1.PointerVarType;
+        _this.isDynamicArray = type instanceof ctypes_1.ArrayType && type.isDynamicArray;
+        _this.isStaticArray = type instanceof ctypes_1.ArrayType && !type.isDynamicArray;
+        _this.arrayCapacity = type instanceof ctypes_1.ArrayType && !type.isDynamicArray && type.capacity + "";
+        _this.isDict = type instanceof ctypes_1.DictType;
+        _this.isStruct = type instanceof ctypes_1.StructType;
         if (type === ctypes_1.UniversalVarType && argumentExpression != null) {
-            this.isUniversalAccess = true;
+            _this.isUniversalAccess = true;
             scope.root.headerFlags.js_var_get = true;
         }
-        this.isString = type === ctypes_1.StringVarType;
+        _this.isString = type === ctypes_1.StringVarType;
         if (argumentExpression != null && type instanceof ctypes_1.DictType && type.elementType === ctypes_1.UniversalVarType)
-            this.nullValue = new literals_1.CUndefined(scope);
-        if (this.isString && this.argumentExpression == "length")
+            _this.nullValue = new literals_1.CUndefined(scope);
+        if (_this.isString && _this.argumentExpression == "length")
             scope.root.headerFlags.str_len = true;
+        return _this;
     }
     CSimpleElementAccess = __decorate([
         template_1.CodeTemplate("\n{#if isString && argumentExpression == 'length'}\n    str_len({elementAccess})\n{#elseif isSimpleVar || argumentExpression == null}\n    {elementAccess}\n{#elseif isDynamicArray && argumentExpression == 'length'}\n    {elementAccess}->size\n{#elseif isDynamicArray}\n    {elementAccess}->data[{argumentExpression}]\n{#elseif isStaticArray && argumentExpression == 'length'}\n    {arrayCapacity}\n{#elseif isStaticArray}\n    {elementAccess}[{argumentExpression}]\n{#elseif isStruct}\n    {elementAccess}->{argumentExpression}\n{#elseif isDict}\n    DICT_GET({elementAccess}, {argumentExpression}, {nullValue})\n{#elseif isUniversalAccess}\n    js_var_get({elementAccess}, {argumentExpression})\n{#else}\n    /* Unsupported element access scenario: {elementAccess} {argumentExpression} */\n{/if}")
     ], CSimpleElementAccess);
     return CSimpleElementAccess;
-}());
+}(template_1.CTemplateBase));
 exports.CSimpleElementAccess = CSimpleElementAccess;
-var CArraySize = /** @class */ (function () {
+var CArraySize = /** @class */ (function (_super) {
+    __extends(CArraySize, _super);
     function CArraySize(scope, varAccess, type) {
-        this.varAccess = varAccess;
-        this.type = type;
-        this.arrayCapacity = type.capacity + "";
+        var _this = _super.call(this) || this;
+        _this.varAccess = varAccess;
+        _this.type = type;
+        _this.arrayCapacity = type.capacity + "";
+        return _this;
     }
     CArraySize = __decorate([
         template_1.CodeTemplate("\n{#if type.isDynamicArray}\n    {varAccess}->size\n{#else}\n    {arrayCapacity}\n{/if}")
     ], CArraySize);
     return CArraySize;
-}());
+}(template_1.CTemplateBase));
 exports.CArraySize = CArraySize;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../template":43,"../types/ctypes":44,"../types/utils":49,"./literals":7,"./typeconvert":10}],5:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -752,133 +854,144 @@ var typeconvert_1 = require("./typeconvert");
 var utils_1 = require("../types/utils");
 var elementaccess_1 = require("./elementaccess");
 var standard_1 = require("../standard");
-var CCondition = /** @class */ (function () {
+var CCondition = /** @class */ (function (_super) {
+    __extends(CCondition, _super);
     function CCondition(scope, node) {
-        this.universalWrapper = false;
-        this.isString = false;
-        this.expressionIsIdentifier = false;
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node);
-        this.expressionIsIdentifier = ts.isIdentifier(node);
+        var _this = _super.call(this) || this;
+        _this.universalWrapper = false;
+        _this.isString = false;
+        _this.expressionIsIdentifier = false;
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node);
+        _this.expressionIsIdentifier = ts.isIdentifier(node);
         var type = scope.root.typeHelper.getCType(node);
-        this.isString = type == ctypes_1.StringVarType;
+        _this.isString = type == ctypes_1.StringVarType;
         if (type == ctypes_1.UniversalVarType) {
-            this.universalWrapper = true;
+            _this.universalWrapper = true;
             scope.root.headerFlags.js_var_to_bool = true;
         }
+        return _this;
     }
     CCondition = __decorate([
         template_1.CodeTemplate("\n{#if universalWrapper}\n    js_var_to_bool({expression})\n{#elseif isString && expressionIsIdentifier}\n    *{expression}\n{#elseif isString}\n    *({expression})\n{#else}\n    {expression}\n{/if}")
     ], CCondition);
     return CCondition;
-}());
+}(template_1.CTemplateBase));
 exports.CCondition = CCondition;
-var CBinaryExpression = /** @class */ (function () {
+var CBinaryExpression = /** @class */ (function (_super) {
+    __extends(CBinaryExpression, _super);
     function CBinaryExpression(scope, node) {
-        this.expression = null;
+        var _this = _super.call(this) || this;
+        _this.expression = null;
         if (node.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-            this.expression = assignment_1.AssignmentHelper.create(scope, node.left, node.right, true);
-            return;
+            _this.expression = assignment_1.AssignmentHelper.create(scope, node.left, node.right, true);
+            return _this;
         }
         if (node.operatorToken.kind == ts.SyntaxKind.CommaToken) {
             var nodeAsStatement = ts.createNode(ts.SyntaxKind.ExpressionStatement);
             nodeAsStatement.expression = node.left;
             nodeAsStatement.parent = node.getSourceFile();
             scope.statements.push(template_1.CodeTemplateFactory.createForNode(scope, nodeAsStatement));
-            this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.right);
-            return;
+            _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+            return _this;
         }
         if (node.operatorToken.kind == ts.SyntaxKind.PlusToken) {
-            this.expression = new CPlusExpression(scope, node);
-            return;
+            _this.expression = new CPlusExpression(scope, node);
+            return _this;
         }
         if (node.operatorToken.kind == ts.SyntaxKind.PlusEqualsToken) {
             var left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
             var right = new CPlusExpression(scope, node);
-            this.expression = "(" + template_1.CodeTemplateFactory.templateToString(left) + " = " + template_1.CodeTemplateFactory.templateToString(right) + ")";
+            _this.expression = "(" + template_1.CodeTemplateFactory.templateToString(left) + " = " + template_1.CodeTemplateFactory.templateToString(right) + ")";
         }
         if (utils_1.isNumberOp(node.operatorToken.kind) || utils_1.isIntegerOp(node.operatorToken.kind)) {
-            this.expression = new CArithmeticExpression(scope, node);
-            return;
+            _this.expression = new CArithmeticExpression(scope, node);
+            return _this;
         }
         if (utils_1.isRelationalOp(node.operatorToken.kind)) {
-            this.expression = new CRelationalExpression(scope, node);
-            return;
+            _this.expression = new CRelationalExpression(scope, node);
+            return _this;
         }
         if (utils_1.isEqualityOp(node.operatorToken.kind)) {
-            this.expression = new CEqualityExpression(scope, node);
-            return;
+            _this.expression = new CEqualityExpression(scope, node);
+            return _this;
         }
         if (node.operatorToken.kind === ts.SyntaxKind.InKeyword) {
-            this.expression = new CInExpression(scope, node);
-            return;
+            _this.expression = new CInExpression(scope, node);
+            return _this;
         }
         if (utils_1.isLogicOp(node.operatorToken.kind)) {
-            this.expression = new CLogicExpession(scope, node);
-            return;
+            _this.expression = new CLogicExpession(scope, node);
+            return _this;
         }
-        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        _this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        return _this;
     }
     CBinaryExpression = __decorate([
         template_1.CodeTemplate("\n{#if expression}\n    {expression}\n{#else}\n    /* unsupported expression {nodeText} */\n{/if}", ts.SyntaxKind.BinaryExpression)
     ], CBinaryExpression);
     return CBinaryExpression;
-}());
+}(template_1.CTemplateBase));
 exports.CBinaryExpression = CBinaryExpression;
-var CLogicExpession = /** @class */ (function () {
+var CLogicExpession = /** @class */ (function (_super) {
+    __extends(CLogicExpession, _super);
     function CLogicExpession(scope, node) {
-        this.leftVarName = "";
-        this.rightVarName = "";
+        var _this = _super.call(this) || this;
+        _this.leftVarName = "";
+        _this.rightVarName = "";
         var type = scope.root.typeHelper.getCType(node);
         if (type === ctypes_1.UniversalVarType) {
-            this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
-            this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
+            _this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
+            _this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
         }
         else {
-            this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
-            this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+            _this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+            _this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         }
-        this.isBoolContext = utils_1.isInBoolContext(node) && type !== ctypes_1.UniversalVarType;
+        _this.isBoolContext = utils_1.isInBoolContext(node) && type !== ctypes_1.UniversalVarType;
         var isOr = node.operatorToken.kind === ts.SyntaxKind.BarBarToken;
-        if (this.isBoolContext) {
-            this.operator = isOr ? "||" : "&&";
+        if (_this.isBoolContext) {
+            _this.operator = isOr ? "||" : "&&";
         }
         else {
             if (!utils_1.isSimpleNode(node.left)) {
-                this.leftVarName = scope.root.symbolsHelper.addTemp(node, "tmp1");
-                scope.variables.push(new variable_1.CVariable(scope, this.leftVarName, type));
+                _this.leftVarName = scope.root.symbolsHelper.addTemp(node, "tmp1");
+                scope.variables.push(new variable_1.CVariable(scope, _this.leftVarName, type));
             }
             if (!utils_1.isSimpleNode(node.right)) {
-                this.rightVarName = scope.root.symbolsHelper.addTemp(node, "tmp2");
-                scope.variables.push(new variable_1.CVariable(scope, this.rightVarName, type));
+                _this.rightVarName = scope.root.symbolsHelper.addTemp(node, "tmp2");
+                scope.variables.push(new variable_1.CVariable(scope, _this.rightVarName, type));
             }
-            if (this.leftVarName && type === ctypes_1.UniversalVarType) {
-                this.condition = "js_var_to_bool(" + this.leftVarName + ")";
+            if (_this.leftVarName && type === ctypes_1.UniversalVarType) {
+                _this.condition = "js_var_to_bool(" + _this.leftVarName + ")";
                 scope.root.headerFlags.js_var_to_bool = true;
             }
             else
-                this.condition = this.leftVarName || new CCondition(scope, node.left);
+                _this.condition = _this.leftVarName || new CCondition(scope, node.left);
             if (isOr) {
-                this.whenTrue = this.leftVarName || this.left;
-                this.whenFalse = this.rightVarName || this.right;
+                _this.whenTrue = _this.leftVarName || _this.left;
+                _this.whenFalse = _this.rightVarName || _this.right;
             }
             else {
-                this.whenTrue = this.rightVarName || this.right;
-                this.whenFalse = this.leftVarName || this.left;
+                _this.whenTrue = _this.rightVarName || _this.right;
+                _this.whenFalse = _this.leftVarName || _this.left;
             }
         }
+        return _this;
     }
     CLogicExpession = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if leftVarName}\n        {leftVarName} = {left};\n    {/if}\n    {#if rightVarName}\n        {rightVarName} = {right};\n    {/if}\n{/statements}\n{#if isBoolContext}\n    {left} {operator} {right}\n{#else}\n    {condition} ? {whenTrue} : {whenFalse}\n{/if}")
     ], CLogicExpession);
     return CLogicExpession;
-}());
-var CArithmeticExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CArithmeticExpression = /** @class */ (function (_super) {
+    __extends(CArithmeticExpression, _super);
     function CArithmeticExpression(scope, node) {
-        this.operator = null;
-        this.computeOperation = null;
+        var _this = _super.call(this) || this;
+        _this.operator = null;
+        _this.computeOperation = null;
         var leftType = scope.root.typeHelper.getCType(node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
-        this.isCompoundAssignment = utils_1.isCompoundAssignment(node.operatorToken);
+        _this.isCompoundAssignment = utils_1.isCompoundAssignment(node.operatorToken);
         if (utils_1.toNumberCanBeNaN(leftType) || utils_1.toNumberCanBeNaN(rightType)) {
             var js_var_operator_map = (_a = {},
                 _a[ts.SyntaxKind.AsteriskToken] = "JS_VAR_ASTERISK",
@@ -900,233 +1013,244 @@ var CArithmeticExpression = /** @class */ (function () {
                 _a[ts.SyntaxKind.AmpersandToken] = "JS_VAR_AND",
                 _a[ts.SyntaxKind.AmpersandEqualsToken] = "JS_VAR_AND",
                 _a);
-            this.computeOperation = js_var_operator_map[node.operatorToken.kind];
-            this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
-            this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
+            _this.computeOperation = js_var_operator_map[node.operatorToken.kind];
+            _this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
+            _this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
             scope.root.headerFlags.js_var_compute = true;
         }
         else {
-            this.operator = node.operatorToken.getText();
-            this.left = new typeconvert_1.CAsNumber(scope, node.left);
-            this.right = new typeconvert_1.CAsNumber(scope, node.right);
+            _this.operator = node.operatorToken.getText();
+            _this.left = new typeconvert_1.CAsNumber(scope, node.left);
+            _this.right = new typeconvert_1.CAsNumber(scope, node.right);
             if (node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
                 || node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) {
-                this.operator = ">>";
-                var leftAsString = template_1.CodeTemplateFactory.templateToString(this.left);
-                this.left = "((uint16_t)" + leftAsString + ")";
+                _this.operator = ">>";
+                var leftAsString = template_1.CodeTemplateFactory.templateToString(_this.left);
+                _this.left = "((uint16_t)" + leftAsString + ")";
                 if (node.operatorToken.kind == ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken)
-                    this.left = leftAsString + " = " + this.left;
+                    _this.left = leftAsString + " = " + _this.left;
                 scope.root.headerFlags.uint16_t = true;
             }
         }
-        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        _this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        return _this;
         var _a;
     }
     CArithmeticExpression = __decorate([
         template_1.CodeTemplate("\n{#if operator}\n    {left} {operator} {right}\n{#elseif computeOperation && isCompoundAssignment}\n    {left} = js_var_compute({left}, {computeOperation}, {right})\n{#elseif computeOperation}\n    js_var_compute({left}, {computeOperation}, {right})\n{#else}\n    /* unsupported arithmetic expression {nodeText} */\n{/if}")
     ], CArithmeticExpression);
     return CArithmeticExpression;
-}());
-var CRelationalExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CRelationalExpression = /** @class */ (function (_super) {
+    __extends(CRelationalExpression, _super);
     function CRelationalExpression(scope, node) {
-        this.operator = null;
-        this.universalCondition = null;
-        this.stringCondition = null;
+        var _this = _super.call(this) || this;
+        _this.operator = null;
+        _this.universalCondition = null;
+        _this.stringCondition = null;
         var leftType = scope.root.typeHelper.getCType(node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
         if (leftType === ctypes_1.UniversalVarType || rightType === ctypes_1.UniversalVarType) {
             switch (node.operatorToken.kind) {
                 case ts.SyntaxKind.LessThanToken:
-                    this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
-                    this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
-                    this.universalCondition = "> 0";
+                    _this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
+                    _this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
+                    _this.universalCondition = "> 0";
                     break;
                 case ts.SyntaxKind.LessThanEqualsToken:
                     // notice operands are swapped
-                    this.left = new typeconvert_1.CAsUniversalVar(scope, node.right);
-                    this.right = new typeconvert_1.CAsUniversalVar(scope, node.left);
-                    this.universalCondition = "< 0";
+                    _this.left = new typeconvert_1.CAsUniversalVar(scope, node.right);
+                    _this.right = new typeconvert_1.CAsUniversalVar(scope, node.left);
+                    _this.universalCondition = "< 0";
                     break;
                 case ts.SyntaxKind.GreaterThanToken:
                     // notice operands are swapped
-                    this.left = new typeconvert_1.CAsUniversalVar(scope, node.right);
-                    this.right = new typeconvert_1.CAsUniversalVar(scope, node.left);
-                    this.universalCondition = "> 0";
+                    _this.left = new typeconvert_1.CAsUniversalVar(scope, node.right);
+                    _this.right = new typeconvert_1.CAsUniversalVar(scope, node.left);
+                    _this.universalCondition = "> 0";
                     break;
                 case ts.SyntaxKind.GreaterThanEqualsToken:
-                    this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
-                    this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
-                    this.universalCondition = "< 0";
+                    _this.left = new typeconvert_1.CAsUniversalVar(scope, node.left);
+                    _this.right = new typeconvert_1.CAsUniversalVar(scope, node.right);
+                    _this.universalCondition = "< 0";
                     break;
             }
             scope.root.headerFlags.js_var_lessthan = true;
         }
         else if (leftType === ctypes_1.StringVarType && rightType === ctypes_1.StringVarType) {
-            this.stringCondition = node.operatorToken.getText() + " 0";
-            this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
-            this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+            _this.stringCondition = node.operatorToken.getText() + " 0";
+            _this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+            _this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
             scope.root.headerFlags.strings = true;
         }
         else {
-            this.operator = node.operatorToken.getText();
-            this.left = new typeconvert_1.CAsNumber(scope, node.left);
-            this.right = new typeconvert_1.CAsNumber(scope, node.right);
+            _this.operator = node.operatorToken.getText();
+            _this.left = new typeconvert_1.CAsNumber(scope, node.left);
+            _this.right = new typeconvert_1.CAsNumber(scope, node.right);
         }
-        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        _this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        return _this;
     }
     CRelationalExpression = __decorate([
         template_1.CodeTemplate("\n{#if operator}\n    {left} {operator} {right}\n{#elseif stringCondition}\n    strcmp({left}, {right}) {stringCondition}\n{#elseif universalCondition}\n    js_var_lessthan({left}, {right}) {universalCondition}\n{#else}\n    /* unsupported relational expression {nodeText} */\n{/if}")
     ], CRelationalExpression);
     return CRelationalExpression;
-}());
-var CEqualityExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CEqualityExpression = /** @class */ (function (_super) {
+    __extends(CEqualityExpression, _super);
     function CEqualityExpression(scope, node) {
-        this.expression = null;
-        this.operator = null;
-        this.stringCondition = null;
-        this.strNumCondition = null;
-        this.universalCondition = null;
-        this.strict = null;
+        var _this = _super.call(this) || this;
+        _this.expression = null;
+        _this.operator = null;
+        _this.stringCondition = null;
+        _this.strNumCondition = null;
+        _this.universalCondition = null;
+        _this.strict = null;
         var leftType = scope.root.typeHelper.getCType(node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
         var notEquals = node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken;
-        this.strict = node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ? "TRUE" : "FALSE";
-        this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
-        this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        _this.strict = node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ? "TRUE" : "FALSE";
+        _this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+        _this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         if ((leftType == ctypes_1.NumberVarType || leftType == ctypes_1.BooleanVarType) && (rightType == ctypes_1.NumberVarType || rightType == ctypes_1.BooleanVarType)) {
-            this.operator = notEquals ? "!=" : "==";
+            _this.operator = notEquals ? "!=" : "==";
         }
         else if (leftType == ctypes_1.StringVarType && rightType == ctypes_1.StringVarType) {
-            this.stringCondition = notEquals ? "!= 0" : "== 0";
+            _this.stringCondition = notEquals ? "!= 0" : "== 0";
             scope.root.headerFlags.strings = true;
         }
         else if (leftType == ctypes_1.NumberVarType && rightType == ctypes_1.StringVarType
             || leftType == ctypes_1.StringVarType && rightType == ctypes_1.NumberVarType) {
-            this.strNumCondition = notEquals ? "!= 0" : "== 0";
+            _this.strNumCondition = notEquals ? "!= 0" : "== 0";
             scope.root.headerFlags.str_int16_t_cmp = true;
             // str_int16_t_cmp expects certain order of arguments (string, number)
             if (leftType == ctypes_1.NumberVarType) {
-                var tmp = this.left;
-                this.left = this.right;
-                this.right = tmp;
+                var tmp = _this.left;
+                _this.left = _this.right;
+                _this.right = tmp;
             }
         }
         else if (leftType == ctypes_1.UniversalVarType || rightType == ctypes_1.UniversalVarType) {
-            this.universalCondition = notEquals ? "== FALSE" : "== TRUE";
-            this.left = new typeconvert_1.CAsUniversalVar(scope, this.left, leftType);
-            this.right = new typeconvert_1.CAsUniversalVar(scope, this.right, rightType);
+            _this.universalCondition = notEquals ? "== FALSE" : "== TRUE";
+            _this.left = new typeconvert_1.CAsUniversalVar(scope, _this.left, leftType);
+            _this.right = new typeconvert_1.CAsUniversalVar(scope, _this.right, rightType);
             scope.root.headerFlags.js_var_eq = true;
         }
         else if (leftType instanceof ctypes_1.StructType || leftType instanceof ctypes_1.ArrayType || leftType instanceof ctypes_1.DictType
             || rightType instanceof ctypes_1.StructType || rightType instanceof ctypes_1.ArrayType || rightType instanceof ctypes_1.DictType) {
             if (leftType != rightType) {
-                this.expression = notEquals ? "TRUE" : "FALSE";
+                _this.expression = notEquals ? "TRUE" : "FALSE";
                 scope.root.headerFlags.bool = true;
             }
             else
-                this.operator = notEquals ? "!=" : "==";
+                _this.operator = notEquals ? "!=" : "==";
         }
-        this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        _this.nodeText = node.flags & ts.NodeFlags.Synthesized ? "(synthesized node)" : node.getText();
+        return _this;
     }
     CEqualityExpression = __decorate([
         template_1.CodeTemplate("\n{#if expression}\n    {expression}\n{#elseif operator}\n    {left} {operator} {right}\n{#elseif stringCondition}\n    strcmp({left}, {right}) {stringCondition}\n{#elseif strNumCondition}\n    str_int16_t_cmp({left}, {right}) {strNumCondition}\n{#elseif universalCondition}\n    js_var_eq({left}, {right}, {strict}) {universalCondition}\n{#else}\n    /* unsupported equality expression {nodeText} */\n{/if}")
     ], CEqualityExpression);
     return CEqualityExpression;
-}());
-var CPlusExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CPlusExpression = /** @class */ (function (_super) {
+    __extends(CPlusExpression, _super);
     function CPlusExpression(scope, node) {
-        this.addNumbers = false;
-        this.isUniversalVar = false;
-        this.replacedWithVar = false;
-        this.replacementVarName = null;
-        this.gcVarName = null;
+        var _this = _super.call(this) || this;
+        _this.addNumbers = false;
+        _this.isUniversalVar = false;
+        _this.replacedWithVar = false;
+        _this.replacementVarName = null;
+        _this.gcVarName = null;
         var leftType = scope.root.typeHelper.getCType(node.left);
-        this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
+        _this.left = template_1.CodeTemplateFactory.createForNode(scope, node.left);
         var rightType = scope.root.typeHelper.getCType(node.right);
-        this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        _this.right = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         if (leftType == ctypes_1.RegexVarType) {
             leftType = ctypes_1.StringVarType;
-            this.left = new regexfunc_1.CRegexAsString(this.left);
+            _this.left = new regexfunc_1.CRegexAsString(_this.left);
         }
         if (rightType == ctypes_1.RegexVarType) {
             rightType = ctypes_1.StringVarType;
-            this.right = new regexfunc_1.CRegexAsString(this.right);
+            _this.right = new regexfunc_1.CRegexAsString(_this.right);
         }
         if ((leftType === ctypes_1.NumberVarType || leftType === ctypes_1.BooleanVarType) && (rightType === ctypes_1.NumberVarType || rightType === ctypes_1.BooleanVarType)) {
-            this.addNumbers = true;
+            _this.addNumbers = true;
         }
         else if (leftType === ctypes_1.UniversalVarType || rightType === ctypes_1.UniversalVarType) {
-            this.isUniversalVar = true;
-            this.left = new typeconvert_1.CAsUniversalVar(scope, this.left, leftType);
-            this.right = new typeconvert_1.CAsUniversalVar(scope, this.right, rightType);
+            _this.isUniversalVar = true;
+            _this.left = new typeconvert_1.CAsUniversalVar(scope, _this.left, leftType);
+            _this.right = new typeconvert_1.CAsUniversalVar(scope, _this.right, rightType);
             scope.root.headerFlags.js_var_plus = true;
         }
         else {
             var tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             scope.func.variables.push(new variable_1.CVariable(scope, tempVarName, "char *", { initializer: "NULL" }));
-            this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-            this.replacedWithVar = true;
-            this.replacementVarName = tempVarName;
-            this.strlen_left = new typeconvert_1.CAsString_Length(scope, node.left, this.left, leftType);
-            this.strlen_right = new typeconvert_1.CAsString_Length(scope, node.right, this.right, rightType);
-            this.strcat_left = new typeconvert_1.CAsString_Concat(scope, node.left, tempVarName, this.left, leftType);
-            this.strcat_right = new typeconvert_1.CAsString_Concat(scope, node.right, tempVarName, this.right, rightType);
+            _this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+            _this.replacedWithVar = true;
+            _this.replacementVarName = tempVarName;
+            _this.strlen_left = new typeconvert_1.CAsString_Length(scope, node.left, _this.left, leftType);
+            _this.strlen_right = new typeconvert_1.CAsString_Length(scope, node.right, _this.right, rightType);
+            _this.strcat_left = new typeconvert_1.CAsString_Concat(scope, node.left, tempVarName, _this.left, leftType);
+            _this.strcat_right = new typeconvert_1.CAsString_Concat(scope, node.right, tempVarName, _this.right, rightType);
             scope.root.headerFlags.strings = true;
             scope.root.headerFlags.malloc = true;
             scope.root.headerFlags.str_int16_t_cat = true;
-            if (this.gcVarName) {
+            if (_this.gcVarName) {
                 scope.root.headerFlags.gc_iterator = true;
                 scope.root.headerFlags.array = true;
             }
         }
+        return _this;
     }
     CPlusExpression = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if replacedWithVar}\n        {replacementVarName} = malloc({strlen_left} + {strlen_right} + 1);\n        assert({replacementVarName} != NULL);\n        {replacementVarName}[0] = '\\0';\n        {strcat_left}\n        {strcat_right}\n    {/if}\n    {#if replacedWithVar && gcVarName}\n        ARRAY_PUSH({gcVarName}, {replacementVarName});\n    {/if}\n\n{/statements}\n{#if addNumbers}\n    {left} + {right}\n{#elseif replacedWithVar}\n    {replacementVarName}\n{#elseif isUniversalVar}\n    js_var_plus({left}, {right})\n{/if}")
     ], CPlusExpression);
     return CPlusExpression;
-}());
-var CInExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CInExpression = /** @class */ (function (_super) {
+    __extends(CInExpression, _super);
     function CInExpression(scope, node) {
-        var _this = this;
-        this.isArray = false;
-        this.isStruct = false;
-        this.isDict = false;
-        this.isUniversalVar = false;
-        this.result = null;
-        this.tmpVarName = null;
+        var _this = _super.call(this) || this;
+        _this.isArray = false;
+        _this.isStruct = false;
+        _this.isDict = false;
+        _this.isUniversalVar = false;
+        _this.result = null;
+        _this.tmpVarName = null;
         var type = scope.root.typeHelper.getCType(node.right);
-        this.obj = template_1.CodeTemplateFactory.createForNode(scope, node.right);
+        _this.obj = template_1.CodeTemplateFactory.createForNode(scope, node.right);
         if (type instanceof ctypes_1.ArrayType) {
-            this.isArray = true;
-            this.arraySize = new elementaccess_1.CArraySize(scope, this.obj, type);
-            this.key = new typeconvert_1.CAsNumber(scope, node.left);
+            _this.isArray = true;
+            _this.arraySize = new elementaccess_1.CArraySize(scope, _this.obj, type);
+            _this.key = new typeconvert_1.CAsNumber(scope, node.left);
             var keyType = scope.root.typeHelper.getCType(node.left);
             if (utils_1.toNumberCanBeNaN(keyType)) {
-                this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp_key");
-                scope.variables.push(new variable_1.CVariable(scope, this.tmpVarName, ctypes_1.UniversalVarType));
+                _this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp_key");
+                scope.variables.push(new variable_1.CVariable(scope, _this.tmpVarName, ctypes_1.UniversalVarType));
             }
         }
         else {
-            this.key = new typeconvert_1.CAsString(scope, node.left);
+            _this.key = new typeconvert_1.CAsString(scope, node.left);
         }
         if (type instanceof ctypes_1.StructType) {
-            this.isStruct = true;
+            _this.isStruct = true;
             var propTypes = Object.keys(type.properties);
             if (propTypes.length == 0) {
-                this.result = "FALSE";
+                _this.result = "FALSE";
                 scope.root.headerFlags.bool = true;
             }
             else {
                 var initializer = "{ " + propTypes.sort().map(function (p) { return '"' + p + '"'; }).join(", ") + " }";
-                this.propertiesVarName = type.structName + "_props";
-                this.propertiesCount = propTypes.length + "";
+                _this.propertiesVarName = type.structName + "_props";
+                _this.propertiesCount = propTypes.length + "";
                 if (!scope.root.variables.some(function (v) { return v.name === _this.propertiesVarName; }))
-                    scope.root.variables.push(new variable_1.CVariable(scope, this.propertiesVarName, "const char *{var}[" + this.propertiesCount + "]", { initializer: initializer }));
+                    scope.root.variables.push(new variable_1.CVariable(scope, _this.propertiesVarName, "const char *{var}[" + _this.propertiesCount + "]", { initializer: initializer }));
                 scope.root.headerFlags.dict_find_pos = true;
             }
         }
-        this.isDict = type instanceof ctypes_1.DictType;
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.isDict = type instanceof ctypes_1.DictType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
         if (ts.isStringLiteral(node.left)) {
             var ident_1 = ts.createIdentifier(node.left.text);
             var propAccess_1 = ts.createPropertyAccess(node.right, ident_1);
@@ -1138,86 +1262,89 @@ var CInExpression = /** @class */ (function () {
             standardCall.parent = node.parent;
             standardCall.getText = function () { return propAccess_1.getText() + "()"; };
             if (standard_1.StandardCallHelper.isStandardCall(scope.root.typeHelper, standardCall))
-                this.result = "TRUE";
+                _this.result = "TRUE";
         }
-        if (this.isArray && ts.isStringLiteral(node.left) && node.left.text === "length")
-            this.result = "TRUE";
-        this.nodeText = node.getText();
+        if (_this.isArray && ts.isStringLiteral(node.left) && node.left.text === "length")
+            _this.result = "TRUE";
+        _this.nodeText = node.getText();
+        return _this;
     }
     CInExpression = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if tmpVarName}\n        {tmpVarName} = {key};\n    {/if}\n{/statements}\n{#if result}\n    {result}\n{#elseif isArray && tmpVarName}\n    ({tmpVarName}.type != JS_VAR_NAN && {tmpVarName}.number >= 0 && {tmpVarName}.number < {arraySize})\n{#elseif isArray && !tmpVarName}\n    ({key} >= 0 && {key} < {arraySize})\n{#elseif isStruct}\n    dict_find_pos({propertiesVarName}, {propertiesCount}, {key}) > -1\n{#elseif isDict}\n    dict_find_pos({obj}->index->data, {obj}->index->size, {key}) > -1\n{#elseif isUniversalVar}\n    js_var_get({obj}, {key}).type != JS_VAR_UNDEFINED\n{#else}\n    /* unsupported 'in' expression {nodeText} */\n{/if}")
     ], CInExpression);
     return CInExpression;
-}());
-var CUnaryExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CUnaryExpression = /** @class */ (function (_super) {
+    __extends(CUnaryExpression, _super);
     function CUnaryExpression(scope, node) {
-        this.before = "";
-        this.after = "";
-        this.argumentExpr = null;
-        this.incrementBy = "";
-        this.isCompound = false;
-        this.isPostfix = ts.isPostfixUnaryExpression(node);
+        var _this = _super.call(this) || this;
+        _this.before = "";
+        _this.after = "";
+        _this.argumentExpr = null;
+        _this.incrementBy = "";
+        _this.isCompound = false;
+        _this.isPostfix = ts.isPostfixUnaryExpression(node);
         var isTopExpressionOfStatement = ts.isExpressionStatement(node.parent);
         var type = scope.root.typeHelper.getCType(node.operand);
         if (node.operator === ts.SyntaxKind.PlusToken)
-            this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
+            _this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
         else if (node.operator === ts.SyntaxKind.MinusToken) {
-            this.before = "-";
-            this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
+            _this.before = "-";
+            _this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
             if (utils_1.toNumberCanBeNaN(type)) {
-                this.before = "js_var_compute(js_var_from_int16_t(0), JS_VAR_MINUS, ";
-                this.after = ")";
+                _this.before = "js_var_compute(js_var_from_int16_t(0), JS_VAR_MINUS, ";
+                _this.after = ")";
                 scope.root.headerFlags.js_var_compute = true;
                 scope.root.headerFlags.js_var_from_int16_t = true;
             }
         }
         else if (node.operator === ts.SyntaxKind.TildeToken) {
-            this.before = "~";
-            this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
+            _this.before = "~";
+            _this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
             if (utils_1.toNumberCanBeNaN(type))
-                this.after = ".number";
+                _this.after = ".number";
         }
         else if (node.operator === ts.SyntaxKind.ExclamationToken) {
-            this.before = "!";
-            this.operand = new CCondition(scope, node.operand);
+            _this.before = "!";
+            _this.operand = new CCondition(scope, node.operand);
         }
         else if (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) {
             var plus_1 = node.operator === ts.SyntaxKind.PlusPlusToken;
             var accessObj = null, isDict = false;
             if ((ts.isPropertyAccessExpression(node.operand) || ts.isElementAccessExpression(node.operand))) {
-                this.argumentExpr = template_1.CodeTemplateFactory.createForNode(scope, ts.isPropertyAccessExpression(node.operand) ? node.operand.name : node.operand.argumentExpression);
+                _this.argumentExpr = template_1.CodeTemplateFactory.createForNode(scope, ts.isPropertyAccessExpression(node.operand) ? node.operand.name : node.operand.argumentExpression);
                 accessObj = node.operand.expression;
                 isDict = scope.root.typeHelper.getCType(accessObj) instanceof ctypes_1.DictType;
             }
-            if (this.isPostfix) {
+            if (_this.isPostfix) {
                 if (!isDict && (type === ctypes_1.NumberVarType || type === ctypes_1.BooleanVarType)) {
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = plus_1 ? "++" : "--";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
+                    _this.after = plus_1 ? "++" : "--";
                 }
                 else if (isDict) {
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, accessObj);
-                    this.incrementBy = plus_1 ? "1" : "-1";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, accessObj);
+                    _this.incrementBy = plus_1 ? "1" : "-1";
                     scope.root.headerFlags.js_var_dict_inc = true;
                 }
                 else if (type === ctypes_1.UniversalVarType) {
-                    this.before = "js_var_inc(&";
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = ", " + (plus_1 ? "1" : "-1") + ")";
+                    _this.before = "js_var_inc(&";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
+                    _this.after = ", " + (plus_1 ? "1" : "-1") + ")";
                     scope.root.headerFlags.js_var_inc = true;
                 }
                 else {
-                    this.operand = "/* expression is not yet supported " + node.getText() + " */";
+                    _this.operand = "/* expression is not yet supported " + node.getText() + " */";
                 }
             }
             else {
                 if (!isDict && (type === ctypes_1.NumberVarType || type === ctypes_1.BooleanVarType)) {
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.before = plus_1 ? "++" : "--";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
+                    _this.before = plus_1 ? "++" : "--";
                 }
                 else if (!isDict && !utils_1.toNumberCanBeNaN(type)) {
-                    this.isCompound = true;
-                    this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
-                    this.after = plus_1 ? " + 1" : " - 1";
+                    _this.isCompound = true;
+                    _this.operand = new typeconvert_1.CAsNumber(scope, node.operand);
+                    _this.after = plus_1 ? " + 1" : " - 1";
                 }
                 else if (isTopExpressionOfStatement) {
                     var applyOperation = plus_1 ? ts.createAdd : ts.createSubtract;
@@ -1227,115 +1354,141 @@ var CUnaryExpression = /** @class */ (function () {
                     binExpr.operatorToken.getText = function () { return plus_1 ? "+" : "-"; };
                     binExpr.right.getText = function () { return "1"; };
                     scope.root.typeHelper.registerSyntheticNode(binExpr, ctypes_1.UniversalVarType);
-                    this.operand = assignment_1.AssignmentHelper.create(scope, node.operand, binExpr);
+                    _this.operand = assignment_1.AssignmentHelper.create(scope, node.operand, binExpr);
                 }
                 else if (!isDict && plus_1) {
-                    this.isCompound = true;
-                    this.before = "js_var_plus(js_var_to_number(";
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = "), js_var_from_int16_t(1))";
+                    _this.isCompound = true;
+                    _this.before = "js_var_plus(js_var_to_number(";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
+                    _this.after = "), js_var_from_int16_t(1))";
                     scope.root.headerFlags.js_var_plus = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
                 }
                 else if (!isDict && !plus_1) {
-                    this.isCompound = true;
-                    this.before = "js_var_compute(js_var_to_number(";
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = "), JS_VAR_MINUS, js_var_from_int16_t(1))";
+                    _this.isCompound = true;
+                    _this.before = "js_var_compute(js_var_to_number(";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, node.operand);
+                    _this.after = "), JS_VAR_MINUS, js_var_from_int16_t(1))";
                     scope.root.headerFlags.js_var_compute = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
                 }
                 else {
-                    this.operand = template_1.CodeTemplateFactory.createForNode(scope, accessObj);
-                    this.incrementBy = plus_1 ? "1" : "-1";
+                    _this.operand = template_1.CodeTemplateFactory.createForNode(scope, accessObj);
+                    _this.incrementBy = plus_1 ? "1" : "-1";
                     scope.root.headerFlags.js_var_dict_inc = true;
                 }
             }
         }
         else {
-            this.operand = "/* not supported unary expression " + node.getText() + " */";
+            _this.operand = "/* not supported unary expression " + node.getText() + " */";
         }
+        return _this;
     }
     CUnaryExpression = __decorate([
         template_1.CodeTemplate("\n{#if isCompound}\n    ({operand} = {before}{operand}{after})\n{#elseif incrementBy && isPostfix}\n    js_var_dict_inc({operand}, {argumentExpr}, {incrementBy}, TRUE)\n{#elseif incrementBy}\n    js_var_dict_inc({operand}, {argumentExpr}, {incrementBy}, FALSE)\n{#else}\n    {before}{operand}{after}\n{/if}", [ts.SyntaxKind.PrefixUnaryExpression, ts.SyntaxKind.PostfixUnaryExpression])
     ], CUnaryExpression);
     return CUnaryExpression;
-}());
-var CTernaryExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CTernaryExpression = /** @class */ (function (_super) {
+    __extends(CTernaryExpression, _super);
     function CTernaryExpression(scope, node) {
-        this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.condition);
-        this.whenTrue = template_1.CodeTemplateFactory.createForNode(scope, node.whenTrue);
-        this.whenFalse = template_1.CodeTemplateFactory.createForNode(scope, node.whenFalse);
+        var _this = _super.call(this) || this;
+        _this.condition = template_1.CodeTemplateFactory.createForNode(scope, node.condition);
+        _this.whenTrue = template_1.CodeTemplateFactory.createForNode(scope, node.whenTrue);
+        _this.whenFalse = template_1.CodeTemplateFactory.createForNode(scope, node.whenFalse);
+        return _this;
     }
     CTernaryExpression = __decorate([
         template_1.CodeTemplate("{condition} ? {whenTrue} : {whenFalse}", ts.SyntaxKind.ConditionalExpression)
     ], CTernaryExpression);
     return CTernaryExpression;
-}());
-var CGroupingExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CGroupingExpression = /** @class */ (function (_super) {
+    __extends(CGroupingExpression, _super);
     function CGroupingExpression(scope, node) {
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        return _this;
     }
     CGroupingExpression = __decorate([
         template_1.CodeTemplate("({expression})", ts.SyntaxKind.ParenthesizedExpression)
     ], CGroupingExpression);
     return CGroupingExpression;
-}());
-var CTypeOf = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CTypeOf = /** @class */ (function (_super) {
+    __extends(CTypeOf, _super);
     function CTypeOf(scope, node) {
+        var _this = _super.call(this) || this;
         var type = scope.root.typeHelper.getCType(node.expression);
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isNumber = type === ctypes_1.NumberVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isNumber = type === ctypes_1.NumberVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         if (type == ctypes_1.UniversalVarType) {
             scope.root.headerFlags.js_var = true;
             scope.root.headerFlags.js_var_typeof = true;
         }
+        return _this;
     }
     CTypeOf = __decorate([
         template_1.CodeTemplate("\n{#if isUniversalVar}\n    js_var_typeof({expression})\n{#elseif isString}\n    \"string\"\n{#elseif isNumber}\n    \"number\"\n{#elseif isBoolean}\n    \"number\"\n{#else}\n    \"object\"\n{/if}", ts.SyntaxKind.TypeOfExpression)
     ], CTypeOf);
     return CTypeOf;
-}());
-var CVoid = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CVoid = /** @class */ (function (_super) {
+    __extends(CVoid, _super);
     function CVoid(scope, node) {
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         scope.root.headerFlags.js_var = true;
         scope.root.headerFlags.js_var_to_undefined = true;
+        return _this;
     }
     CVoid = __decorate([
         template_1.CodeTemplate("js_var_to_undefined({expression})", ts.SyntaxKind.VoidExpression)
     ], CVoid);
     return CVoid;
-}());
-var CDelete = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CDelete = /** @class */ (function (_super) {
+    __extends(CDelete, _super);
     function CDelete(scope, node) {
-        this.topExpressionOfStatement = node.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        this.dict = (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))
+        var _this = _super.call(this) || this;
+        _this.topExpressionOfStatement = node.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        _this.dict = (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))
             && template_1.CodeTemplateFactory.createForNode(scope, node.expression.expression);
         if (ts.isElementAccessExpression(node.expression))
-            this.argExpression = ts.isNumericLiteral(node.expression.argumentExpression)
+            _this.argExpression = ts.isNumericLiteral(node.expression.argumentExpression)
                 ? '"' + node.expression.argumentExpression.text + '"'
                 : template_1.CodeTemplateFactory.createForNode(scope, node.expression.argumentExpression);
         else if (ts.isPropertyAccessExpression(node.expression))
-            this.argExpression = new literals_1.CString(scope, node.expression.name.text);
-        this.tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_dict_pos");
-        scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.NumberVarType));
+            _this.argExpression = new literals_1.CString(scope, node.expression.name.text);
+        _this.tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_dict_pos");
+        scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.NumberVarType));
         scope.root.headerFlags.bool = true;
         scope.root.headerFlags.array_remove = true;
+        return _this;
     }
     CDelete = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {tempVarName} = dict_find_pos({dict}->index->data, {dict}->index->size, {argExpression});\n    if ({tempVarName} >= 0)\n    {\n        ARRAY_REMOVE({dict}->index, {tempVarName}, 1);\n        ARRAY_REMOVE({dict}->values, {tempVarName}, 1);\n    }\n{/statements}\n{#if !topExpressionOfStatement}\n    TRUE\n{/if}", ts.SyntaxKind.DeleteExpression)
     ], CDelete);
     return CDelete;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../standard":14,"../template":43,"../types/ctypes":44,"../types/utils":49,"./assignment":2,"./elementaccess":4,"./literals":7,"./regexfunc":8,"./typeconvert":10,"./variable":11}],6:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -1349,78 +1502,89 @@ var variable_1 = require("./variable");
 var ctypes_1 = require("../types/ctypes");
 var standard_1 = require("../standard");
 var utils_1 = require("../types/utils");
-var CFunctionPrototype = /** @class */ (function () {
+var CFunctionPrototype = /** @class */ (function (_super) {
+    __extends(CFunctionPrototype, _super);
     function CFunctionPrototype(scope, node) {
-        this.parameters = [];
+        var _this = _super.call(this) || this;
+        _this.parameters = [];
         var funcType = scope.root.typeHelper.getCType(node);
-        this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
-        this.name = node.name.getText();
-        this.parameters = node.parameters.map(function (p, i) { return new variable_1.CVariable(scope, p.name.getText(), funcType.parameterTypes[i], { removeStorageSpecifier: true }); });
+        _this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
+        _this.name = node.name.getText();
+        _this.parameters = node.parameters.map(function (p, i) { return new variable_1.CVariable(scope, p.name.getText(), funcType.parameterTypes[i], { removeStorageSpecifier: true }); });
         if (funcType.instanceType)
-            this.parameters.unshift(new variable_1.CVariable(scope, "this", funcType.instanceType, { removeStorageSpecifier: true }));
+            _this.parameters.unshift(new variable_1.CVariable(scope, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
             var p = _a[_i];
-            this.parameters.push(new variable_1.CVariable(scope, p.node.text, p.node, { removeStorageSpecifier: true }));
+            _this.parameters.push(new variable_1.CVariable(scope, p.node.text, p.node, { removeStorageSpecifier: true }));
         }
+        return _this;
     }
     CFunctionPrototype = __decorate([
         template_1.CodeTemplate("{returnType} {name}({parameters {, }=> {this}});")
     ], CFunctionPrototype);
     return CFunctionPrototype;
-}());
+}(template_1.CTemplateBase));
 exports.CFunctionPrototype = CFunctionPrototype;
-var CFunction = /** @class */ (function () {
+var CFunction = /** @class */ (function (_super) {
+    __extends(CFunction, _super);
     function CFunction(root, node) {
-        var _this = this;
-        this.root = root;
-        this.func = this;
-        this.parameters = [];
-        this.variables = [];
-        this.statements = [];
-        this.parent = root;
-        this.name = node.name && node.name.text;
-        if (!this.name) {
+        var _this = _super.call(this) || this;
+        _this.root = root;
+        _this.func = _this;
+        _this.parameters = [];
+        _this.variables = [];
+        _this.scopeVarAllocator = null;
+        _this.statements = [];
+        _this.parent = root;
+        _this.name = node.name && node.name.text;
+        if (!_this.name) {
             var funcExprName = "func";
             if (utils_1.isEqualsExpression(node.parent) && node.parent.right == node && ts.isIdentifier(node.parent.left))
                 funcExprName = node.parent.left.text + "_func";
             if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
                 funcExprName = node.parent.name.text + "_func";
-            this.name = root.symbolsHelper.addTemp(utils_1.findParentSourceFile(node), funcExprName);
+            if (ts.isPropertyAssignment(node.parent) && ts.isIdentifier(node.parent.name))
+                funcExprName = node.parent.name.text + "_func";
+            _this.name = root.symbolsHelper.addTemp(utils_1.findParentSourceFile(node), funcExprName);
         }
         var funcType = root.typeHelper.getCType(node);
-        this.funcDecl = new variable_1.CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
-        this.parameters = node.parameters.map(function (p, i) {
+        _this.funcDecl = new variable_1.CVariable(_this, _this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
+        _this.parameters = node.parameters.map(function (p, i) {
             return new variable_1.CVariable(_this, p.name.text, funcType.parameterTypes[i], { removeStorageSpecifier: true });
         });
         if (funcType.instanceType)
-            this.parameters.unshift(new variable_1.CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
+            _this.parameters.unshift(new variable_1.CVariable(_this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         if (funcType.needsClosureStruct) {
             var closureParamVarName = root.symbolsHelper.getClosureVarName(node);
-            this.parameters.push(new variable_1.CVariable(this, closureParamVarName, funcType));
+            _this.parameters.push(new variable_1.CVariable(_this, closureParamVarName, funcType));
         }
         else {
             for (var _i = 0, _a = funcType.closureParams; _i < _a.length; _i++) {
                 var p = _a[_i];
                 var type = root.typeHelper.getCType(p.node);
                 var ptype = p.assigned ? ctypes_1.getTypeText(type) + "*" : type;
-                this.parameters.push(new variable_1.CVariable(this, p.node.text, ptype, { removeStorageSpecifier: true }));
+                _this.parameters.push(new variable_1.CVariable(_this, p.node.text, ptype, { removeStorageSpecifier: true }));
             }
         }
-        this.variables = [];
-        this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
+        if (funcType.scopeType) {
+            var scopeVarName = root.symbolsHelper.getScopeVarName(node);
+            _this.variables.push(new variable_1.CVariable(_this, scopeVarName, funcType.scopeType));
+            _this.scopeVarAllocator = new variable_1.CVariableAllocation(_this, scopeVarName, funcType.scopeType, node);
+        }
+        _this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
         var _loop_1 = function (gcVarName) {
             if (root.variables.filter(function (v) { return v.name == gcVarName; }).length)
                 return "continue";
             var gcType = gcVarName.indexOf("arrays") == -1 ? "ARRAY(void *)" : "ARRAY(ARRAY(void *))";
             root.variables.push(new variable_1.CVariable(root, gcVarName, gcType));
         };
-        for (var _b = 0, _c = this.gcVarNames; _b < _c.length; _b++) {
+        for (var _b = 0, _c = _this.gcVarNames; _b < _c.length; _b++) {
             var gcVarName = _c[_b];
             _loop_1(gcVarName);
         }
         node.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
         if (node.body.statements.length > 0 && node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
-            this.destructors = new variable_1.CVariableDestructors(this, node);
+            _this.destructors = new variable_1.CVariableDestructors(_this, node);
         }
         var nodesInFunction = utils_1.getAllNodesUnder(node);
         var declaredFunctionNames = root.functions.concat(root.functionPrototypes).map(function (f) { return f.name; });
@@ -1434,52 +1598,66 @@ var CFunction = /** @class */ (function () {
                 }
             }
         });
+        return _this;
     }
     CFunction = __decorate([
-        template_1.CodeTemplate("\n{funcDecl}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}")
+        template_1.CodeTemplate("\n{funcDecl}({parameters {, }=> {this}})\n{\n    {variables  {    }=> {this};\n}\n    {#if scopeVarAllocator != null}\n        {scopeVarAllocator}\n    {/if}\n    {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}\n\n    {statements {    }=> {this}}\n\n    {destructors}\n}")
     ], CFunction);
     return CFunction;
-}());
+}(template_1.CTemplateBase));
 exports.CFunction = CFunction;
-var CFunctionExpression = /** @class */ (function () {
+var CFunctionExpression = /** @class */ (function (_super) {
+    __extends(CFunctionExpression, _super);
     function CFunctionExpression(scope, node) {
-        this.expression = '';
-        this.isClosureFunc = false;
-        var func = new CFunction(scope.root, node);
-        scope.root.functions.push(func);
-        this.name = func.name;
+        var _this = _super.call(this) || this;
+        _this.expression = '';
+        _this.isClosureFunc = false;
         var type = scope.root.typeHelper.getCType(node);
         var parentFunc = utils_1.findParentFunction(node.parent);
-        if (parentFunc && type instanceof ctypes_1.FuncType && type.needsClosureStruct) {
-            this.isClosureFunc = true;
-            this.closureVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+        if (type instanceof ctypes_1.FuncType && type.needsClosureStruct && parentFunc) {
+            var parentFuncType = scope.root.typeHelper.getCType(parentFunc);
+            _this.isClosureFunc = true;
+            _this.closureVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            scope.root.symbolsHelper.ensureClosureStruct(type, parentFuncType, _this.closureVarName);
             if (!scope.root.memoryManager.variableWasReused(node))
-                scope.variables.push(new variable_1.CVariable(scope, this.closureVarName, type));
-            this.allocator = new variable_1.CVariableAllocation(scope, this.closureVarName, type, node);
-            var parentFuncType_1 = scope.root.typeHelper.getCType(parentFunc);
-            var parentClosureVarName_1 = parentFuncType_1 && parentFuncType_1.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
-            this.closureParams = type.closureParams.map(function (p) {
-                var key = p.node.text;
-                var value = key;
-                if (parentClosureVarName_1 && parentFuncType_1.closureParams.some(function (p) { return p.node.text === key; }))
-                    value = parentClosureVarName_1 + "->" + key;
-                return { key: key, value: value };
-            });
+                scope.variables.push(new variable_1.CVariable(scope, _this.closureVarName, type));
+            _this.allocator = new variable_1.CVariableAllocation(scope, _this.closureVarName, type, node);
+            /** since we're anyway passing the whole scope object, probably a good idea to move this fragment into @see CFunction */
+            _this.scopeVarName = parentFuncType && scope.root.symbolsHelper.getScopeVarName(node);
+            var parentClosureVarName = parentFuncType && parentFuncType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
+            var prefix_1 = parentClosureVarName ? parentClosureVarName + "->scope->" : "";
+            var closureParamsFromParent = parentFuncType.closureParams.map(function (p) { return ({ key: p.node.text, value: prefix_1 + p.node.text }); });
+            var paramsFromParent = type.closureParams.filter(function (p) { return scope.root.typeHelper.getDeclaration(p.node).parent === parentFunc; }).map(function (p) { return ({ key: p.node.text, value: p.node.text }); });
+            _this.closureParams = closureParamsFromParent.concat(paramsFromParent);
         }
+        var func = new CFunction(scope.root, node);
+        scope.root.functions.push(func);
+        _this.name = func.name;
         if (ts.isFunctionExpression(node))
-            this.expression = this.closureVarName || func.name;
+            _this.expression = _this.closureVarName || func.name;
+        return _this;
     }
     CFunctionExpression = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if isClosureFunc}\n        {allocator}\n        {closureVarName}->func = {name};\n        {closureParams => {closureVarName}->{key} = {value};\n}\n    {/if}\n{/statements}\n{expression}", [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
+        template_1.CodeTemplate("\n{#statements}\n    {#if isClosureFunc}\n        {closureParams => {scopeVarName}->{key} = {value};\n}\n        {allocator}\n        {closureVarName}->func = {name};\n        {closureVarName}->scope = {scopeVarName};\n    {/if}\n{/statements}\n{expression}", [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
     ], CFunctionExpression);
     return CFunctionExpression;
-}());
+}(template_1.CTemplateBase));
 exports.CFunctionExpression = CFunctionExpression;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../standard":14,"../template":43,"../types/ctypes":44,"../types/utils":49,"./variable":11}],7:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -1494,14 +1672,16 @@ var variable_1 = require("./variable");
 var assignment_1 = require("./assignment");
 var regexfunc_1 = require("./regexfunc");
 var typeconvert_1 = require("./typeconvert");
-var CArrayLiteralExpression = /** @class */ (function () {
+var CArrayLiteralExpression = /** @class */ (function (_super) {
+    __extends(CArrayLiteralExpression, _super);
     function CArrayLiteralExpression(scope, node) {
-        this.universalWrapper = false;
+        var _this = _super.call(this) || this;
+        _this.universalWrapper = false;
         var arrSize = node.elements.length;
         var type = scope.root.typeHelper.getCType(node);
         if (type === ctypes_1.UniversalVarType) {
             type = new ctypes_1.ArrayType(ctypes_1.UniversalVarType, 0, true);
-            this.universalWrapper = true;
+            _this.universalWrapper = true;
             scope.root.headerFlags.js_var_array = true;
         }
         if (type instanceof ctypes_1.ArrayType) {
@@ -1542,86 +1722,95 @@ var CArrayLiteralExpression = /** @class */ (function () {
                     scope.statements.push(assignment);
                 }
             }
-            this.expression = varName;
+            _this.expression = varName;
         }
         else
-            this.expression = "/* Unsupported use of array literal expression */";
+            _this.expression = "/* Unsupported use of array literal expression */";
+        return _this;
     }
     CArrayLiteralExpression = __decorate([
         template_1.CodeTemplate("\n{#if universalWrapper}\n    js_var_from_array({expression})\n{#else}\n    {expression}\n{/if}", ts.SyntaxKind.ArrayLiteralExpression)
     ], CArrayLiteralExpression);
     return CArrayLiteralExpression;
-}());
-var CObjectLiteralExpression = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CObjectLiteralExpression = /** @class */ (function (_super) {
+    __extends(CObjectLiteralExpression, _super);
     function CObjectLiteralExpression(scope, node) {
-        var _this = this;
-        this.expression = '';
-        this.universalWrapper = false;
+        var _this = _super.call(this) || this;
+        _this.expression = '';
+        _this.universalWrapper = false;
         var type = scope.root.typeHelper.getCType(node);
         if (type === ctypes_1.UniversalVarType) {
             type = new ctypes_1.DictType(ctypes_1.UniversalVarType);
-            this.universalWrapper = true;
+            _this.universalWrapper = true;
             scope.root.headerFlags.js_var_dict = true;
         }
-        this.isStruct = type instanceof ctypes_1.StructType;
-        this.isDict = type instanceof ctypes_1.DictType;
-        if (this.isStruct || this.isDict) {
+        _this.isStruct = type instanceof ctypes_1.StructType;
+        _this.isDict = type instanceof ctypes_1.DictType;
+        if (_this.isStruct || _this.isDict) {
             var varName_1 = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
                 scope.func.variables.push(new variable_1.CVariable(scope, varName_1, type, { initializer: "NULL" }));
-            this.allocator = new variable_1.CVariableAllocation(scope, varName_1, type, node);
-            this.initializers = node.properties
+            _this.allocator = new variable_1.CVariableAllocation(scope, varName_1, type, node);
+            _this.initializers = node.properties
                 .filter(function (p) { return p.kind == ts.SyntaxKind.PropertyAssignment; })
                 .map(function (p) { return p; })
                 .map(function (p) {
                 var propName = (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text;
                 return new assignment_1.CAssignment(scope, varName_1, _this.isDict ? '"' + propName + '"' : propName, type, p.initializer);
             });
-            this.expression = varName_1;
+            _this.expression = varName_1;
         }
         else
-            this.expression = "/* Unsupported use of object literal expression */";
+            _this.expression = "/* Unsupported use of object literal expression */";
+        return _this;
     }
     CObjectLiteralExpression = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if isStruct || isDict}\n        {allocator}\n        {initializers}\n    {/if}\n{/statements}\n{#if universalWrapper}\n    js_var_from_dict({expression})\n{#else}\n    {expression}\n{/if}", ts.SyntaxKind.ObjectLiteralExpression)
     ], CObjectLiteralExpression);
     return CObjectLiteralExpression;
-}());
+}(template_1.CTemplateBase));
 exports.CObjectLiteralExpression = CObjectLiteralExpression;
 var regexNames = {};
-var CRegexLiteralExpression = /** @class */ (function () {
+var CRegexLiteralExpression = /** @class */ (function (_super) {
+    __extends(CRegexLiteralExpression, _super);
     function CRegexLiteralExpression(scope, node) {
-        this.expression = '';
+        var _this = _super.call(this) || this;
+        _this.expression = '';
         var template = node.text;
         if (!regexNames[template]) {
             regexNames[template] = scope.root.symbolsHelper.addTemp(null, "regex");
             scope.root.functions.splice(scope.parent ? -2 : -1, 0, new regexfunc_1.CRegexSearchFunction(scope, template, regexNames[template]));
         }
-        this.expression = regexNames[template];
+        _this.expression = regexNames[template];
         scope.root.headerFlags.regex = true;
+        return _this;
     }
     CRegexLiteralExpression = __decorate([
         template_1.CodeTemplate("{expression}", ts.SyntaxKind.RegularExpressionLiteral)
     ], CRegexLiteralExpression);
     return CRegexLiteralExpression;
-}());
-var CString = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CString = /** @class */ (function (_super) {
+    __extends(CString, _super);
     function CString(scope, nodeOrString) {
-        this.universalWrapper = false;
+        var _this = _super.call(this) || this;
+        _this.universalWrapper = false;
         var s = typeof nodeOrString === 'string' ? '"' + nodeOrString + '"' : nodeOrString.getText();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, function (match, g1) { return String.fromCharCode(parseInt(g1, 16)); });
         if (s.indexOf("'") == 0)
-            this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
+            _this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
         else
-            this.value = s;
+            _this.value = s;
         if (typeof (nodeOrString) !== "string" && scope.root.typeHelper.getCType(nodeOrString) == ctypes_1.UniversalVarType)
-            this.value = new typeconvert_1.CAsUniversalVar(scope, this.value, ctypes_1.StringVarType);
+            _this.value = new typeconvert_1.CAsUniversalVar(scope, _this.value, ctypes_1.StringVarType);
+        return _this;
     }
     CString = __decorate([
         template_1.CodeTemplate("{value}", ts.SyntaxKind.StringLiteral)
     ], CString);
     return CString;
-}());
+}(template_1.CTemplateBase));
 exports.CString = CString;
 var CNumber = /** @class */ (function () {
     function CNumber(scope, node) {
@@ -1636,62 +1825,86 @@ var CNumber = /** @class */ (function () {
     return CNumber;
 }());
 exports.CNumber = CNumber;
-var CBoolean = /** @class */ (function () {
+var CBoolean = /** @class */ (function (_super) {
+    __extends(CBoolean, _super);
     function CBoolean(scope, node) {
-        this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
+        var _this = _super.call(this) || this;
+        _this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
         if (scope.root.typeHelper.getCType(node) == ctypes_1.UniversalVarType)
-            this.value = new typeconvert_1.CAsUniversalVar(scope, this.value, ctypes_1.BooleanVarType);
+            _this.value = new typeconvert_1.CAsUniversalVar(scope, _this.value, ctypes_1.BooleanVarType);
+        return _this;
     }
     CBoolean = __decorate([
         template_1.CodeTemplate("{value}", [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
     ], CBoolean);
     return CBoolean;
-}());
+}(template_1.CTemplateBase));
 exports.CBoolean = CBoolean;
-var CNull = /** @class */ (function () {
+var CNull = /** @class */ (function (_super) {
+    __extends(CNull, _super);
     function CNull(scope) {
+        var _this = _super.call(this) || this;
         scope.root.headerFlags.js_var_from = true;
+        return _this;
     }
     CNull = __decorate([
         template_1.CodeTemplate("js_var_from(JS_VAR_NULL)", ts.SyntaxKind.NullKeyword)
     ], CNull);
     return CNull;
-}());
+}(template_1.CTemplateBase));
 exports.CNull = CNull;
-var CUndefined = /** @class */ (function () {
+var CUndefined = /** @class */ (function (_super) {
+    __extends(CUndefined, _super);
     function CUndefined(scope) {
+        var _this = _super.call(this) || this;
         scope.root.headerFlags.js_var_from = true;
+        return _this;
     }
     CUndefined = __decorate([
         template_1.CodeTemplate("js_var_from(JS_VAR_UNDEFINED)", ts.SyntaxKind.UndefinedKeyword)
     ], CUndefined);
     return CUndefined;
-}());
+}(template_1.CTemplateBase));
 exports.CUndefined = CUndefined;
-var CNaN = /** @class */ (function () {
+var CNaN = /** @class */ (function (_super) {
+    __extends(CNaN, _super);
     function CNaN(scope, node) {
+        var _this = _super.call(this) || this;
         scope.root.headerFlags.js_var_from = true;
+        return _this;
     }
     CNaN = __decorate([
         template_1.CodeTemplate("js_var_from(JS_VAR_NAN)", ts.SyntaxKind.Count + 1)
     ], CNaN);
     return CNaN;
-}());
+}(template_1.CTemplateBase));
 exports.CNaN = CNaN;
-var CThis = /** @class */ (function () {
+var CThis = /** @class */ (function (_super) {
+    __extends(CThis, _super);
     function CThis(scope, node) {
+        return _super.call(this) || this;
     }
     CThis = __decorate([
         template_1.CodeTemplate("this", ts.SyntaxKind.ThisKeyword)
     ], CThis);
     return CThis;
-}());
+}(template_1.CTemplateBase));
 exports.CThis = CThis;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../template":43,"../types/ctypes":44,"./assignment":2,"./regexfunc":8,"./typeconvert":10,"./variable":11}],8:[function(require,module,exports){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -1702,81 +1915,89 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var template_1 = require("../template");
 var literals_1 = require("./literals");
 var regex_1 = require("../regex");
-var CRegexSearchFunction = /** @class */ (function () {
+var CRegexSearchFunction = /** @class */ (function (_super) {
+    __extends(CRegexSearchFunction, _super);
     function CRegexSearchFunction(scope, template, regexName, regexMachine) {
         if (regexMachine === void 0) { regexMachine = null; }
-        this.regexName = regexName;
-        this.stateBlocks = [];
-        this.groupNumber = 0;
-        this.templateString = new literals_1.CString(scope, template.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+        var _this = _super.call(this) || this;
+        _this.regexName = regexName;
+        _this.stateBlocks = [];
+        _this.groupNumber = 0;
+        _this.templateString = new literals_1.CString(scope, template.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
         if (/\/[a-z]+$/.test(template))
             throw new Error("Flags not supported in regex literals yet (" + template + ").");
         regexMachine = regexMachine || regex_1.RegexBuilder.build(template.slice(1, -1));
         var max = function (arr, func) { return arr && arr.reduce(function (acc, t) { return Math.max(acc, func(t), 0); }, 0) || 0; };
-        this.groupNumber = max(regexMachine.states, function (s) { return max(s.transitions, function (t) { return max(t.startGroup, function (g) { return g; }); }); });
-        this.hasChars = regexMachine.states.filter(function (s) { return s && s.transitions.filter(function (c) { return typeof c.condition == "string" || c.condition.fromChar || c.condition.tokens.length > 0; }); }).length > 0;
+        _this.groupNumber = max(regexMachine.states, function (s) { return max(s.transitions, function (t) { return max(t.startGroup, function (g) { return g; }); }); });
+        _this.hasChars = regexMachine.states.filter(function (s) { return s && s.transitions.filter(function (c) { return typeof c.condition == "string" || regex_1.isRangeCondition(c.condition) || c.condition.tokens.length > 0; }); }).length > 0;
         for (var s = 0; s < regexMachine.states.length; s++) {
             if (regexMachine.states[s] == null || regexMachine.states[s].transitions.length == 0)
                 continue;
-            this.stateBlocks.push(new CStateBlock(scope, s + "", regexMachine.states[s], this.groupNumber));
+            _this.stateBlocks.push(new CStateBlock(scope, s + "", regexMachine.states[s], _this.groupNumber));
         }
-        this.finals = regexMachine.states.length > 0 ? regexMachine.states.map(function (s, i) { return s.final ? i : -1; }).filter(function (f) { return f > -1; }).map(function (f) { return f + ""; }) : ["-1"];
-        if (this.groupNumber > 0)
+        _this.finals = regexMachine.states.length > 0 ? regexMachine.states.map(function (s, i) { return s.final ? i : -1; }).filter(function (f) { return f > -1; }).map(function (f) { return f + ""; }) : ["-1"];
+        if (_this.groupNumber > 0)
             scope.root.headerFlags.malloc = true;
         scope.root.headerFlags.strings = true;
         scope.root.headerFlags.bool = true;
+        return _this;
     }
     CRegexSearchFunction = __decorate([
         template_1.CodeTemplate("\nstruct regex_match_struct_t {regexName}_search(const char *str, int16_t capture) {\n    int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;\n    struct regex_match_struct_t result;\n{#if hasChars}\n        char ch;\n{/if}\n{#if groupNumber}\n        int16_t started[{groupNumber}];\n        if (capture) {\n            result.matches = malloc({groupNumber} * sizeof(*result.matches));\n            assert(result.matches != NULL);\n            regex_clear_matches(&result, {groupNumber});\n            memset(started, 0, sizeof started);\n        }\n{/if}\n    for (iterator = 0; iterator < len; iterator++) {\n{#if hasChars}\n            ch = str[iterator];\n{/if}\n\n{stateBlocks}\n\n        if (next == -1) {\n            if ({finals { || }=> state == {this}})\n                break;\n            iterator = index;\n            index++;\n            state = 0;\n            end = -1;\n{#if groupNumber}\n                if (capture) {\n                    regex_clear_matches(&result, {groupNumber});\n                    memset(started, 0, sizeof started);\n                }\n{/if}\n        } else {\n            state = next;\n            next = -1;\n        }\n\n        if (iterator == len-1 && index < len-1 && {finals { && }=> state != {this}}) {\n            if (end > -1)\n                break;\n            iterator = index;\n            index++;\n            state = 0;\n{#if groupNumber}\n                if (capture) {\n                    regex_clear_matches(&result, {groupNumber});\n                    memset(started, 0, sizeof started);\n                }\n{/if}\n        }\n    }\n    if (end == -1 && {finals { && }=> state != {this}})\n        index = -1;\n    result.index = index;\n    result.end = end == -1 ? iterator : end;\n    result.matches_count = {groupNumber};\n    return result;\n}\nstruct regex_struct_t {regexName} = { {templateString}, {regexName}_search };\n")
     ], CRegexSearchFunction);
     return CRegexSearchFunction;
-}());
+}(template_1.CTemplateBase));
 exports.CRegexSearchFunction = CRegexSearchFunction;
-var CStateBlock = /** @class */ (function () {
+var CStateBlock = /** @class */ (function (_super) {
+    __extends(CStateBlock, _super);
     function CStateBlock(scope, stateNumber, state, groupNumber) {
-        this.stateNumber = stateNumber;
-        this.groupNumber = groupNumber;
-        this.conditions = [];
-        this.groupsToReset = [];
-        this.final = state.final;
+        var _this = _super.call(this) || this;
+        _this.stateNumber = stateNumber;
+        _this.groupNumber = groupNumber;
+        _this.conditions = [];
+        _this.groupsToReset = [];
+        _this.final = state.final;
         var allGroups = [];
         state.transitions.forEach(function (t) { return allGroups = allGroups.concat(t.startGroup || []).concat(t.endGroup || []); });
         for (var i = 0; i < groupNumber; i++)
             if (allGroups.indexOf(i + 1) == -1)
-                this.groupsToReset.push(i + "");
+                _this.groupsToReset.push(i + "");
         for (var _i = 0, _a = state.transitions; _i < _a.length; _i++) {
             var tr = _a[_i];
-            this.conditions.push(new CharCondition(tr, groupNumber));
+            _this.conditions.push(new CharCondition(tr, groupNumber));
         }
+        return _this;
     }
     CStateBlock = __decorate([
         template_1.CodeTemplate("\n        if (state == {stateNumber}) {\n{#if final}\n                end = iterator;\n{/if}\n{conditions {\n}=> {this}}\n{#if groupNumber && groupsToReset.length}\n                if (capture && next == -1) {\n                    {groupsToReset {\n                    }=> started[{this}] = 0;}\n                }\n{/if}\n        }\n")
     ], CStateBlock);
     return CStateBlock;
-}());
-var CharCondition = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CharCondition = /** @class */ (function (_super) {
+    __extends(CharCondition, _super);
     function CharCondition(tr, groupN) {
-        this.anyCharExcept = false;
-        this.anyChar = false;
-        this.charClass = false;
-        this.fixedConditions = '';
+        var _this = _super.call(this) || this;
+        _this.anyCharExcept = false;
+        _this.anyChar = false;
+        _this.charClass = false;
+        _this.fixedConditions = '';
         if (tr.fixedStart)
-            this.fixedConditions = " && iterator == 0";
+            _this.fixedConditions = " && iterator == 0";
         else if (tr.fixedEnd)
-            this.fixedConditions = " && iterator == len - 1";
+            _this.fixedConditions = " && iterator == len - 1";
         if (typeof tr.condition === "string")
-            this.ch = tr.condition.replace('\\', '\\\\').replace("'", "\\'");
-        else if (tr.condition.fromChar) {
-            this.charClass = true;
-            this.chFrom = tr.condition.fromChar;
-            this.ch = tr.condition.toChar;
+            _this.ch = tr.condition.replace('\\', '\\\\').replace("'", "\\'");
+        else if (regex_1.isRangeCondition(tr.condition)) {
+            _this.charClass = true;
+            _this.chFrom = tr.condition.fromChar;
+            _this.ch = tr.condition.toChar;
         }
         else if (tr.condition.tokens.length) {
-            this.anyCharExcept = true;
-            this.except = tr.condition.tokens.map(function (ch) { return ch.replace('\\', '\\\\').replace("'", "\\'"); });
+            _this.anyCharExcept = true;
+            _this.except = tr.condition.tokens.map(function (ch) { return ch.replace('\\', '\\\\').replace("'", "\\'"); });
         }
         else
-            this.anyChar = true;
+            _this.anyChar = true;
         var groupCaptureCode = '';
         for (var _i = 0, _a = tr.startGroup || []; _i < _a.length; _i++) {
             var g = _a[_i];
@@ -1786,29 +2007,43 @@ var CharCondition = /** @class */ (function () {
             var g = _c[_b];
             groupCaptureCode += " if (capture && started[" + (g - 1) + "]) result.matches[" + (g - 1) + "].end = iterator + 1;";
         }
-        this.nextCode = "next = " + tr.next + ";";
+        _this.nextCode = "next = " + tr.next + ";";
         if (groupCaptureCode)
-            this.nextCode = "{ " + this.nextCode + groupCaptureCode + " }";
+            _this.nextCode = "{ " + _this.nextCode + groupCaptureCode + " }";
+        return _this;
     }
     CharCondition = __decorate([
         template_1.CodeTemplate("\n{#if anyCharExcept}\n                if (next == -1 && {except { && }=> ch != '{this}'}{fixedConditions}) {nextCode}\n{#elseif anyChar}\n                if (next == -1{fixedConditions}) {nextCode}\n{#elseif charClass}\n                if (ch >= '{chFrom}' && ch <= '{ch}'{fixedConditions}) {nextCode}\n{#else}\n                if (ch == '{ch}'{fixedConditions}) {nextCode}\n{/if}")
     ], CharCondition);
     return CharCondition;
-}());
-var CRegexAsString = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CRegexAsString = /** @class */ (function (_super) {
+    __extends(CRegexAsString, _super);
     function CRegexAsString(expression) {
-        this.expression = expression;
+        var _this = _super.call(this) || this;
+        _this.expression = expression;
+        return _this;
     }
     CRegexAsString = __decorate([
         template_1.CodeTemplate("{expression}.str")
     ], CRegexAsString);
     return CRegexAsString;
-}());
+}(template_1.CTemplateBase));
 exports.CRegexAsString = CRegexAsString;
 
 },{"../regex":13,"../template":43,"./literals":7}],9:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -1824,55 +2059,64 @@ var expressions_1 = require("./expressions");
 var elementaccess_1 = require("./elementaccess");
 var assignment_1 = require("./assignment");
 var utils_1 = require("../types/utils");
-var CLabeledStatement = /** @class */ (function () {
+var CLabeledStatement = /** @class */ (function (_super) {
+    __extends(CLabeledStatement, _super);
     function CLabeledStatement(scope, node) {
+        var _this = _super.call(this) || this;
         var nodes = utils_1.getAllNodesUnder(node);
-        this.breakLabel = nodes.some(function (n) { return ts.isBreakStatement(n) && n.label.text === node.label.text; })
+        _this.breakLabel = nodes.some(function (n) { return ts.isBreakStatement(n) && n.label.text === node.label.text; })
             ? " " + node.label.text + "_break:"
             : "";
         var hasContinue = nodes.some(function (n) { return ts.isContinueStatement(n) && n.label.text === node.label.text; });
         if (hasContinue) {
             if (ts.isForStatement(node.statement))
-                this.statement = new CForStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+                _this.statement = new CForStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
             else if (ts.isForOfStatement(node.statement))
-                this.statement = new CForOfStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+                _this.statement = new CForOfStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
             else if (ts.isWhileStatement(node.statement))
-                this.statement = new CWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+                _this.statement = new CWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
             else if (ts.isDoStatement(node.statement))
-                this.statement = new CDoWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+                _this.statement = new CDoWhileStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
             else if (ts.isForInStatement(node.statement))
-                this.statement = new CForInStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
+                _this.statement = new CForInStatement(scope, node.statement, hasContinue && node.label.text + "_continue");
             else
-                this.statement = "/* Unsupported labeled statement " + node.getText() + " */";
+                _this.statement = "/* Unsupported labeled statement " + node.getText() + " */";
         }
         else
-            this.statement = template_1.CodeTemplateFactory.createForNode(scope, node.statement);
+            _this.statement = template_1.CodeTemplateFactory.createForNode(scope, node.statement);
+        return _this;
     }
     CLabeledStatement = __decorate([
         template_1.CodeTemplate("{statement}{breakLabel}", ts.SyntaxKind.LabeledStatement)
     ], CLabeledStatement);
     return CLabeledStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CLabeledStatement = CLabeledStatement;
-var CBreakStatement = /** @class */ (function () {
+var CBreakStatement = /** @class */ (function (_super) {
+    __extends(CBreakStatement, _super);
     function CBreakStatement(scope, node) {
-        this.label = node.label && node.label.text + "_break";
+        var _this = _super.call(this) || this;
+        _this.label = node.label && node.label.text + "_break";
+        return _this;
     }
     CBreakStatement = __decorate([
         template_1.CodeTemplate("\n{#if label}\n    goto {label};\n{#else}\n    break;\n{/if}\n", ts.SyntaxKind.BreakStatement)
     ], CBreakStatement);
     return CBreakStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CBreakStatement = CBreakStatement;
-var CContinueStatement = /** @class */ (function () {
+var CContinueStatement = /** @class */ (function (_super) {
+    __extends(CContinueStatement, _super);
     function CContinueStatement(scope, node) {
-        this.label = node.label && node.label.text + "_continue";
+        var _this = _super.call(this) || this;
+        _this.label = node.label && node.label.text + "_continue";
+        return _this;
     }
     CContinueStatement = __decorate([
         template_1.CodeTemplate("\n{#if label}\n    goto {label};\n{#else}\n    continue;\n{/if}\n", ts.SyntaxKind.ContinueStatement)
     ], CContinueStatement);
     return CContinueStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CContinueStatement = CContinueStatement;
 var CEmptyStatement = /** @class */ (function () {
     function CEmptyStatement(scope, node) {
@@ -1883,306 +2127,359 @@ var CEmptyStatement = /** @class */ (function () {
     return CEmptyStatement;
 }());
 exports.CEmptyStatement = CEmptyStatement;
-var CReturnStatement = /** @class */ (function () {
+var CReturnStatement = /** @class */ (function (_super) {
+    __extends(CReturnStatement, _super);
     function CReturnStatement(scope, node) {
-        this.retVarName = null;
-        this.closureParams = [];
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
-        this.destructors = new variable_1.CVariableDestructors(scope, node);
+        var _this = _super.call(this) || this;
+        _this.retVarName = null;
+        _this.closureParams = [];
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        _this.destructors = new variable_1.CVariableDestructors(scope, node);
+        return _this;
     }
     CReturnStatement = __decorate([
         template_1.CodeTemplate("\n{destructors}\nreturn {expression};\n", ts.SyntaxKind.ReturnStatement)
     ], CReturnStatement);
     return CReturnStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CReturnStatement = CReturnStatement;
-var CIfStatement = /** @class */ (function () {
+var CIfStatement = /** @class */ (function (_super) {
+    __extends(CIfStatement, _super);
     function CIfStatement(scope, node) {
-        this.condition = new expressions_1.CCondition(scope, node.expression);
-        this.thenBlock = new CBlock(scope, node.thenStatement);
-        this.hasElseBlock = !!node.elseStatement;
-        this.elseBlock = this.hasElseBlock && new CBlock(scope, node.elseStatement);
+        var _this = _super.call(this) || this;
+        _this.condition = new expressions_1.CCondition(scope, node.expression);
+        _this.thenBlock = new CBlock(scope, node.thenStatement);
+        _this.hasElseBlock = !!node.elseStatement;
+        _this.elseBlock = _this.hasElseBlock && new CBlock(scope, node.elseStatement);
+        return _this;
     }
     CIfStatement = __decorate([
         template_1.CodeTemplate("\nif ({condition})\n{thenBlock}\n{#if hasElseBlock}\n    else\n    {elseBlock}\n{/if}\n", ts.SyntaxKind.IfStatement)
     ], CIfStatement);
     return CIfStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CIfStatement = CIfStatement;
-var CSwitchStatement = /** @class */ (function () {
+var CSwitchStatement = /** @class */ (function (_super) {
+    __extends(CSwitchStatement, _super);
     function CSwitchStatement(scope, node) {
-        var _this = this;
+        var _this = _super.call(this) || this;
         var exprType = scope.root.typeHelper.getCType(node.expression);
-        this.nonIntegral = exprType != ctypes_1.NumberVarType;
-        this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
-        this.cases = node.caseBlock.clauses.map(function (clause, index) { return new CSwitchCaseClause(scope, clause, _this.nonIntegral ? index : null); });
-        if (this.nonIntegral) {
+        _this.nonIntegral = exprType != ctypes_1.NumberVarType;
+        _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        _this.cases = node.caseBlock.clauses.map(function (clause, index) { return new CSwitchCaseClause(scope, clause, _this.nonIntegral ? index : null); });
+        if (_this.nonIntegral) {
             var tempVarName = scope.root.symbolsHelper.addTemp(node, "tmp_switch");
             scope.variables.push(new variable_1.CVariable(scope, tempVarName, ctypes_1.NumberVarType));
-            this.values = node.caseBlock.clauses.filter(function (c) { return ts.isCaseClause(c); }).map(function (clause, index) { return new CSwitchCaseCompare(scope, _this.expression, clause, index); });
-            this.switch = tempVarName;
+            _this.values = node.caseBlock.clauses.filter(function (c) { return ts.isCaseClause(c); }).map(function (clause, index) { return new CSwitchCaseCompare(scope, _this.expression, clause, index); });
+            _this.switch = tempVarName;
         }
         else
-            this.switch = this.expression;
+            _this.switch = _this.expression;
+        return _this;
     }
     CSwitchStatement = __decorate([
         template_1.CodeTemplate("\n{#if nonIntegral}\n    {switch} = {values {\n        : }=> {this}}\n        : -1;\n{/if}\nswitch ({switch}) {\n    {cases {    }=> {this}\n}\n}\n", ts.SyntaxKind.SwitchStatement)
     ], CSwitchStatement);
     return CSwitchStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CSwitchStatement = CSwitchStatement;
-var CSwitchCaseClause = /** @class */ (function () {
+var CSwitchCaseClause = /** @class */ (function (_super) {
+    __extends(CSwitchCaseClause, _super);
     function CSwitchCaseClause(scope, clause, index) {
-        this.variables = [];
-        this.statements = [];
-        this.parent = scope;
-        this.func = scope.func;
-        this.root = scope.root;
-        this.defaultClause = clause.kind === ts.SyntaxKind.DefaultClause;
+        var _this = _super.call(this) || this;
+        _this.variables = [];
+        _this.statements = [];
+        _this.parent = scope;
+        _this.func = scope.func;
+        _this.root = scope.root;
+        _this.defaultClause = clause.kind === ts.SyntaxKind.DefaultClause;
         if (index != null)
-            this.value = "" + index;
+            _this.value = "" + index;
         else if (ts.isCaseClause(clause))
-            this.value = template_1.CodeTemplateFactory.createForNode(scope, clause.expression);
+            _this.value = template_1.CodeTemplateFactory.createForNode(scope, clause.expression);
         for (var _i = 0, _a = clause.statements; _i < _a.length; _i++) {
             var s = _a[_i];
-            var statement = template_1.CodeTemplateFactory.createForNode(this, s);
-            this.statements.push(statement);
+            var statement = template_1.CodeTemplateFactory.createForNode(_this, s);
+            _this.statements.push(statement);
         }
+        return _this;
     }
     CSwitchCaseClause = __decorate([
         template_1.CodeTemplate("\n{#if !defaultClause}\n    case {value}:\n{#else}\n    default:\n{/if}\n        {statements {        }=> {this}}\n")
     ], CSwitchCaseClause);
     return CSwitchCaseClause;
-}());
-var CSwitchCaseCompare = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CSwitchCaseCompare = /** @class */ (function (_super) {
+    __extends(CSwitchCaseCompare, _super);
     function CSwitchCaseCompare(scope, expression, clause, index) {
-        this.expression = expression;
-        this.index = index;
-        this.value = template_1.CodeTemplateFactory.createForNode(scope, clause.expression);
+        var _this = _super.call(this) || this;
+        _this.expression = expression;
+        _this.index = index;
+        _this.value = template_1.CodeTemplateFactory.createForNode(scope, clause.expression);
+        return _this;
     }
     CSwitchCaseCompare = __decorate([
         template_1.CodeTemplate("!strcmp({expression}, {value}) ? {index}")
     ], CSwitchCaseCompare);
     return CSwitchCaseCompare;
-}());
-var CWhileStatement = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CWhileStatement = /** @class */ (function (_super) {
+    __extends(CWhileStatement, _super);
     function CWhileStatement(scope, node, continueLabel) {
-        this.continueLabel = continueLabel;
-        this.variables = [];
-        this.statements = [];
-        this.block = new CBlock(scope, node.statement);
-        this.variables = this.block.variables;
-        this.statements = this.block.statements;
-        this.condition = new expressions_1.CCondition(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.continueLabel = continueLabel;
+        _this.variables = [];
+        _this.statements = [];
+        _this.block = new CBlock(scope, node.statement);
+        _this.variables = _this.block.variables;
+        _this.statements = _this.block.statements;
+        _this.condition = new expressions_1.CCondition(scope, node.expression);
+        return _this;
     }
     CWhileStatement = __decorate([
         template_1.CodeTemplate("\n{#if continueLabel}\n    while({condition}) {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n        {continueLabel}: ;\n    }\n{#else}\n    while ({condition})\n    {block}\n{/if}", ts.SyntaxKind.WhileStatement)
     ], CWhileStatement);
     return CWhileStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CWhileStatement = CWhileStatement;
-var CDoWhileStatement = /** @class */ (function () {
+var CDoWhileStatement = /** @class */ (function (_super) {
+    __extends(CDoWhileStatement, _super);
     function CDoWhileStatement(scope, node, continueLabel) {
-        this.continueLabel = continueLabel;
-        this.variables = [];
-        this.statements = [];
-        this.block = new CBlock(scope, node.statement);
-        this.variables = this.block.variables;
-        this.statements = this.block.statements;
-        this.condition = new expressions_1.CCondition(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.continueLabel = continueLabel;
+        _this.variables = [];
+        _this.statements = [];
+        _this.block = new CBlock(scope, node.statement);
+        _this.variables = _this.block.variables;
+        _this.statements = _this.block.statements;
+        _this.condition = new expressions_1.CCondition(scope, node.expression);
+        return _this;
     }
     CDoWhileStatement = __decorate([
         template_1.CodeTemplate("\n{#if continueLabel}\n    do {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n        {continueLabel}: ;\n    } while ({condition});\n{#else}\n    do\n    {block}\n    while ({condition});\n{/if}", ts.SyntaxKind.DoStatement)
     ], CDoWhileStatement);
     return CDoWhileStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CDoWhileStatement = CDoWhileStatement;
-var CForStatement = /** @class */ (function () {
+var CForStatement = /** @class */ (function (_super) {
+    __extends(CForStatement, _super);
     function CForStatement(scope, node, continueLabel) {
-        this.continueLabel = continueLabel;
-        this.variables = [];
-        this.statements = [];
-        this.varDecl = null;
-        this.block = new CBlock(scope, node.statement);
-        this.variables = this.block.variables;
-        this.statements = this.block.statements;
+        var _this = _super.call(this) || this;
+        _this.continueLabel = continueLabel;
+        _this.variables = [];
+        _this.statements = [];
+        _this.varDecl = null;
+        _this.block = new CBlock(scope, node.statement);
+        _this.variables = _this.block.variables;
+        _this.statements = _this.block.statements;
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             var declList = node.initializer;
-            this.varDecl = new variable_1.CVariableDeclaration(scope, declList.declarations[0]);
-            this.init = "";
+            _this.varDecl = new variable_1.CVariableDeclaration(scope, declList.declarations[0]);
+            _this.init = "";
         }
         else
-            this.init = template_1.CodeTemplateFactory.createForNode(scope, node.initializer);
-        this.condition = new expressions_1.CCondition(scope, node.condition);
-        this.increment = node.incrementor ? template_1.CodeTemplateFactory.createForNode(scope, node.incrementor) : "";
+            _this.init = template_1.CodeTemplateFactory.createForNode(scope, node.initializer);
+        _this.condition = new expressions_1.CCondition(scope, node.condition);
+        _this.increment = node.incrementor ? template_1.CodeTemplateFactory.createForNode(scope, node.incrementor) : "";
+        return _this;
     }
     CForStatement = __decorate([
         template_1.CodeTemplate("\n{#if varDecl}\n    {varDecl}\n{/if}\n{#if continueLabel}\n    {init};\n    while({condition}) {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n        {continueLabel}:\n        {increment};\n    }\n{#else}\n    for ({init};{condition};{increment})\n    {block}\n{/if}", ts.SyntaxKind.ForStatement)
     ], CForStatement);
     return CForStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CForStatement = CForStatement;
-var CForOfStatement = /** @class */ (function () {
+var CForOfStatement = /** @class */ (function (_super) {
+    __extends(CForOfStatement, _super);
     function CForOfStatement(scope, node, continueLabel) {
-        this.continueLabel = continueLabel;
-        this.variables = [];
-        this.statements = [];
-        this.cast = "";
-        this.parent = scope;
-        this.func = scope.func;
-        this.root = scope.root;
-        this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
+        var _this = _super.call(this) || this;
+        _this.continueLabel = continueLabel;
+        _this.variables = [];
+        _this.statements = [];
+        _this.cast = "";
+        _this.parent = scope;
+        _this.func = scope.func;
+        _this.root = scope.root;
+        _this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
         var arrType = scope.root.typeHelper.getCType(node.expression);
         var varAccess = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
-        this.elementAccess = new elementaccess_1.CSimpleElementAccess(scope, arrType, varAccess, this.iteratorVarName);
-        this.arraySize = new elementaccess_1.CArraySize(scope, varAccess, arrType);
+        _this.elementAccess = new elementaccess_1.CSimpleElementAccess(scope, arrType, varAccess, _this.iteratorVarName);
+        _this.arraySize = new elementaccess_1.CArraySize(scope, varAccess, arrType);
         if (arrType && arrType instanceof ctypes_1.ArrayType && arrType.elementType instanceof ctypes_1.ArrayType && arrType.elementType.isDynamicArray)
-            this.cast = "(void *)";
+            _this.cast = "(void *)";
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             var declInit = node.initializer.declarations[0];
             scope.variables.push(new variable_1.CVariable(scope, declInit.name.getText(), declInit.name));
-            this.init = declInit.name.getText();
+            _this.init = declInit.name.getText();
         }
         else
-            this.init = new elementaccess_1.CElementAccess(scope, node.initializer);
-        this.statements.push(template_1.CodeTemplateFactory.createForNode(this, node.statement));
-        scope.variables = scope.variables.concat(this.variables);
-        this.variables = [];
+            _this.init = new elementaccess_1.CElementAccess(scope, node.initializer);
+        _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, node.statement));
+        scope.variables = scope.variables.concat(_this.variables);
+        _this.variables = [];
+        return _this;
     }
     CForOfStatement = __decorate([
         template_1.CodeTemplate("\n{#if continueLabel}\n    {iteratorVarName} = 0;\n    while ({iteratorVarName} < {arraySize}) {\n        {variables {    }=> {this};\n}\n        {init} = {cast}{elementAccess};\n    {statements {    }=> {this}}\n        {continueLabel}:\n        {iteratorVarName}++;\n    }\n{#else}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)\n    {\n        {variables {    }=> {this};\n}\n        {init} = {cast}{elementAccess};\n        {statements {    }=> {this}}\n    }\n{/if}\n", ts.SyntaxKind.ForOfStatement)
     ], CForOfStatement);
     return CForOfStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CForOfStatement = CForOfStatement;
-var CForInStatement = /** @class */ (function () {
+var CForInStatement = /** @class */ (function (_super) {
+    __extends(CForInStatement, _super);
     function CForInStatement(scope, node, continueLabel) {
-        this.continueLabel = continueLabel;
-        this.variables = [];
-        this.statements = [];
-        this.parent = scope;
-        this.func = scope.func;
-        this.root = scope.root;
-        this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-        this.varAccess = new elementaccess_1.CElementAccess(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.continueLabel = continueLabel;
+        _this.variables = [];
+        _this.statements = [];
+        _this.parent = scope;
+        _this.func = scope.func;
+        _this.root = scope.root;
+        _this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, node.expression);
         if (node.initializer.kind == ts.SyntaxKind.VariableDeclarationList) {
             var declInit = node.initializer.declarations[0];
             scope.variables.push(new variable_1.CVariable(scope, declInit.name.getText(), declInit.name));
-            this.init = declInit.name.getText();
+            _this.init = declInit.name.getText();
         }
         else
-            this.init = new elementaccess_1.CElementAccess(scope, node.initializer);
+            _this.init = new elementaccess_1.CElementAccess(scope, node.initializer);
         if (node.statement.kind == ts.SyntaxKind.Block) {
             var block = node.statement;
             for (var _i = 0, _a = block.statements; _i < _a.length; _i++) {
                 var s = _a[_i];
-                this.statements.push(template_1.CodeTemplateFactory.createForNode(this, s));
+                _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s));
             }
         }
         else
-            this.statements.push(template_1.CodeTemplateFactory.createForNode(this, node.statement));
-        scope.variables = scope.variables.concat(this.variables);
-        this.variables = [];
+            _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, node.statement));
+        scope.variables = scope.variables.concat(_this.variables);
+        _this.variables = [];
+        return _this;
     }
     CForInStatement = __decorate([
         template_1.CodeTemplate("\n{#if continueLabel}\n    {iteratorVarName} = 0;\n    while ({iteratorVarName} < {varAccess}->index->size) {\n        {variables {    }=> {this};\n}\n        {init} = {varAccess}->index->data[{iteratorVarName}];\n        {statements {    }=> {this}}\n        {continueLabel}:\n        {iteratorVarName}++;\n    }\n{#else}\n    for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->index->size; {iteratorVarName}++)\n    {\n        {variables {    }=> {this};\n}\n        {init} = {varAccess}->index->data[{iteratorVarName}];\n        {statements {    }=> {this}}\n    }\n{/if}\n", ts.SyntaxKind.ForInStatement)
     ], CForInStatement);
     return CForInStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CForInStatement = CForInStatement;
-var CExpressionStatement = /** @class */ (function () {
+var CExpressionStatement = /** @class */ (function (_super) {
+    __extends(CExpressionStatement, _super);
     function CExpressionStatement(scope, node) {
-        this.SemicolonCR = ';\n';
+        var _this = _super.call(this) || this;
+        _this.SemicolonCR = ';\n';
         if (node.expression.kind == ts.SyntaxKind.BinaryExpression) {
             var binExpr = node.expression;
             if (binExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken) {
-                this.expression = assignment_1.AssignmentHelper.create(scope, binExpr.left, binExpr.right);
+                _this.expression = assignment_1.AssignmentHelper.create(scope, binExpr.left, binExpr.right);
                 ;
-                this.SemicolonCR = '';
+                _this.SemicolonCR = '';
             }
         }
-        if (!this.expression)
-            this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        if (!_this.expression)
+            _this.expression = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        return _this;
     }
     CExpressionStatement = __decorate([
         template_1.CodeTemplate("{expression}{SemicolonCR}", ts.SyntaxKind.ExpressionStatement)
     ], CExpressionStatement);
     return CExpressionStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CExpressionStatement = CExpressionStatement;
-var CBlock = /** @class */ (function () {
+var CBlock = /** @class */ (function (_super) {
+    __extends(CBlock, _super);
     function CBlock(scope, node) {
-        var _this = this;
-        this.variables = [];
-        this.statements = [];
-        this.parent = scope;
-        this.func = scope.func;
-        this.root = scope.root;
+        var _this = _super.call(this) || this;
+        _this.variables = [];
+        _this.statements = [];
+        _this.parent = scope;
+        _this.func = scope.func;
+        _this.root = scope.root;
         if (ts.isBlock(node)) {
             node.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
         }
         else
-            this.statements.push(template_1.CodeTemplateFactory.createForNode(this, node));
+            _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, node));
+        return _this;
     }
     CBlock = __decorate([
         template_1.CodeTemplate("\n{#if statements.length > 1 || variables.length > 0}\n    {\n        {variables {    }=> {this};\n}\n        {statements {    }=> {this}}\n    }\n{/if}\n{#if statements.length == 1 && variables.length == 0}\n        {statements}\n{/if}\n{#if statements.length == 0 && variables.length == 0}\n        /* no statements */;\n{/if}", ts.SyntaxKind.Block)
     ], CBlock);
     return CBlock;
-}());
+}(template_1.CTemplateBase));
 exports.CBlock = CBlock;
-var CImport = /** @class */ (function () {
+var CImport = /** @class */ (function (_super) {
+    __extends(CImport, _super);
     function CImport(scope, node) {
+        var _this = _super.call(this) || this;
         var moduleName = node.moduleSpecifier.text;
-        this.externalInclude = moduleName.indexOf('ts2c-target') == 0;
-        if (this.externalInclude) {
+        _this.externalInclude = moduleName.indexOf('ts2c-target') == 0;
+        if (_this.externalInclude) {
             moduleName = moduleName.split('/').slice(1).join('/');
             if (moduleName.slice(-6) == "/index")
                 moduleName = moduleName.slice(0, -6);
             if (scope.root.includes.indexOf(moduleName) == -1)
                 scope.root.includes.push(moduleName);
         }
-        this.nodeText = node.getText();
+        _this.nodeText = node.getText();
+        return _this;
     }
     CImport = __decorate([
         template_1.CodeTemplate("", ts.SyntaxKind.ImportDeclaration)
     ], CImport);
     return CImport;
-}());
+}(template_1.CTemplateBase));
 exports.CImport = CImport;
-var CTryStatement = /** @class */ (function () {
+var CTryStatement = /** @class */ (function (_super) {
+    __extends(CTryStatement, _super);
     function CTryStatement(scope, node) {
-        this.tryBlock = new CBlock(scope, node.tryBlock);
-        this.catchBlock = node.catchClause ? new CBlock(scope, node.catchClause.block) : "";
-        this.finallyBlock = node.finallyBlock ? new CBlock(scope, node.finallyBlock) : "";
-        this.catchVarName = node.catchClause && node.catchClause.variableDeclaration && node.catchClause.variableDeclaration.name.getText();
-        if (this.catchVarName)
-            scope.variables.push(new variable_1.CVariable(scope, this.catchVarName, ctypes_1.StringVarType));
+        var _this = _super.call(this) || this;
+        _this.tryBlock = new CBlock(scope, node.tryBlock);
+        _this.catchBlock = node.catchClause ? new CBlock(scope, node.catchClause.block) : "";
+        _this.finallyBlock = node.finallyBlock ? new CBlock(scope, node.finallyBlock) : "";
+        _this.catchVarName = node.catchClause && node.catchClause.variableDeclaration && node.catchClause.variableDeclaration.name.getText();
+        if (_this.catchVarName)
+            scope.variables.push(new variable_1.CVariable(scope, _this.catchVarName, ctypes_1.StringVarType));
         scope.root.headerFlags.try_catch = true;
+        return _this;
     }
     CTryStatement = __decorate([
         template_1.CodeTemplate("\nTRY\n{tryBlock}\nCATCH\n{#if catchVarName}\n        {catchVarName} = err_defs->data[err_val - 1];\n{/if}\n{catchBlock}\n{finallyBlock}\nEND_TRY\n", ts.SyntaxKind.TryStatement)
     ], CTryStatement);
     return CTryStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CTryStatement = CTryStatement;
-var CThrowStatement = /** @class */ (function () {
+var CThrowStatement = /** @class */ (function (_super) {
+    __extends(CThrowStatement, _super);
     function CThrowStatement(scope, node) {
-        this.value = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
+        var _this = _super.call(this) || this;
+        _this.value = template_1.CodeTemplateFactory.createForNode(scope, node.expression);
         scope.root.headerFlags.try_catch = true;
+        return _this;
     }
     CThrowStatement = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    ARRAY_PUSH(err_defs, {value});\n{/statements}\nTHROW(err_defs->size);\n", ts.SyntaxKind.ThrowStatement)
     ], CThrowStatement);
     return CThrowStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CThrowStatement = CThrowStatement;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../template":43,"../types/ctypes":44,"../types/utils":49,"./assignment":2,"./elementaccess":4,"./expressions":5,"./variable":11}],10:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -2196,16 +2493,18 @@ var template_1 = require("../template");
 var utils_1 = require("../types/utils");
 var elementaccess_1 = require("./elementaccess");
 var variable_1 = require("./variable");
-var CAsUniversalVar = /** @class */ (function () {
+var CAsUniversalVar = /** @class */ (function (_super) {
+    __extends(CAsUniversalVar, _super);
     function CAsUniversalVar(scope, expr, type) {
-        this.expression = utils_1.isNode(expr) ? template_1.CodeTemplateFactory.createForNode(scope, expr) : expr;
+        var _this = _super.call(this) || this;
+        _this.expression = utils_1.isNode(expr) ? template_1.CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || utils_1.isNode(expr) && scope.root.typeHelper.getCType(expr);
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isNumber = type === ctypes_1.NumberVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.isArray = type instanceof ctypes_1.ArrayType;
-        this.isDict = type instanceof ctypes_1.StructType || type instanceof ctypes_1.DictType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isNumber = type === ctypes_1.NumberVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.isArray = type instanceof ctypes_1.ArrayType;
+        _this.isDict = type instanceof ctypes_1.StructType || type instanceof ctypes_1.DictType;
         if (type === ctypes_1.StringVarType)
             scope.root.headerFlags.js_var_from_str = true;
         if (type === ctypes_1.NumberVarType)
@@ -2217,33 +2516,37 @@ var CAsUniversalVar = /** @class */ (function () {
         if (type instanceof ctypes_1.StructType || type instanceof ctypes_1.DictType)
             scope.root.headerFlags.js_var_dict = true;
         scope.root.headerFlags.js_var = true;
+        return _this;
     }
     CAsUniversalVar = __decorate([
         template_1.CodeTemplate("\n{#if isUniversalVar}\n    {expression}\n{#elseif isString}\n    js_var_from_str({expression})\n{#elseif isNumber}\n    js_var_from_int16_t({expression})\n{#elseif isBoolean}\n    js_var_from_uint8_t({expression})\n{#elseif isArray}\n    js_var_from_array({expression})\n{#elseif isDict}\n    js_var_from_dict({expression})\n{#else}\n    /** converting {expression} to js_var is not supported yet */\n{/if}")
     ], CAsUniversalVar);
     return CAsUniversalVar;
-}());
+}(template_1.CTemplateBase));
 exports.CAsUniversalVar = CAsUniversalVar;
-var CAsNumber = /** @class */ (function () {
+var CAsNumber = /** @class */ (function (_super) {
+    __extends(CAsNumber, _super);
     function CAsNumber(scope, expr, type) {
-        this.type = type;
-        this.isSingleElementStaticArray = false;
-        this.expression = utils_1.isNode(expr) ? template_1.CodeTemplateFactory.createForNode(scope, expr) : expr;
+        var _this = _super.call(this) || this;
+        _this.type = type;
+        _this.isSingleElementStaticArray = false;
+        _this.expression = utils_1.isNode(expr) ? template_1.CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || utils_1.isNode(expr) && scope.root.typeHelper.getCType(expr);
-        this.isNumber = type === ctypes_1.NumberVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.isNumber = type === ctypes_1.NumberVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
         if (type instanceof ctypes_1.ArrayType && !type.isDynamicArray && type.capacity === 1) {
-            this.isSingleElementStaticArray = true;
-            this.arrayFirstElementAsNumber = new CAsNumber_1(scope, new elementaccess_1.CSimpleElementAccess(scope, type, this.expression, "0"), type.elementType);
+            _this.isSingleElementStaticArray = true;
+            _this.arrayFirstElementAsNumber = new CAsNumber_1(scope, new elementaccess_1.CSimpleElementAccess(scope, type, _this.expression, "0"), type.elementType);
         }
-        if (this.isString)
+        if (_this.isString)
             scope.root.headerFlags.str_to_int16_t = true;
-        if (this.isUniversalVar)
+        if (_this.isUniversalVar)
             scope.root.headerFlags.js_var_to_number = true;
-        if (!this.isNumber && !this.isBoolean && !this.isString && !this.isUniversalVar && !this.isSingleElementStaticArray)
+        if (!_this.isNumber && !_this.isBoolean && !_this.isString && !_this.isUniversalVar && !_this.isSingleElementStaticArray)
             scope.root.headerFlags.js_var_from = true;
+        return _this;
     }
     CAsNumber_1 = CAsNumber;
     CAsNumber = CAsNumber_1 = __decorate([
@@ -2251,109 +2554,116 @@ var CAsNumber = /** @class */ (function () {
     ], CAsNumber);
     return CAsNumber;
     var CAsNumber_1;
-}());
+}(template_1.CTemplateBase));
 exports.CAsNumber = CAsNumber;
-var CAsString = /** @class */ (function () {
+var CAsString = /** @class */ (function (_super) {
+    __extends(CAsString, _super);
     function CAsString(scope, node) {
+        var _this = _super.call(this) || this;
         var type = scope.root.typeHelper.getCType(node);
-        this.arg = template_1.CodeTemplateFactory.createForNode(scope, node);
-        this.isNumberLiteral = ts.isNumericLiteral(node);
-        this.isNumber = !this.isNumberLiteral && type === ctypes_1.NumberVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
-        this.isArray = type instanceof ctypes_1.ArrayType;
-        if (this.isNumber || this.isArray || this.isUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "buf");
-            scope.variables.push(new variable_1.CVariable(scope, this.tmpVarName, "char *"));
+        _this.arg = template_1.CodeTemplateFactory.createForNode(scope, node);
+        _this.isNumberLiteral = ts.isNumericLiteral(node);
+        _this.isNumber = !_this.isNumberLiteral && type === ctypes_1.NumberVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        _this.isArray = type instanceof ctypes_1.ArrayType;
+        if (_this.isNumber || _this.isArray || _this.isUniversalVar) {
+            _this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "buf");
+            scope.variables.push(new variable_1.CVariable(scope, _this.tmpVarName, "char *"));
             scope.root.headerFlags.gc_iterator = true;
         }
-        if (this.isNumber)
+        if (_this.isNumber)
             scope.root.headerFlags.str_int16_t_buflen = true;
         if (type instanceof ctypes_1.ArrayType) {
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-            var arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, this.arg, this.iteratorVarName);
-            this.arrayElementCat = new CAsString_Concat(scope, node, this.tmpVarName, arrayElement, type.elementType);
-            this.arraySize = new elementaccess_1.CArraySize(scope, this.arg, type);
-            this.arrayStrLen = new CAsString_Length(scope, node, this.arg, type);
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+            var arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, _this.arg, _this.iteratorVarName);
+            _this.arrayElementCat = new CAsString_Concat(scope, node, _this.tmpVarName, arrayElement, type.elementType);
+            _this.arraySize = new elementaccess_1.CArraySize(scope, _this.arg, type);
+            _this.arrayStrLen = new CAsString_Length(scope, node, _this.arg, type);
         }
+        return _this;
     }
     CAsString = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if isNumber}\n        {tmpVarName} = malloc(STR_INT16_T_BUFLEN);\n        assert({tmpVarName} != NULL);\n        sprintf({tmpVarName}, \"%d\", {arg});\n        ARRAY_PUSH(gc_main, (void *){tmpVarName});\n    {#elseif isUniversalVar}\n        {tmpVarName} = js_var_to_str({arg}, &{needDisposeVarName});\n        if ({needDisposeVarName})\n            ARRAY_PUSH(gc_main, (void *){tmpVarName});\n    {#elseif isArray}\n        {tmpVarName} = malloc({arrayStrLen});\n        assert({tmpVarName} != NULL);\n        {tmpVarName}[0] = '\\0';\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n            if ({iteratorVarName} != 0)\n                strcat({tmpVarName}, \",\");\n            {arrayElementCat}\n        }\n        ARRAY_PUSH(gc_main, (void *){tmpVarName});\n    {/if}\n{/statements}\n{#if isNumberLiteral}\n    \"{arg}\"\n{#elseif isString}\n    {arg}\n{#elseif isBoolean}\n    ({arg} ? \"true\" : \"false\")\n{#elseif isUniversalVar || isArray || isNumber}\n    {tmpVarName}\n{#else}\n    \"[object Object]\"\n{/if}")
     ], CAsString);
     return CAsString;
-}());
+}(template_1.CTemplateBase));
 exports.CAsString = CAsString;
-var CAsString_Length = /** @class */ (function () {
+var CAsString_Length = /** @class */ (function (_super) {
+    __extends(CAsString_Length, _super);
     function CAsString_Length(scope, node, arg, type) {
-        var _this = this;
-        this.arg = arg;
-        this.type = type;
-        this.isNumber = type === ctypes_1.NumberVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.isArrayOfString = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.StringVarType;
-        this.isArrayOfNumber = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.NumberVarType;
-        this.isArrayOfBoolean = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.BooleanVarType;
-        this.isArrayOfUniversalVar = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.UniversalVarType;
-        this.isArrayOfArray = type instanceof ctypes_1.ArrayType && type.elementType instanceof Array;
-        this.isArrayOfObj = type instanceof ctypes_1.ArrayType && (type.elementType instanceof ctypes_1.DictType || type.elementType instanceof ctypes_1.StructType);
-        this.arraySize = type instanceof ctypes_1.ArrayType && new elementaccess_1.CArraySize(scope, arg, type);
-        if (this.isArrayOfString || this.isArrayOfUniversalVar) {
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-            this.arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
-            this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
-            scope.variables.push(new variable_1.CVariable(scope, this.lengthVarName, ctypes_1.NumberVarType));
+        var _this = _super.call(this) || this;
+        _this.arg = arg;
+        _this.type = type;
+        _this.isNumber = type === ctypes_1.NumberVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.isArrayOfString = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.StringVarType;
+        _this.isArrayOfNumber = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.NumberVarType;
+        _this.isArrayOfBoolean = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.BooleanVarType;
+        _this.isArrayOfUniversalVar = type instanceof ctypes_1.ArrayType && type.elementType === ctypes_1.UniversalVarType;
+        _this.isArrayOfArray = type instanceof ctypes_1.ArrayType && type.elementType instanceof Array;
+        _this.isArrayOfObj = type instanceof ctypes_1.ArrayType && (type.elementType instanceof ctypes_1.DictType || type.elementType instanceof ctypes_1.StructType);
+        _this.arraySize = type instanceof ctypes_1.ArrayType && new elementaccess_1.CArraySize(scope, arg, type);
+        if (_this.isArrayOfString || _this.isArrayOfUniversalVar) {
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+            _this.arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, arg, _this.iteratorVarName);
+            _this.lengthVarName = scope.root.symbolsHelper.addTemp(node, "len");
+            scope.variables.push(new variable_1.CVariable(scope, _this.lengthVarName, ctypes_1.NumberVarType));
             scope.root.headerFlags.strings = true;
         }
-        if (this.isArrayOfUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
+        if (_this.isArrayOfUniversalVar) {
+            _this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
+            _this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
             if (!scope.variables.some(function (v) { return v.name == _this.tmpVarName; }))
-                scope.variables.push(new variable_1.CVariable(scope, this.tmpVarName, ctypes_1.StringVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.tmpVarName, ctypes_1.StringVarType));
             if (!scope.variables.some(function (v) { return v.name == _this.needDisposeVarName; }))
-                scope.variables.push(new variable_1.CVariable(scope, this.needDisposeVarName, ctypes_1.BooleanVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.needDisposeVarName, ctypes_1.BooleanVarType));
             scope.root.headerFlags.js_var_to_str = true;
         }
+        return _this;
     }
     CAsString_Length = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if isArrayOfString}\n        {lengthVarName} = {arraySize};\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++)\n            {lengthVarName} += strlen({arrayElement});\n    {#elseif isArrayOfUniversalVar}\n        {lengthVarName} = {arraySize};\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n            {lengthVarName} += strlen({tmpVarName} = js_var_to_str({arrayElement}, &{needDisposeVarName}));\n            if ({needDisposeVarName})\n                free((void *){tmpVarName});\n        }\n    {/if}\n{/statements}\n{#if isNumber}\n    STR_INT16_T_BUFLEN\n{#elseif isString}\n    strlen({arg})\n{#elseif isBoolean}\n    (5-{arg})\n{#elseif isArrayOfNumber}\n    (STR_INT16_T_BUFLEN + 1) * {arraySize}\n{#elseif isArrayOfBoolean}\n    6 * {arraySize}\n{#elseif isArrayOfObj}\n    16 * {arraySize}\n{#elseif isArrayOfString || isArrayOfUniversalVar}\n    {lengthVarName}\n{#elseif isArrayOfArray}\n    /* determining string length of array {arg} is not supported yet */\n{#else}\n    15\n{/if}")
     ], CAsString_Length);
     return CAsString_Length;
-}());
+}(template_1.CTemplateBase));
 exports.CAsString_Length = CAsString_Length;
-var CAsString_Concat = /** @class */ (function () {
+var CAsString_Concat = /** @class */ (function (_super) {
+    __extends(CAsString_Concat, _super);
     function CAsString_Concat(scope, node, buf, arg, type) {
-        var _this = this;
-        this.buf = buf;
-        this.arg = arg;
-        this.type = type;
-        this.isArray = false;
-        this.isNumber = type === ctypes_1.NumberVarType;
-        this.isString = type === ctypes_1.StringVarType;
-        this.isBoolean = type === ctypes_1.BooleanVarType;
-        this.isUniversalVar = type === ctypes_1.UniversalVarType;
-        if (this.isNumber)
+        var _this = _super.call(this) || this;
+        _this.buf = buf;
+        _this.arg = arg;
+        _this.type = type;
+        _this.isArray = false;
+        _this.isNumber = type === ctypes_1.NumberVarType;
+        _this.isString = type === ctypes_1.StringVarType;
+        _this.isBoolean = type === ctypes_1.BooleanVarType;
+        _this.isUniversalVar = type === ctypes_1.UniversalVarType;
+        if (_this.isNumber)
             scope.root.headerFlags.str_int16_t_cat = true;
-        if (this.isUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
+        if (_this.isUniversalVar) {
+            _this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "tmp", false);
+            _this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, "need_dispose", false);
             if (!scope.variables.some(function (v) { return v.name == _this.tmpVarName; }))
-                scope.variables.push(new variable_1.CVariable(scope, this.tmpVarName, ctypes_1.StringVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.tmpVarName, ctypes_1.StringVarType));
             if (!scope.variables.some(function (v) { return v.name == _this.needDisposeVarName; }))
-                scope.variables.push(new variable_1.CVariable(scope, this.needDisposeVarName, ctypes_1.BooleanVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.needDisposeVarName, ctypes_1.BooleanVarType));
             scope.root.headerFlags.js_var_to_str = true;
         }
         if (type instanceof ctypes_1.ArrayType) {
-            this.isArray = true;
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-            var arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, arg, this.iteratorVarName);
-            this.arrayElementCat = new CAsString_Concat_1(scope, node, buf, arrayElement, type.elementType);
-            this.arraySize = new elementaccess_1.CArraySize(scope, arg, type);
+            _this.isArray = true;
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(node);
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+            var arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, arg, _this.iteratorVarName);
+            _this.arrayElementCat = new CAsString_Concat_1(scope, node, buf, arrayElement, type.elementType);
+            _this.arraySize = new elementaccess_1.CArraySize(scope, arg, type);
         }
+        return _this;
     }
     CAsString_Concat_1 = CAsString_Concat;
     CAsString_Concat = CAsString_Concat_1 = __decorate([
@@ -2361,13 +2671,23 @@ var CAsString_Concat = /** @class */ (function () {
     ], CAsString_Concat);
     return CAsString_Concat;
     var CAsString_Concat_1;
-}());
+}(template_1.CTemplateBase));
 exports.CAsString_Concat = CAsString_Concat;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../template":43,"../types/ctypes":44,"../types/utils":49,"./elementaccess":4,"./variable":11}],11:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -2380,33 +2700,42 @@ var template_1 = require("../template");
 var ctypes_1 = require("../types/ctypes");
 var assignment_1 = require("./assignment");
 var utils_1 = require("../types/utils");
-var CVariableStatement = /** @class */ (function () {
+var CVariableStatement = /** @class */ (function (_super) {
+    __extends(CVariableStatement, _super);
     function CVariableStatement(scope, node) {
-        this.declarations = node.declarationList.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
+        var _this = _super.call(this) || this;
+        _this.declarations = node.declarationList.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
+        return _this;
     }
     CVariableStatement = __decorate([
         template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableStatement)
     ], CVariableStatement);
     return CVariableStatement;
-}());
+}(template_1.CTemplateBase));
 exports.CVariableStatement = CVariableStatement;
-var CVariableDeclarationList = /** @class */ (function () {
+var CVariableDeclarationList = /** @class */ (function (_super) {
+    __extends(CVariableDeclarationList, _super);
     function CVariableDeclarationList(scope, node) {
-        this.declarations = node.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
+        var _this = _super.call(this) || this;
+        _this.declarations = node.declarations.map(function (d) { return template_1.CodeTemplateFactory.createForNode(scope, d); });
+        return _this;
     }
     CVariableDeclarationList = __decorate([
         template_1.CodeTemplate("{declarations}", ts.SyntaxKind.VariableDeclarationList)
     ], CVariableDeclarationList);
     return CVariableDeclarationList;
-}());
+}(template_1.CTemplateBase));
 exports.CVariableDeclarationList = CVariableDeclarationList;
-var CVariableDeclaration = /** @class */ (function () {
+var CVariableDeclaration = /** @class */ (function (_super) {
+    __extends(CVariableDeclaration, _super);
     function CVariableDeclaration(scope, varDecl) {
-        this.allocator = '';
-        this.initializer = '';
+        var _this = _super.call(this) || this;
+        _this.allocator = '';
+        _this.initializer = '';
         var name = varDecl.name.getText();
         var type = scope.root.typeHelper.getCType(varDecl.name);
-        if (type instanceof ctypes_1.ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
+        var scopeVar = scope.root.typeHelper.isScopeVariableDeclaration(varDecl);
+        if (type instanceof ctypes_1.ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer) && !scopeVar) {
             var canUseInitializerList = varDecl.initializer.elements.every(function (e) { return e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral; });
             if (canUseInitializerList) {
                 var s = "{ ";
@@ -2418,92 +2747,77 @@ var CVariableDeclaration = /** @class */ (function () {
                 }
                 s += " }";
                 scope.variables.push(new CVariable(scope, name, type, { initializer: s }));
-                return;
+                return _this;
             }
         }
-        if (!scope.variables.some(function (v) { return v.name === name; }))
+        if (!scope.variables.some(function (v) { return v.name === name; }) && !scopeVar)
             scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
-            this.initializer = assignment_1.AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
+            _this.initializer = assignment_1.AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
+        return _this;
     }
     CVariableDeclaration = __decorate([
         template_1.CodeTemplate("{initializer}", ts.SyntaxKind.VariableDeclaration)
     ], CVariableDeclaration);
     return CVariableDeclaration;
-}());
+}(template_1.CTemplateBase));
 exports.CVariableDeclaration = CVariableDeclaration;
-var CVariableAllocation = /** @class */ (function () {
+var CVariableAllocation = /** @class */ (function (_super) {
+    __extends(CVariableAllocation, _super);
     function CVariableAllocation(scope, varName, varType, refNode) {
-        this.varName = varName;
-        this.needAllocateArray = varType instanceof ctypes_1.ArrayType && varType.isDynamicArray;
-        this.needAllocateStruct = varType instanceof ctypes_1.StructType || varType instanceof ctypes_1.FuncType && varType.needsClosureStruct;
-        this.needAllocateDict = varType instanceof ctypes_1.DictType;
-        this.initialCapacity = 4;
-        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(refNode);
+        var _this = _super.call(this) || this;
+        _this.varName = varName;
+        _this.needAllocateArray = varType instanceof ctypes_1.ArrayType && varType.isDynamicArray;
+        _this.needAllocateStruct = varType instanceof ctypes_1.StructType || varType instanceof ctypes_1.FuncType && varType.needsClosureStruct;
+        _this.needAllocateDict = varType instanceof ctypes_1.DictType;
+        _this.initialCapacity = 4;
+        _this.gcVarName = scope.root.memoryManager.getGCVariableForNode(refNode);
         if (varType instanceof ctypes_1.ArrayType) {
-            this.initialCapacity = Math.max(varType.capacity * 2, 4);
-            this.size = varType.capacity;
+            _this.initialCapacity = Math.max(varType.capacity * 2, 4);
+            _this.size = varType.capacity;
         }
-        if (this.needAllocateStruct || this.needAllocateArray || this.needAllocateDict)
+        if (_this.needAllocateStruct || _this.needAllocateArray || _this.needAllocateDict)
             scope.root.headerFlags.malloc = true;
-        if (this.gcVarName || this.needAllocateArray)
+        if (_this.gcVarName || _this.needAllocateArray)
             scope.root.headerFlags.array = true;
         if (varType instanceof ctypes_1.ArrayType && varType.elementType == ctypes_1.UniversalVarType)
             scope.root.headerFlags.js_var_array = true;
         if (varType instanceof ctypes_1.DictType && varType.elementType == ctypes_1.UniversalVarType)
             scope.root.headerFlags.js_var_dict = true;
-        else if (this.needAllocateDict)
+        else if (_this.needAllocateDict)
             scope.root.headerFlags.dict = true;
-        if (this.gcVarName)
+        if (_this.gcVarName)
             scope.root.headerFlags.gc_iterator = true;
+        return _this;
     }
     CVariableAllocation = __decorate([
         template_1.CodeTemplate("\n{#if needAllocateArray}\n    ARRAY_CREATE({varName}, {initialCapacity}, {size});\n{#elseif needAllocateDict}\n    DICT_CREATE({varName}, {initialCapacity});\n{#elseif needAllocateStruct}\n    {varName} = malloc(sizeof(*{varName}));\n    assert({varName} != NULL);\n{/if}\n{#if gcVarName && (needAllocateStruct || needAllocateArray || needAllocateDict)}\n    ARRAY_PUSH({gcVarName}, (void *){varName});\n{/if}\n")
     ], CVariableAllocation);
     return CVariableAllocation;
-}());
+}(template_1.CTemplateBase));
 exports.CVariableAllocation = CVariableAllocation;
-var CTempVarReplacement = /** @class */ (function () {
-    function CTempVarReplacement(scope, node, inlineCall, type) {
-        this.inlineCall = inlineCall;
-        this.type = type;
-        this.varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
-        this.reused = scope.root.memoryManager.variableWasReused(node);
-        this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-        if (!this.reused)
-            scope.variables.push(new CVariable(scope, this.varName, type));
-        if (this.gcVarName) {
-            scope.root.headerFlags.array = true;
-            scope.root.headerFlags.gc_iterator = true;
-        }
-    }
-    CTempVarReplacement = __decorate([
-        template_1.CodeTemplate("\n{#statements}\n    {#if gcVarName}\n        {varName} = {inlineCall};\n        ARRAY_PUSH({gcVarName}, (void *){varName});\n    {/if}\n{/statements}\n{#if gcVarName}\n    {varName}\n{#elseif reused}\n    {inlineCall}\n{#else}\n    ({varName} = {inlineCall})\n{/if}")
-    ], CTempVarReplacement);
-    return CTempVarReplacement;
-}());
-exports.CTempVarReplacement = CTempVarReplacement;
-var CVariableDestructors = /** @class */ (function () {
+var CVariableDestructors = /** @class */ (function (_super) {
+    __extends(CVariableDestructors, _super);
     function CVariableDestructors(scope, node) {
-        var _this = this;
-        this.gcVarName = null;
-        this.gcArraysVarName = null;
-        this.gcArraysCVarName = null;
-        this.gcDictsVarName = null;
-        this.arrayDestructors = [];
+        var _this = _super.call(this) || this;
+        _this.gcVarName = null;
+        _this.gcArraysVarName = null;
+        _this.gcArraysCVarName = null;
+        _this.gcDictsVarName = null;
+        _this.arrayDestructors = [];
         var gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (var _i = 0, gcVarNames_1 = gcVarNames; _i < gcVarNames_1.length; _i++) {
             var gc = gcVarNames_1[_i];
             if (gc.indexOf("_arrays_c") > -1)
-                this.gcArraysCVarName = gc;
+                _this.gcArraysCVarName = gc;
             else if (gc.indexOf("_dicts") > -1)
-                this.gcDictsVarName = gc;
+                _this.gcDictsVarName = gc;
             else if (gc.indexOf("_arrays") > -1)
-                this.gcArraysVarName = gc;
+                _this.gcArraysVarName = gc;
             else
-                this.gcVarName = gc;
+                _this.gcVarName = gc;
         }
-        this.destructors = [];
+        _this.destructors = [];
         scope.root.memoryManager.getDestructorsForScope(node)
             .forEach(function (r) {
             if (r.array) {
@@ -2529,24 +2843,25 @@ var CVariableDestructors = /** @class */ (function () {
             else
                 _this.destructors.push(r.varName);
         });
+        return _this;
     }
     CVariableDestructors = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}\n    {destructors => free({this});\n}\n    {#if gcArraysCVarName}\n        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {\n            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)\n                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n\n            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);\n            free({gcArraysCVarName}->data[gc_i]);\n        }\n        free({gcArraysCVarName}->data);\n        free({gcArraysCVarName});\n    {/if}\n    {#if gcArraysVarName}\n        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {\n            free({gcArraysVarName}->data[gc_i]->data);\n            free({gcArraysVarName}->data[gc_i]);\n        }\n        free({gcArraysVarName}->data);\n        free({gcArraysVarName});\n    {/if}\n    {#if gcDictsVarName}\n        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {\n            free({gcDictsVarName}->data[gc_i]->index->data);\n            free({gcDictsVarName}->data[gc_i]->index);\n            free({gcDictsVarName}->data[gc_i]->values->data);\n            free({gcDictsVarName}->data[gc_i]->values);\n            free({gcDictsVarName}->data[gc_i]);\n        }\n        free({gcDictsVarName}->data);\n        free({gcDictsVarName});\n    {/if}\n    {#if gcVarName}\n        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)\n            free({gcVarName}->data[gc_i]);\n        free({gcVarName}->data);\n        free({gcVarName});\n    {/if}\n{/statements}")
     ], CVariableDestructors);
     return CVariableDestructors;
-}());
+}(template_1.CTemplateBase));
 exports.CVariableDestructors = CVariableDestructors;
-var CVariable = /** @class */ (function () {
+var CVariable = /** @class */ (function (_super) {
+    __extends(CVariable, _super);
     function CVariable(scope, name, typeSource, options) {
-        this.name = name;
+        var _this = _super.call(this) || this;
+        _this.name = name;
         var type = utils_1.isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
         if (type instanceof ctypes_1.StructType)
             scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof ctypes_1.ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
-        else if (type instanceof ctypes_1.FuncType && type.closureParams.length)
-            scope.root.symbolsHelper.ensureClosureStruct(type, name);
-        if (this.typeHasNumber(type))
+        if (_this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
         if (type == ctypes_1.BooleanVarType)
             scope.root.headerFlags.bool = true;
@@ -2556,14 +2871,15 @@ var CVariable = /** @class */ (function () {
             scope.root.headerFlags.js_var_dict = true;
         // root scope, make variables file-scoped by default
         if (scope.parent == null)
-            this.static = true;
+            _this.static = true;
         if (options && options.removeStorageSpecifier)
-            this.static = false;
-        this.arraysToPointers = options && options.arraysToPointers;
+            _this.static = false;
+        _this.arraysToPointers = options && options.arraysToPointers;
         if (options && options.initializer)
-            this.initializer = options.initializer;
-        this.type = type;
-        this.typeHelper = scope.root.typeHelper;
+            _this.initializer = options.initializer;
+        _this.type = type;
+        _this.typeHelper = scope.root.typeHelper;
+        return _this;
     }
     CVariable.prototype.typeHasNumber = function (type) {
         var _this = this;
@@ -2590,7 +2906,7 @@ var CVariable = /** @class */ (function () {
         return varString;
     };
     return CVariable;
-}());
+}(template_1.CTemplateBase));
 exports.CVariable = CVariable;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
@@ -2807,6 +3123,9 @@ Array.prototype["removeDuplicates"] = function () {
 };
 function isStartGroup(t) { return t && !!t.startGroup || false; }
 function isEndGroup(t) { return t && !!t.endGroup || false; }
+function isRangeCondition(t) { return t && !!t.fromChar && !!t.toChar || false; }
+exports.isRangeCondition = isRangeCondition;
+;
 var RegexParser = /** @class */ (function () {
     function RegexParser() {
     }
@@ -3206,6 +3525,16 @@ exports.StandardCallHelper = StandardCallHelper;
 },{}],15:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3253,35 +3582,37 @@ var ArrayConcatResolver = /** @class */ (function () {
     ], ArrayConcatResolver);
     return ArrayConcatResolver;
 }());
-var CArrayConcat = /** @class */ (function () {
+var CArrayConcat = /** @class */ (function (_super) {
+    __extends(CArrayConcat, _super);
     function CArrayConcat(scope, call) {
-        var _this = this;
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.concatValues = [];
-        this.sizes = [];
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.concatValues = [];
+        _this.sizes = [];
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             var type = scope.root.typeHelper.getCType(propAccess.expression);
             if (!scope.root.memoryManager.variableWasReused(call))
-                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, new ctypes_1.ArrayType(type.elementType, 0, true)));
-            this.indexVarName = scope.root.symbolsHelper.addIterator(call);
-            scope.variables.push(new variable_1.CVariable(scope, this.indexVarName, ctypes_1.NumberVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, new ctypes_1.ArrayType(type.elementType, 0, true)));
+            _this.indexVarName = scope.root.symbolsHelper.addIterator(call);
+            scope.variables.push(new variable_1.CVariable(scope, _this.indexVarName, ctypes_1.NumberVarType));
             var args = call.arguments.map(function (a) { return ({ node: a, template: template_1.CodeTemplateFactory.createForNode(scope, a) }); });
-            var toConcatenate = [{ node: propAccess.expression, template: this.varAccess }].concat(args);
-            this.sizes = toConcatenate.map(function (a) { return new CGetSize(scope, a.node, a.template); });
-            this.concatValues = toConcatenate.map(function (a) { return new CConcatValue(scope, _this.tempVarName, a.node, a.template, _this.indexVarName); });
+            var toConcatenate = [{ node: propAccess.expression, template: _this.varAccess }].concat(args);
+            _this.sizes = toConcatenate.map(function (a) { return new CGetSize(scope, a.node, a.template); });
+            _this.concatValues = toConcatenate.map(function (a) { return new CConcatValue(scope, _this.tempVarName, a.node, a.template, _this.indexVarName); });
         }
         scope.root.headerFlags.array = true;
+        return _this;
     }
     CArrayConcat = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {sizes{+}=>{this}}, 0);\n        {tempVarName}->size = {tempVarName}->capacity;\n        {indexVarName} = 0;\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayConcat);
     return CArrayConcat;
-}());
+}(template_1.CTemplateBase));
 var CGetSize = /** @class */ (function () {
     function CGetSize(scope, valueNode, value) {
         this.value = value;
@@ -3317,6 +3648,16 @@ var CConcatValue = /** @class */ (function () {
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],16:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3360,38 +3701,50 @@ var ArrayForEachResolver = /** @class */ (function () {
     ], ArrayForEachResolver);
     return ArrayForEachResolver;
 }());
-var CArrayForEach = /** @class */ (function () {
+var CArrayForEach = /** @class */ (function (_super) {
+    __extends(CArrayForEach, _super);
     function CArrayForEach(scope, call) {
-        var _this = this;
-        this.variables = [];
-        this.statements = [];
-        this.iteratorFnAccess = null;
-        this.arraySize = '';
-        this.parent = scope;
-        this.func = scope.func;
-        this.root = scope.root;
+        var _this = _super.call(this) || this;
+        _this.variables = [];
+        _this.statements = [];
+        _this.iteratorFnAccess = null;
+        _this.arraySize = '';
+        _this.parent = scope;
+        _this.func = scope.func;
+        _this.root = scope.root;
         var propAccess = call.expression;
         var objType = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = template_1.CodeTemplateFactory.templateToString(new elementaccess_1.CElementAccess(scope, propAccess.expression));
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
-        this.arraySize = objType.isDynamicArray ? this.varAccess + "->size" : objType.capacity + "";
+        _this.varAccess = template_1.CodeTemplateFactory.templateToString(new elementaccess_1.CElementAccess(scope, propAccess.expression));
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        _this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
+        _this.arraySize = objType.isDynamicArray ? _this.varAccess + "->size" : objType.capacity + "";
         var iteratorFunc = call.arguments[0];
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-        this.paramName = iteratorFunc.parameters[0].name.text;
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+        _this.paramName = iteratorFunc.parameters[0].name.text;
         iteratorFunc.body.statements.forEach(function (s) { return _this.statements.push(template_1.CodeTemplateFactory.createForNode(_this, s)); });
-        this.variables.push(new variable_1.CVariable(scope, this.paramName, objType.elementType));
+        _this.variables.push(new variable_1.CVariable(scope, _this.paramName, objType.elementType));
+        return _this;
     }
     CArrayForEach = __decorate([
         template_1.CodeTemplate("\nfor ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n    {variables {   }=> {this};\n}\n    {paramName} = {varAccess}[{iteratorVarName}];\n    {statements {    }=> {this}}\n}\n")
     ], CArrayForEach);
     return CArrayForEach;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],17:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3436,24 +3789,26 @@ var ArrayIndexOfResolver = /** @class */ (function () {
     ], ArrayIndexOfResolver);
     return ArrayIndexOfResolver;
 }());
-var CArrayIndexOf = /** @class */ (function () {
+var CArrayIndexOf = /** @class */ (function (_super) {
+    __extends(CArrayIndexOf, _super);
     function CArrayIndexOf(scope, call) {
-        this.tempVarName = '';
-        this.staticArraySize = '';
-        this.varAccess = null;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.staticArraySize = '';
+        _this.varAccess = null;
         var propAccess = call.expression;
         var objType = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
-            this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.NumberVarType));
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
+            _this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
+            scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
             // Synthesize binary node that represents comparison expression
-            var iteratorIdent = ts.createIdentifier(this.iteratorVarName);
+            var iteratorIdent = ts.createIdentifier(_this.iteratorVarName);
             var arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
             var comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
             iteratorIdent.parent = arrayElement;
@@ -3461,20 +3816,31 @@ var CArrayIndexOf = /** @class */ (function () {
             scope.root.typeHelper.registerSyntheticNode(iteratorIdent, ctypes_1.NumberVarType);
             scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
             scope.root.typeHelper.registerSyntheticNode(comparison, ctypes_1.BooleanVarType);
-            this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
+            _this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
             scope.root.headerFlags.array = true;
         }
+        return _this;
     }
     CArrayIndexOf = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {staticArraySize}; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = 0; {iteratorVarName} < {varAccess}->size; {iteratorVarName}++) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayIndexOf);
     return CArrayIndexOf;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/expressions":5,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],18:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3521,28 +3887,30 @@ var ArrayConcatResolver = /** @class */ (function () {
     ], ArrayConcatResolver);
     return ArrayConcatResolver;
 }());
-var CArrayJoin = /** @class */ (function () {
+var CArrayJoin = /** @class */ (function (_super) {
+    __extends(CArrayJoin, _super);
     function CArrayJoin(scope, call) {
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             var propAccess = call.expression;
             var type = scope.root.typeHelper.getCType(propAccess.expression);
-            this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-            this.arraySize = new elementaccess_1.CArraySize(scope, this.varAccess, type);
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
-            this.arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, this.varAccess, this.iteratorVarName);
-            this.catFuncName = type.elementType == ctypes_1.NumberVarType ? "str_int16_t_cat" : "strcat";
-            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+            _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+            _this.arraySize = new elementaccess_1.CArraySize(scope, _this.varAccess, type);
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
+            _this.arrayElement = new elementaccess_1.CSimpleElementAccess(scope, type, _this.varAccess, _this.iteratorVarName);
+            _this.catFuncName = type.elementType == ctypes_1.NumberVarType ? "str_int16_t_cat" : "strcat";
+            _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             if (!scope.root.memoryManager.variableWasReused(call))
-                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, "char *"));
-            this.calculatedStringLength = new CCalculateStringSize(scope, this.varAccess, this.iteratorVarName, type, call);
+                scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, "char *"));
+            _this.calculatedStringLength = new CCalculateStringSize(scope, _this.varAccess, _this.iteratorVarName, type, call);
             if (call.arguments.length > 0 && propAccess.name.getText() == "join")
-                this.separator = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.separator = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             else
-                this.separator = new literals_1.CString(scope, ',');
+                _this.separator = new literals_1.CString(scope, ',');
             scope.root.headerFlags.malloc = true;
             scope.root.headerFlags.strings = true;
             if (type.isDynamicArray)
@@ -3550,12 +3918,13 @@ var CArrayJoin = /** @class */ (function () {
             if (type.elementType == ctypes_1.NumberVarType)
                 scope.root.headerFlags.str_int16_t_cat = true;
         }
+        return _this;
     }
     CArrayJoin = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {tempVarName} = malloc({calculatedStringLength});\n        assert({tempVarName} != NULL);\n        ((char *){tempVarName})[0] = '\\0';\n        for ({iteratorVarName} = 0; {iteratorVarName} < {arraySize}; {iteratorVarName}++) {\n            if ({iteratorVarName} > 0)\n                strcat((char *){tempVarName}, {separator});\n            {catFuncName}((char *){tempVarName}, {arrayElement});\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayJoin);
     return CArrayJoin;
-}());
+}(template_1.CTemplateBase));
 var CCalculateStringSize = /** @class */ (function () {
     function CCalculateStringSize(scope, varAccess, iteratorVarName, type, node) {
         this.varAccess = varAccess;
@@ -3581,6 +3950,16 @@ var CCalculateStringSize = /** @class */ (function () {
 },{"../../nodes/elementaccess":4,"../../nodes/literals":7,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],19:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3625,24 +4004,26 @@ var ArrayLastIndexOfResolver = /** @class */ (function () {
     ], ArrayLastIndexOfResolver);
     return ArrayLastIndexOfResolver;
 }());
-var CArrayLastIndexOf = /** @class */ (function () {
+var CArrayLastIndexOf = /** @class */ (function (_super) {
+    __extends(CArrayLastIndexOf, _super);
     function CArrayLastIndexOf(scope, call) {
-        this.tempVarName = '';
-        this.staticArraySize = '';
-        this.varAccess = null;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.staticArraySize = '';
+        _this.varAccess = null;
         var propAccess = call.expression;
         var objType = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
-            this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.NumberVarType));
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
+            _this.staticArraySize = objType.isDynamicArray ? "" : objType.capacity + "";
+            scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
             // Synthesize binary node that represents comparison expression
-            var iteratorIdent = ts.createIdentifier(this.iteratorVarName);
+            var iteratorIdent = ts.createIdentifier(_this.iteratorVarName);
             var arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
             var comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
             iteratorIdent.parent = arrayElement;
@@ -3650,20 +4031,31 @@ var CArrayLastIndexOf = /** @class */ (function () {
             scope.root.typeHelper.registerSyntheticNode(iteratorIdent, ctypes_1.NumberVarType);
             scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
             scope.root.typeHelper.registerSyntheticNode(comparison, ctypes_1.BooleanVarType);
-            this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
+            _this.comparison = new expressions_1.CBinaryExpression(scope, comparison);
             scope.root.headerFlags.array = true;
         }
+        return _this;
     }
     CArrayLastIndexOf = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && staticArraySize}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {staticArraySize} - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {#elseif !topExpressionOfStatement}\n        {tempVarName} = -1;\n        for ({iteratorVarName} = {varAccess}->size - 1; {iteratorVarName} >= 0; {iteratorVarName}--) {\n            if ({comparison}) {\n                {tempVarName} = {iteratorVarName};\n                break;\n            }\n        }\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayLastIndexOf);
     return CArrayLastIndexOf;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/expressions":5,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],20:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3711,25 +4103,38 @@ var ArrayPopResolver = /** @class */ (function () {
     ], ArrayPopResolver);
     return ArrayPopResolver;
 }());
-var CArrayPop = /** @class */ (function () {
+var CArrayPop = /** @class */ (function (_super) {
+    __extends(CArrayPop, _super);
     function CArrayPop(scope, call) {
-        this.tempVarName = '';
-        this.varAccess = null;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_pop = true;
+        return _this;
     }
     CArrayPop = __decorate([
         template_1.CodeTemplate("ARRAY_POP({varAccess})")
     ], CArrayPop);
     return CArrayPop;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],21:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3783,29 +4188,31 @@ var ArrayPushResolver = /** @class */ (function () {
     ], ArrayPushResolver);
     return ArrayPushResolver;
 }());
-var CArrayPush = /** @class */ (function () {
+var CArrayPush = /** @class */ (function (_super) {
+    __extends(CArrayPush, _super);
     function CArrayPush(scope, call) {
-        var _this = this;
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.pushValues = [];
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.pushValues = [];
         var propAccess = call.expression;
         var type = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         var args = call.arguments.map(function (a) { return type.elementType === ctypes_1.UniversalVarType ? new typeconvert_1.CAsUniversalVar(scope, a) : template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.pushValues = args.map(function (a) { return new CPushValue(scope, _this.varAccess, a); });
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.NumberVarType));
+        _this.pushValues = args.map(function (a) { return new CPushValue(scope, _this.varAccess, a); });
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
+            scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.NumberVarType));
         }
         scope.root.headerFlags.array = true;
+        return _this;
     }
     CArrayPush = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {pushValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {pushValues}\n{#else}\n    {tempVarName}\n{/if}")
     ], CArrayPush);
     return CArrayPush;
-}());
+}(template_1.CTemplateBase));
 var CPushValue = /** @class */ (function () {
     function CPushValue(scope, varAccess, value) {
         this.varAccess = varAccess;
@@ -3821,6 +4228,16 @@ var CPushValue = /** @class */ (function () {
 },{"../../nodes/elementaccess":4,"../../nodes/typeconvert":10,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],22:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3868,30 +4285,43 @@ var ArraySortResolver = /** @class */ (function () {
     ], ArraySortResolver);
     return ArraySortResolver;
 }());
-var CArrayReverse = /** @class */ (function () {
+var CArrayReverse = /** @class */ (function (_super) {
+    __extends(CArrayReverse, _super);
     function CArrayReverse(scope, call) {
-        this.varAccess = null;
+        var _this = _super.call(this) || this;
+        _this.varAccess = null;
         var propAccess = call.expression;
         var type = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        this.iteratorVar1 = scope.root.symbolsHelper.addIterator(call);
-        this.iteratorVar2 = scope.root.symbolsHelper.addIterator(call);
-        this.tempVarName = scope.root.symbolsHelper.addTemp(call, "temp");
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVar1, ctypes_1.NumberVarType));
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVar2, ctypes_1.NumberVarType));
-        scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type.elementType));
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        _this.iteratorVar1 = scope.root.symbolsHelper.addIterator(call);
+        _this.iteratorVar2 = scope.root.symbolsHelper.addIterator(call);
+        _this.tempVarName = scope.root.symbolsHelper.addTemp(call, "temp");
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVar1, ctypes_1.NumberVarType));
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVar2, ctypes_1.NumberVarType));
+        scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, type.elementType));
+        return _this;
     }
     CArrayReverse = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {iteratorVar1} = 0;\n    {iteratorVar2} = {varAccess}->size - 1;\n    while ({iteratorVar1} < {iteratorVar2}) {\n        {tempVarName} = {varAccess}->data[{iteratorVar1}];\n        {varAccess}->data[{iteratorVar1}] = {varAccess}->data[{iteratorVar2}];\n        {varAccess}->data[{iteratorVar2}] = {tempVarName};\n        {iteratorVar1}++;\n        {iteratorVar2}--;\n    }\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{/if}")
     ], CArrayReverse);
     return CArrayReverse;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],23:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -3940,29 +4370,42 @@ var ArrayShiftResolver = /** @class */ (function () {
     ], ArrayShiftResolver);
     return ArrayShiftResolver;
 }());
-var CArrayShift = /** @class */ (function () {
+var CArrayShift = /** @class */ (function (_super) {
+    __extends(CArrayShift, _super);
     function CArrayShift(scope, call) {
-        this.tempVarName = '';
-        this.varAccess = null;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "value");
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "value");
         var type = scope.root.typeHelper.getCType(propAccess.expression);
-        scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type.elementType));
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, type.elementType));
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_remove = true;
+        return _this;
     }
     CArrayShift = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {tempVarName} = {varAccess}->data[0];\n    ARRAY_REMOVE({varAccess}, 0, 1);\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CArrayShift);
     return CArrayShift;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],24:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4008,63 +4451,66 @@ var ArraySliceResolver = /** @class */ (function () {
     ], ArraySliceResolver);
     return ArraySliceResolver;
 }());
-var CArraySlice = /** @class */ (function () {
+var CArraySlice = /** @class */ (function (_super) {
+    __extends(CArraySlice, _super);
     function CArraySlice(scope, call) {
-        this.tempVarName = '';
-        this.iteratorVarName = '';
-        this.sizeVarName = '';
-        this.startVarName = '';
-        this.endVarName = '';
-        this.simpleSlice = false;
-        this.simpleSliceSize = 0;
-        this.simpleSliceStart = 0;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (this.topExpressionOfStatement)
-            return;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.iteratorVarName = '';
+        _this.sizeVarName = '';
+        _this.startVarName = '';
+        _this.endVarName = '';
+        _this.simpleSlice = false;
+        _this.simpleSliceSize = 0;
+        _this.simpleSliceStart = 0;
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (_this.topExpressionOfStatement)
+            return _this;
         var propAccess = call.expression;
         var varType = scope.root.typeHelper.getCType(propAccess.expression);
         var varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.arraySize = new elementaccess_1.CSimpleElementAccess(scope, varType, varAccess, "length");
-        this.arrayDataAccess = new CArrayDataAccess(scope, varAccess, varType.isDynamicArray);
-        this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
-        scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
+        _this.arraySize = new elementaccess_1.CSimpleElementAccess(scope, varType, varAccess, "length");
+        _this.arrayDataAccess = new CArrayDataAccess(scope, varAccess, varType.isDynamicArray);
+        _this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
+        scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
         var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.startIndexArg = args[0];
-        this.endIndexArg = args.length == 2 ? args[1] : null;
+        _this.startIndexArg = args[0];
+        _this.endIndexArg = args.length == 2 ? args[1] : null;
         var _a = getSliceParams(scope.root.typeHelper, call), start = _a.start, size = _a.size, dynamic = _a.dynamic;
         if (!dynamic) {
-            this.simpleSlice = true;
-            this.simpleSliceStart = start;
-            this.simpleSliceSize = size;
+            _this.simpleSlice = true;
+            _this.simpleSliceStart = start;
+            _this.simpleSliceSize = size;
             var reuseVariable = tryReuseExistingVariable(call);
             if (reuseVariable)
-                this.tempVarName = reuseVariable.getText();
+                _this.tempVarName = reuseVariable.getText();
             else {
-                this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "tmp_slice");
-                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, new ctypes_1.ArrayType(varType.elementType, this.simpleSliceSize, false)));
+                _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "tmp_slice");
+                scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, new ctypes_1.ArrayType(varType.elementType, _this.simpleSliceSize, false)));
             }
-            return;
+            return _this;
         }
-        this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+        _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
         var arrayType = scope.root.typeHelper.getCType(propAccess.expression);
         var tempVarType = new ctypes_1.ArrayType(arrayType.elementType, 0, true);
         if (!scope.root.memoryManager.variableWasReused(call))
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, tempVarType));
-        this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_size");
-        scope.variables.push(new variable_1.CVariable(scope, this.sizeVarName, ctypes_1.NumberVarType));
-        this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_start");
-        scope.variables.push(new variable_1.CVariable(scope, this.startVarName, ctypes_1.NumberVarType));
+            scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, tempVarType));
+        _this.sizeVarName = scope.root.symbolsHelper.addTemp(propAccess, _this.tempVarName + "_size");
+        scope.variables.push(new variable_1.CVariable(scope, _this.sizeVarName, ctypes_1.NumberVarType));
+        _this.startVarName = scope.root.symbolsHelper.addTemp(propAccess, _this.tempVarName + "_start");
+        scope.variables.push(new variable_1.CVariable(scope, _this.startVarName, ctypes_1.NumberVarType));
         if (args.length == 2) {
-            this.endVarName = scope.root.symbolsHelper.addTemp(propAccess, this.tempVarName + "_end");
-            scope.variables.push(new variable_1.CVariable(scope, this.endVarName, ctypes_1.NumberVarType));
+            _this.endVarName = scope.root.symbolsHelper.addTemp(propAccess, _this.tempVarName + "_end");
+            scope.variables.push(new variable_1.CVariable(scope, _this.endVarName, ctypes_1.NumberVarType));
         }
         scope.root.headerFlags.array = true;
+        return _this;
     }
     CArraySlice = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && simpleSlice }\n        for ({iteratorVarName} = 0; {iteratorVarName} < {simpleSliceSize}; {iteratorVarName}++)\n            {tempVarName}[{iteratorVarName}] = {arrayDataAccess}[{iteratorVarName} + {simpleSliceStart}];\n    {#elseif !topExpressionOfStatement && !simpleSlice && !endIndexArg}\n        {sizeVarName} = ({startIndexArg}) < 0 ? -({startIndexArg}) : {arraySize} - ({startIndexArg});\n        {startVarName} = ({startIndexArg}) < 0 ? {arraySize} + ({startIndexArg}) : ({startIndexArg});\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {arrayDataAccess}[{iteratorVarName} + {startVarName}];\n    {#elseif !topExpressionOfStatement && !simpleSlice && endIndexArg}\n        {startVarName} = ({startIndexArg}) < 0 ? {arraySize} + ({startIndexArg}) : ({startIndexArg});\n        {endVarName} = ({endIndexArg}) < 0 ? {arraySize} + ({endIndexArg}) : ({endIndexArg});\n        {sizeVarName} = {endVarName} - {startVarName};\n        ARRAY_CREATE({tempVarName}, {sizeVarName}, {sizeVarName});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {sizeVarName}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {arrayDataAccess}[{iteratorVarName} + {startVarName}];\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    /* slice doesn't have side effects, skipping */\n{#else}\n    {tempVarName}\n{/if}")
     ], CArraySlice);
     return CArraySlice;
-}());
+}(template_1.CTemplateBase));
 var CArrayDataAccess = /** @class */ (function () {
     function CArrayDataAccess(scope, elementAccess, isDynamicArray) {
         this.elementAccess = elementAccess;
@@ -4121,6 +4567,16 @@ function tryReuseExistingVariable(node) {
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],25:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4167,32 +4623,45 @@ var ArraySortResolver = /** @class */ (function () {
     ], ArraySortResolver);
     return ArraySortResolver;
 }());
-var CArraySort = /** @class */ (function () {
+var CArraySort = /** @class */ (function (_super) {
+    __extends(CArraySort, _super);
     function CArraySort(scope, call) {
-        this.varAccess = null;
-        this.arrayOfInts = false;
-        this.arrayOfStrings = false;
+        var _this = _super.call(this) || this;
+        _this.varAccess = null;
+        _this.arrayOfInts = false;
+        _this.arrayOfStrings = false;
         var propAccess = call.expression;
         var type = scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        this.arrayOfInts = type.elementType == ctypes_1.NumberVarType;
-        this.arrayOfStrings = type.elementType == ctypes_1.StringVarType;
-        if (this.arrayOfInts)
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        _this.arrayOfInts = type.elementType == ctypes_1.NumberVarType;
+        _this.arrayOfStrings = type.elementType == ctypes_1.StringVarType;
+        if (_this.arrayOfInts)
             scope.root.headerFlags.array_int16_t_cmp = true;
-        else if (this.arrayOfStrings)
+        else if (_this.arrayOfStrings)
             scope.root.headerFlags.array_str_cmp = true;
+        return _this;
     }
     CArraySort = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && arrayOfInts}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n    {#elseif !topExpressionOfStatement && arrayOfStrings}\n        qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {varAccess}\n{#elseif arrayOfInts}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_int16_t_cmp);\n{#elseif arrayOfStrings}\n    qsort({varAccess}->data, {varAccess}->size, sizeof(*{varAccess}->data), array_str_cmp);\n{/if}")
     ], CArraySort);
     return CArraySort;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],26:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4242,43 +4711,45 @@ var ArraySpliceResolver = /** @class */ (function () {
     ], ArraySpliceResolver);
     return ArraySpliceResolver;
 }());
-var CArraySplice = /** @class */ (function () {
+var CArraySplice = /** @class */ (function (_super) {
+    __extends(CArraySplice, _super);
     function CArraySplice(scope, call) {
-        var _this = this;
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.insertValues = [];
-        this.needsRemove = false;
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.insertValues = [];
+        _this.needsRemove = false;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.startPosArg = args[0];
-        this.deleteCountArg = args[1];
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+        _this.startPosArg = args[0];
+        _this.deleteCountArg = args[1];
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             var type = scope.root.typeHelper.getCType(propAccess.expression);
             if (!scope.root.memoryManager.variableWasReused(call))
-                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, type));
-            this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
-            scope.variables.push(new variable_1.CVariable(scope, this.iteratorVarName, ctypes_1.NumberVarType));
+                scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, type));
+            _this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
+            scope.variables.push(new variable_1.CVariable(scope, _this.iteratorVarName, ctypes_1.NumberVarType));
         }
         if (call.arguments.length > 2) {
-            this.insertValues = args.slice(2).reverse().map(function (a) { return new CInsertValue(scope, _this.varAccess, _this.startPosArg, a); });
+            _this.insertValues = args.slice(2).reverse().map(function (a) { return new CInsertValue(scope, _this.varAccess, _this.startPosArg, a); });
             scope.root.headerFlags.array_insert = true;
         }
         if (call.arguments[1].kind == ts.SyntaxKind.NumericLiteral) {
-            this.needsRemove = call.arguments[1].getText() != "0";
+            _this.needsRemove = call.arguments[1].getText() != "0";
         }
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_insert = true;
         scope.root.headerFlags.array_remove = true;
+        return _this;
     }
     CArraySplice = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        ARRAY_CREATE({tempVarName}, {deleteCountArg}, {deleteCountArg});\n        for ({iteratorVarName} = 0; {iteratorVarName} < {deleteCountArg}; {iteratorVarName}++)\n            {tempVarName}->data[{iteratorVarName}] = {varAccess}->data[{iteratorVarName}+(({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}))];\n        ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n        {insertValues}\n    {/if}\n{/statements}\n{#if topExpressionOfStatement && needsRemove}\n    ARRAY_REMOVE({varAccess}, ({startPosArg}) < 0 ? {varAccess}->size + ({startPosArg}) : ({startPosArg}), {deleteCountArg});\n    {insertValues}\n{#elseif topExpressionOfStatement && !needsRemove}\n    {insertValues}\n{#else}\n    {tempVarName}\n{/if}")
     ], CArraySplice);
     return CArraySplice;
-}());
+}(template_1.CTemplateBase));
 var CInsertValue = /** @class */ (function () {
     function CInsertValue(scope, varAccess, startIndex, value) {
         this.varAccess = varAccess;
@@ -4295,6 +4766,16 @@ var CInsertValue = /** @class */ (function () {
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],27:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4347,44 +4828,59 @@ var ArrayUnshiftResolver = /** @class */ (function () {
     ], ArrayUnshiftResolver);
     return ArrayUnshiftResolver;
 }());
-var CArrayUnshift = /** @class */ (function () {
+var CArrayUnshift = /** @class */ (function (_super) {
+    __extends(CArrayUnshift, _super);
     function CArrayUnshift(scope, call) {
-        var _this = this;
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.unshiftValues = [];
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.unshiftValues = [];
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
         var args = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
-        this.unshiftValues = args.map(function (a) { return new CUnshiftValue(scope, _this.varAccess, a); });
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
-            scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.NumberVarType));
+        _this.unshiftValues = args.map(function (a) { return new CUnshiftValue(scope, _this.varAccess, a); });
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
+            scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.NumberVarType));
         }
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_insert = true;
+        return _this;
     }
     CArrayUnshift = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {unshiftValues}\n        {tempVarName} = {varAccess}->size;\n    {/if}\n{/statements}\n{#if topExpressionOfStatement}\n    {unshiftValues}\n{#else}\n    {tempVarName}\n{/if}")
     ], CArrayUnshift);
     return CArrayUnshift;
-}());
-var CUnshiftValue = /** @class */ (function () {
+}(template_1.CTemplateBase));
+var CUnshiftValue = /** @class */ (function (_super) {
+    __extends(CUnshiftValue, _super);
     function CUnshiftValue(scope, varAccess, value) {
-        this.varAccess = varAccess;
-        this.value = value;
+        var _this = _super.call(this) || this;
+        _this.varAccess = varAccess;
+        _this.value = value;
+        return _this;
     }
     CUnshiftValue = __decorate([
         template_1.CodeTemplate("ARRAY_INSERT({varAccess}, 0, {value});\n")
     ], CUnshiftValue);
     return CUnshiftValue;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],28:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4428,10 +4924,12 @@ var ConsoleLogResolver = /** @class */ (function () {
     ], ConsoleLogResolver);
     return ConsoleLogResolver;
 }());
-var CConsoleLog = /** @class */ (function () {
+var CConsoleLog = /** @class */ (function (_super) {
+    __extends(CConsoleLog, _super);
     function CConsoleLog(scope, node) {
-        this.printfCalls = [];
-        this.printfCall = null;
+        var _this = _super.call(this) || this;
+        _this.printfCalls = [];
+        _this.printfCall = null;
         var printfs = [];
         var printNodes = node.arguments;
         var _loop_1 = function (i_1) {
@@ -4484,15 +4982,16 @@ var CConsoleLog = /** @class */ (function () {
         for (var i_1 = 0; i_1 < printNodes.length; i_1++) {
             _loop_1(i_1);
         }
-        this.printfCalls = printfs.slice(0, -1);
-        this.printfCall = printfs[printfs.length - 1];
+        _this.printfCalls = printfs.slice(0, -1);
+        _this.printfCall = printfs[printfs.length - 1];
         scope.root.headerFlags.printf = true;
+        return _this;
     }
     CConsoleLog = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if printfCalls.length}\n        {printfCalls => {this}\n}\n    {/if}\n{/statements}\n{printfCall}")
     ], CConsoleLog);
     return CConsoleLog;
-}());
+}(template_1.CTemplateBase));
 function processBinaryExpressions(scope, printNode) {
     var type = scope.root.typeHelper.getCType(printNode);
     if (type == ctypes_1.StringVarType && ts.isBinaryExpression(printNode)) {
@@ -4599,6 +5098,16 @@ var CPrintf = /** @class */ (function () {
 },{"../../nodes/assignment":2,"../../nodes/literals":7,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44,"../../types/utils":49}],29:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4640,23 +5149,36 @@ var IsNaNResolver = /** @class */ (function () {
     ], IsNaNResolver);
     return IsNaNResolver;
 }());
-var CIsNaN = /** @class */ (function () {
+var CIsNaN = /** @class */ (function (_super) {
+    __extends(CIsNaN, _super);
     function CIsNaN(scope, call) {
-        this.argument = null;
-        this.argument = new typeconvert_1.CAsUniversalVar(scope, call.arguments[0]);
+        var _this = _super.call(this) || this;
+        _this.argument = null;
+        _this.argument = new typeconvert_1.CAsUniversalVar(scope, call.arguments[0]);
         scope.root.headerFlags.js_var_isnan = true;
         scope.root.headerFlags.js_var_to_number = true;
+        return _this;
     }
     CIsNaN = __decorate([
         template_1.CodeTemplate("js_var_isnan({argument})")
     ], CIsNaN);
     return CIsNaN;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/typeconvert":10,"../../standard":14,"../../template":43,"../../types/ctypes":44}],30:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4694,21 +5216,34 @@ var ParseIntResolver = /** @class */ (function () {
     ], ParseIntResolver);
     return ParseIntResolver;
 }());
-var CParseInt = /** @class */ (function () {
+var CParseInt = /** @class */ (function (_super) {
+    __extends(CParseInt, _super);
     function CParseInt(scope, call) {
-        this.arguments = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
+        var _this = _super.call(this) || this;
+        _this.arguments = call.arguments.map(function (a) { return template_1.CodeTemplateFactory.createForNode(scope, a); });
         scope.root.headerFlags.parse_int16_t = true;
+        return _this;
     }
     CParseInt = __decorate([
         template_1.CodeTemplate("parse_int16_t({arguments {, }=> {this}})")
     ], CParseInt);
     return CParseInt;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../standard":14,"../../template":43,"../../types/ctypes":44}],31:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4747,30 +5282,43 @@ var NumberCallResolver = /** @class */ (function () {
     ], NumberCallResolver);
     return NumberCallResolver;
 }());
-var CNumberCall = /** @class */ (function () {
+var CNumberCall = /** @class */ (function (_super) {
+    __extends(CNumberCall, _super);
     function CNumberCall(scope, call) {
-        this.call = "";
-        this.arg = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+        var _this = _super.call(this) || this;
+        _this.call = "";
+        _this.arg = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
         var type = scope.root.typeHelper.getCType(call.arguments[0]);
         if (type != ctypes_1.NumberVarType && type != ctypes_1.UniversalVarType) {
-            this.call = "str_to_int16_t";
+            _this.call = "str_to_int16_t";
             scope.root.headerFlags.str_to_int16_t = true;
         }
         else if (type == ctypes_1.UniversalVarType) {
-            this.call = "js_var_to_number";
+            _this.call = "js_var_to_number";
             scope.root.headerFlags.js_var_to_number = true;
         }
+        return _this;
     }
     CNumberCall = __decorate([
         template_1.CodeTemplate("\n{#if call}\n    {call}({arg})\n{#else}\n    {arg}\n{/if}")
     ], CNumberCall);
     return CNumberCall;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../standard":14,"../../template":43,"../../types/ctypes":44}],32:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4816,36 +5364,49 @@ var StringCharAtResolver = /** @class */ (function () {
     ], StringCharAtResolver);
     return StringCharAtResolver;
 }());
-var CStringCharAt = /** @class */ (function () {
+var CStringCharAt = /** @class */ (function (_super) {
+    __extends(CStringCharAt, _super);
     function CStringCharAt(scope, call) {
-        this.varAccess = null;
-        this.start = null;
+        var _this = _super.call(this) || this;
+        _this.varAccess = null;
+        _this.start = null;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 0) {
                 console.log("Error in " + call.getText() + ". Parameter expected!");
             }
             else {
-                this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
-                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.StringVarType));
-                this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                    scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.StringVarType));
+                _this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             }
         }
         scope.root.headerFlags.str_substring = true;
+        return _this;
     }
     CStringCharAt = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && start != null}\n        {tempVarName} = str_substring({varAccess}, {start}, ({start}) + 1);\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement && start != null}\n    {tempVarName}\n{#elseif !topExpressionOfStatement && start == null}\n    /* Error: parameter expected for charAt */\n{/if}")
     ], CStringCharAt);
     return CStringCharAt;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],33:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4894,30 +5455,43 @@ var StringCharCodeAtResolver = /** @class */ (function () {
     ], StringCharCodeAtResolver);
     return StringCharCodeAtResolver;
 }());
-var CStringSearch = /** @class */ (function () {
+var CStringSearch = /** @class */ (function (_super) {
+    __extends(CStringSearch, _super);
     function CStringSearch(scope, call) {
+        var _this = _super.call(this) || this;
         var propAccess = call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
-                this.strAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-                this.position = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.strAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                _this.position = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 scope.root.headerFlags.str_char_code_at = true;
             }
             else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
+        return _this;
     }
     CStringSearch = __decorate([
         template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    str_char_code_at({strAccess}, {position})\n{/if}")
     ], CStringSearch);
     return CStringSearch;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],34:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -4963,34 +5537,36 @@ var StringConcatResolver = /** @class */ (function () {
     ], StringConcatResolver);
     return StringConcatResolver;
 }());
-var CStringConcat = /** @class */ (function () {
+var CStringConcat = /** @class */ (function (_super) {
+    __extends(CStringConcat, _super);
     function CStringConcat(scope, call) {
-        var _this = this;
-        this.tempVarName = '';
-        this.varAccess = null;
-        this.concatValues = [];
-        this.sizes = [];
+        var _this = _super.call(this) || this;
+        _this.tempVarName = '';
+        _this.varAccess = null;
+        _this.concatValues = [];
+        _this.sizes = [];
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
-            this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
+            _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
             if (!scope.root.memoryManager.variableWasReused(call))
-                scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, "char *"));
+                scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, "char *"));
             var args = call.arguments.map(function (a) { return ({ node: a, template: template_1.CodeTemplateFactory.createForNode(scope, a) }); });
-            var toConcatenate = [{ node: propAccess.expression, template: this.varAccess }].concat(args);
-            this.sizes = toConcatenate.map(function (a) { return new CGetSize(scope, a.node, a.template); });
-            this.concatValues = toConcatenate.map(function (a) { return new CConcatValue(scope, _this.tempVarName, a.node, a.template); });
+            var toConcatenate = [{ node: propAccess.expression, template: _this.varAccess }].concat(args);
+            _this.sizes = toConcatenate.map(function (a) { return new CGetSize(scope, a.node, a.template); });
+            _this.concatValues = toConcatenate.map(function (a) { return new CConcatValue(scope, _this.tempVarName, a.node, a.template); });
         }
         scope.root.headerFlags.strings = true;
         scope.root.headerFlags.malloc = true;
         scope.root.headerFlags.str_int16_t_cat = true;
+        return _this;
     }
     CStringConcat = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {tempVarName} = malloc({sizes{+}=>{this}} + 1);\n        assert({tempVarName} != NULL);\n        ((char *){tempVarName})[0] = '\\0';\n        {concatValues}\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {tempVarName}\n{/if}")
     ], CStringConcat);
     return CStringConcat;
-}());
+}(template_1.CTemplateBase));
 var CGetSize = /** @class */ (function () {
     function CGetSize(scope, valueNode, value) {
         this.value = value;
@@ -5019,6 +5595,16 @@ var CConcatValue = /** @class */ (function () {
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],35:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5061,30 +5647,43 @@ var StringIndexOfResolver = /** @class */ (function () {
     ], StringIndexOfResolver);
     return StringIndexOfResolver;
 }());
-var CStringIndexOf = /** @class */ (function () {
+var CStringIndexOf = /** @class */ (function (_super) {
+    __extends(CStringIndexOf, _super);
     function CStringIndexOf(scope, call) {
+        var _this = _super.call(this) || this;
         var propAccess = call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
-                this.stringAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-                this.arg1 = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.stringAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                _this.arg1 = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 scope.root.headerFlags.str_pos = true;
             }
             else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
+        return _this;
     }
     CStringIndexOf = __decorate([
         template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    str_pos({stringAccess}, {arg1})\n{/if}")
     ], CStringIndexOf);
     return CStringIndexOf;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],36:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5127,30 +5726,43 @@ var StringIndexOfResolver = /** @class */ (function () {
     ], StringIndexOfResolver);
     return StringIndexOfResolver;
 }());
-var CStringIndexOf = /** @class */ (function () {
+var CStringIndexOf = /** @class */ (function (_super) {
+    __extends(CStringIndexOf, _super);
     function CStringIndexOf(scope, call) {
+        var _this = _super.call(this) || this;
         var propAccess = call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
-                this.stringAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-                this.arg1 = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.stringAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                _this.arg1 = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 scope.root.headerFlags.str_rpos = true;
             }
             else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
+        return _this;
     }
     CStringIndexOf = __decorate([
         template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    str_rpos({stringAccess}, {arg1})\n{/if}")
     ], CStringIndexOf);
     return CStringIndexOf;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],37:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5201,21 +5813,23 @@ var StringMatchResolver = /** @class */ (function () {
     return StringMatchResolver;
 }());
 exports.StringMatchResolver = StringMatchResolver;
-var CStringMatch = /** @class */ (function () {
+var CStringMatch = /** @class */ (function (_super) {
+    __extends(CStringMatch, _super);
     function CStringMatch(scope, call) {
-        this.topExpressionOfStatement = false;
-        this.gcVarName = null;
+        var _this = _super.call(this) || this;
+        _this.topExpressionOfStatement = false;
+        _this.gcVarName = null;
         scope.root.headerFlags.str_substring = true;
         var propAccess = call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
-                this.argAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-                this.regexVar = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
-                this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
-                this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                _this.argAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                _this.regexVar = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
+                _this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
-                    scope.variables.push(new variable_1.CVariable(scope, this.matchArrayVarName, new ctypes_1.ArrayType(ctypes_1.StringVarType, 0, true)));
+                    scope.variables.push(new variable_1.CVariable(scope, _this.matchArrayVarName, new ctypes_1.ArrayType(ctypes_1.StringVarType, 0, true)));
                 scope.root.headerFlags.regex_match = true;
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.gc_iterator = true;
@@ -5223,17 +5837,28 @@ var CStringMatch = /** @class */ (function () {
             else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
+        return _this;
     }
     CStringMatch = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement}\n        {matchArrayVarName} = regex_match({regexVar}, {argAccess});\n    {/if}\n    {#if !topExpressionOfStatement && gcVarName}\n        ARRAY_PUSH({gcVarName}, (void *){matchArrayVarName});\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement}\n    {matchArrayVarName}\n{/if}")
     ], CStringMatch);
     return CStringMatch;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],38:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5282,29 +5907,42 @@ var StringSearchResolver = /** @class */ (function () {
     ], StringSearchResolver);
     return StringSearchResolver;
 }());
-var CStringSearch = /** @class */ (function () {
+var CStringSearch = /** @class */ (function (_super) {
+    __extends(CStringSearch, _super);
     function CStringSearch(scope, call) {
+        var _this = _super.call(this) || this;
         var propAccess = call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 1) {
-                this.argAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-                this.regexVar = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                _this.argAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+                _this.regexVar = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
             }
             else
                 console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
         }
+        return _this;
     }
     CStringSearch = __decorate([
         template_1.CodeTemplate("\n{#if !topExpressionOfStatement}\n    {regexVar}.func({argAccess}, FALSE).index\n{/if}")
     ], CStringSearch);
     return CStringSearch;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../standard":14,"../../template":43,"../../types/ctypes":44}],39:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5350,39 +5988,52 @@ var StringSliceResolver = /** @class */ (function () {
     ], StringSliceResolver);
     return StringSliceResolver;
 }());
-var CStringSlice = /** @class */ (function () {
+var CStringSlice = /** @class */ (function (_super) {
+    __extends(CStringSlice, _super);
     function CStringSlice(scope, call) {
-        this.varAccess = null;
-        this.start = null;
-        this.end = null;
+        var _this = _super.call(this) || this;
+        _this.varAccess = null;
+        _this.start = null;
+        _this.end = null;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 0) {
                 console.log("Error in " + call.getText() + ". At least one parameter expected!");
             }
             else {
-                this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
-                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.StringVarType));
-                this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                    scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.StringVarType));
+                _this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 if (call.arguments.length >= 2)
-                    this.end = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[1]);
+                    _this.end = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[1]);
             }
         }
         scope.root.headerFlags.str_slice = true;
+        return _this;
     }
     CStringSlice = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && start && end}\n        {tempVarName} = str_slice({varAccess}, {start}, {end});\n    {#elseif !topExpressionOfStatement && start && !end}\n        {tempVarName} = str_slice({varAccess}, {start}, str_len({varAccess}));\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement && start}\n    {tempVarName}\n{#elseif !topExpressionOfStatement && !start}\n    /* Error: String.slice requires at least one parameter! */\n{/if}")
     ], CStringSlice);
     return CStringSlice;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],40:[function(require,module,exports){
 (function (global){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -5428,34 +6079,37 @@ var StringSubstringResolver = /** @class */ (function () {
     ], StringSubstringResolver);
     return StringSubstringResolver;
 }());
-var CStringSubstring = /** @class */ (function () {
+var CStringSubstring = /** @class */ (function (_super) {
+    __extends(CStringSubstring, _super);
     function CStringSubstring(scope, call) {
-        this.varAccess = null;
-        this.start = null;
-        this.end = null;
+        var _this = _super.call(this) || this;
+        _this.varAccess = null;
+        _this.start = null;
+        _this.end = null;
         var propAccess = call.expression;
-        this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
-        if (!this.topExpressionOfStatement) {
+        _this.varAccess = new elementaccess_1.CElementAccess(scope, propAccess.expression);
+        _this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        if (!_this.topExpressionOfStatement) {
             if (call.arguments.length == 0) {
                 console.log("Error in " + call.getText() + ". At least one parameter expected!");
             }
             else {
-                this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
+                _this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
-                    scope.variables.push(new variable_1.CVariable(scope, this.tempVarName, ctypes_1.StringVarType));
-                this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+                    scope.variables.push(new variable_1.CVariable(scope, _this.tempVarName, ctypes_1.StringVarType));
+                _this.start = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[0]);
                 if (call.arguments.length >= 2)
-                    this.end = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[1]);
+                    _this.end = template_1.CodeTemplateFactory.createForNode(scope, call.arguments[1]);
             }
         }
         scope.root.headerFlags.str_substring = true;
+        return _this;
     }
     CStringSubstring = __decorate([
         template_1.CodeTemplate("\n{#statements}\n    {#if !topExpressionOfStatement && start && end}\n        {tempVarName} = str_substring({varAccess}, {start}, {end});\n    {#elseif !topExpressionOfStatement && start && !end}\n        {tempVarName} = str_substring({varAccess}, {start}, str_len({varAccess}));\n    {/if}\n{/statements}\n{#if !topExpressionOfStatement && start}\n    {tempVarName}\n{#elseif !topExpressionOfStatement && !start}\n    /* Error: String.substring requires at least one parameter! */\n{/if}")
     ], CStringSubstring);
     return CStringSubstring;
-}());
+}(template_1.CTemplateBase));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"../../nodes/elementaccess":4,"../../nodes/variable":11,"../../standard":14,"../../template":43,"../../types/ctypes":44}],41:[function(require,module,exports){
@@ -5537,6 +6191,7 @@ var SymbolsHelper = /** @class */ (function () {
         };
         this.iteratorVarNames = ['i', 'j', 'k', 'l', 'm', 'n'];
         this.closureVarNames = [];
+        this.scopeVarNames = [];
     }
     SymbolsHelper.prototype.getStructsAndFunctionPrototypes = function () {
         var _this = this;
@@ -5560,16 +6215,13 @@ var SymbolsHelper = /** @class */ (function () {
         }); });
         return [structs];
     };
-    SymbolsHelper.prototype.ensureClosureStruct = function (type, name) {
-        var _this = this;
+    SymbolsHelper.prototype.ensureClosureStruct = function (type, parentFuncType, name) {
         if (!type.structName)
             type.structName = name + "_t";
-        var i = 0;
-        var params = type.closureParams.reduce(function (a, p) {
-            a[p.node.text] = { type: _this.typeHelper.getCType(p.node), order: ++i };
-            return a;
-        }, {});
-        params["func"] = { type: type.getText(true), order: 0 };
+        var params = {
+            func: { type: type.getText(true), order: 0 },
+            scope: { type: parentFuncType.scopeType || "void *", order: 1 }
+        };
         var closureStruct = new ctypes_1.StructType(params);
         var found = this.findStructByType(closureStruct);
         if (!found)
@@ -5669,6 +6321,13 @@ var SymbolsHelper = /** @class */ (function () {
         }
         return this.closureVarNames[node.pos];
     };
+    SymbolsHelper.prototype.getScopeVarName = function (node) {
+        if (!this.scopeVarNames[node.pos]) {
+            var name_2 = this.addTemp(node, "scope");
+            this.scopeVarNames[node.pos] = name_2;
+        }
+        return this.scopeVarNames[node.pos];
+    };
     return SymbolsHelper;
 }());
 exports.SymbolsHelper = SymbolsHelper;
@@ -5678,13 +6337,22 @@ exports.SymbolsHelper = SymbolsHelper;
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 ;
+var CTemplateBase = /** @class */ (function () {
+    function CTemplateBase() {
+    }
+    CTemplateBase.prototype.new = function (scope, node) { };
+    ;
+    CTemplateBase.prototype.resolve = function () { return ""; };
+    return CTemplateBase;
+}());
+exports.CTemplateBase = CTemplateBase;
 var nodeKindTemplates = {};
 var CodeTemplateFactory = /** @class */ (function () {
     function CodeTemplateFactory() {
     }
     CodeTemplateFactory.createForNode = function (scope, node) {
-        return nodeKindTemplates[node.kind] && new nodeKindTemplates[node.kind](scope, node)
-            || "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
+        return nodeKindTemplates[node.kind] ? new nodeKindTemplates[node.kind](scope, node)
+            : "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
     };
     CodeTemplateFactory.templateToString = function (template) {
         return typeof (template) === "string" ? template : template.resolve();
@@ -5694,11 +6362,7 @@ var CodeTemplateFactory = /** @class */ (function () {
 exports.CodeTemplateFactory = CodeTemplateFactory;
 function CodeTemplate(tempString, nodeKind) {
     return function (target) {
-        var newConstructor = function (scope) {
-            var rest = [];
-            for (var _i = 1; _i < arguments.length; _i++) {
-                rest[_i - 1] = arguments[_i];
-            }
+        var newConstructor = function (scope, node) {
             var self = this;
             var retValue = target.apply(self, arguments);
             var _a = processTemplate(tempString, self), code = _a[0], statements = _a[1];
@@ -6013,16 +6677,14 @@ var DictType = /** @class */ (function () {
 }());
 exports.DictType = DictType;
 var FuncType = /** @class */ (function () {
-    function FuncType(returnType, parameterTypes, instanceType, closureParams, needsClosureStruct) {
-        if (parameterTypes === void 0) { parameterTypes = []; }
-        if (instanceType === void 0) { instanceType = null; }
-        if (closureParams === void 0) { closureParams = []; }
-        if (needsClosureStruct === void 0) { needsClosureStruct = false; }
-        this.returnType = returnType;
-        this.parameterTypes = parameterTypes;
-        this.instanceType = instanceType;
-        this.closureParams = closureParams;
-        this.needsClosureStruct = needsClosureStruct;
+    function FuncType(data) {
+        this.returnType = data.returnType || exports.VoidType;
+        this.parameterTypes = data.parameterTypes || [];
+        this.instanceType = data.instanceType || null;
+        this.closureParams = data.closureParams || [];
+        this.needsClosureStruct = data.needsClosureStruct || false;
+        this.scopeType = data.scopeType || null;
+        this.structName = data.structName || null;
     }
     FuncType.getReturnType = function (typeHelper, node) {
         var type = typeHelper.getCType(node);
@@ -6052,7 +6714,10 @@ var FuncType = /** @class */ (function () {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType)
             + "(" + paramTypes.map(function (pt) { return pt ? getTypeBodyText(pt) : exports.PointerVarType; }).join(", ") + ")"
-            + "[[" + this.closureParams.map(function (p) { return p.node.text; }).join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
+            + (this.scopeType ? " scope=" + getTypeBodyText(this.scopeType) : "")
+            + (this.closureParams.length ? " closure" : "")
+            + (this.needsClosureStruct ? "_struct" : "")
+            + (this.closureParams.length ? "={" + this.closureParams.map(function (p) { return (p.assigned ? "*" : "") + p.node.text + "(" + p.refs.map(function (r) { return r.pos; }).join(",") + ")"; }).join(", ") + "}" : "");
     };
     return FuncType;
 }());
@@ -6223,12 +6888,13 @@ var TypeMerger = /** @class */ (function () {
         else if (type1 instanceof ctypes_1.FuncType && type2 instanceof ctypes_1.FuncType) {
             var _b = this.mergeTypes(type1.returnType, type2.returnType), returnType = _b.type, returnTypeReplaced = _b.replaced;
             var _c = this.mergeTypes(type1.instanceType, type2.instanceType), instanceType = _c.type, instanceTypeReplaced = _c.replaced;
+            var _d = this.mergeTypes(type1.scopeType, type2.scopeType), scopeType = _d.type, scopeTypeReplaced = _d.replaced;
             var paramCount = Math.max(type1.parameterTypes.length, type2.parameterTypes.length);
             var paramTypesReplaced = type1.parameterTypes.length !== type2.parameterTypes.length;
-            var paramTypes = [];
+            var parameterTypes = [];
             for (var i_1 = 0; i_1 < paramCount; i_1++) {
-                var _d = this.mergeTypes(type1.parameterTypes[i_1], type2.parameterTypes[i_1]), pType = _d.type, pTypeReplaced = _d.replaced;
-                paramTypes.push(pType);
+                var _e = this.mergeTypes(type1.parameterTypes[i_1], type2.parameterTypes[i_1]), pType = _e.type, pTypeReplaced = _e.replaced;
+                parameterTypes.push(pType);
                 if (pTypeReplaced)
                     paramTypesReplaced = true;
             }
@@ -6238,8 +6904,10 @@ var TypeMerger = /** @class */ (function () {
             for (var i_2 = 0; i_2 < closureParamCount; i_2++) {
                 closureParams.push(type1.closureParams[i_2] || type2.closureParams[i_2]);
             }
-            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced || type1.needsClosureStruct != type2.needsClosureStruct)
-                return { type: this.ensureNoTypeDuplicates(new ctypes_1.FuncType(returnType, paramTypes, instanceType, closureParams, type1.needsClosureStruct || type2.needsClosureStruct)), replaced: true };
+            var needsClosureStructReplaced = type1.needsClosureStruct != type2.needsClosureStruct;
+            var needsClosureStruct = type1.needsClosureStruct || type2.needsClosureStruct;
+            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced)
+                return { type: this.ensureNoTypeDuplicates(new ctypes_1.FuncType({ returnType: returnType, parameterTypes: parameterTypes, instanceType: instanceType, closureParams: closureParams, needsClosureStruct: needsClosureStruct, scopeType: scopeType })), replaced: true };
             else
                 return noChanges;
         }
@@ -6349,7 +7017,7 @@ var TypeResolver = /** @class */ (function () {
         addEquality(ts.isPropertyAssignment, function (n) { return n; }, type(function (n) {
             var type = _this.typeHelper.getCType(n.initializer);
             if (type instanceof ctypes_1.FuncType && type.closureParams.length)
-                return new ctypes_1.FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new ctypes_1.FuncType({ needsClosureStruct: true });
             else
                 return null;
         }));
@@ -6404,7 +7072,7 @@ var TypeResolver = /** @class */ (function () {
         addEquality(utils_1.isEqualsExpression, function (n) { return n.left; }, type(function (n) {
             var type = _this.typeHelper.getCType(n.right);
             if (type instanceof ctypes_1.FuncType && type.closureParams.length)
-                return new ctypes_1.FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new ctypes_1.FuncType({ needsClosureStruct: true });
             else
                 return null;
         }));
@@ -6468,7 +7136,7 @@ var TypeResolver = /** @class */ (function () {
         addEquality(utils_1.isDeleteExpression, function (n) { return n.expression.expression; }, type(function (n) { return new ctypes_1.DictType(ctypes_1.UniversalVarType); }));
         // functions
         addEquality(ts.isCallExpression, function (n) { return n.expression; }, function (n) { return _this.typeHelper.getDeclaration(n); });
-        addEquality(ts.isCallExpression, function (n) { return n.expression; }, type(function (n) { return _this.typeHelper.getCType(n) ? new ctypes_1.FuncType(_this.typeHelper.getCType(n), n.arguments.map(function (arg) { return _this.typeHelper.getCType(arg); })) : null; }));
+        addEquality(ts.isCallExpression, function (n) { return n.expression; }, type(function (n) { return _this.typeHelper.getCType(n) ? new ctypes_1.FuncType({ returnType: _this.typeHelper.getCType(n), parameterTypes: n.arguments.map(function (arg) { return _this.typeHelper.getCType(arg); }) }) : null; }));
         addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return ctypes_1.FuncType.getReturnType(_this.typeHelper, n.expression); }));
         addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.name; });
         addEquality(ts.isParameter, function (n) { return n; }, function (n) { return n.initializer; });
@@ -6485,7 +7153,7 @@ var TypeResolver = /** @class */ (function () {
         for (var i_2 = 0; i_2 < 10; i_2++) {
             _loop_2(i_2);
         }
-        addEquality(utils_1.isThisKeyword, function (n) { return utils_1.findParentFunction(n); }, type(function (n) { return new ctypes_1.FuncType(ctypes_1.VoidType, [], _this.typeHelper.getCType(n)); }));
+        addEquality(utils_1.isThisKeyword, function (n) { return utils_1.findParentFunction(n); }, type(function (n) { return new ctypes_1.FuncType({ instanceType: _this.typeHelper.getCType(n) }); }));
         addEquality(utils_1.isThisKeyword, function (n) { return n; }, type(function (n) { return ctypes_1.FuncType.getInstanceType(_this.typeHelper, utils_1.findParentFunction(n)); }));
         addEquality(utils_1.isMethodCall, function (n) { return n.expression.expression; }, type(function (n) { return standard_1.StandardCallHelper.getObjectType(_this.typeHelper, n); }));
         addEquality(ts.isCallExpression, function (n) { return n; }, type(function (n) { return standard_1.StandardCallHelper.getReturnType(_this.typeHelper, n); }));
@@ -6500,24 +7168,55 @@ var TypeResolver = /** @class */ (function () {
             var objType = _this.typeHelper.getCType(n.parent.expression.expression);
             return objType instanceof ctypes_1.ArrayType && n.parent.expression.name.text == "forEach" ? objType.elementType : null;
         }));
-        addEquality(utils_1.isFunction, function (n) { return n; }, type(function (n) { return new ctypes_1.FuncType(ctypes_1.VoidType, n.parameters.map(function (p) { return _this.typeHelper.getCType(p); })); }));
+        addEquality(utils_1.isFunction, function (n) { return n; }, type(function (n) { return new ctypes_1.FuncType({ parameterTypes: n.parameters.map(function (p) { return _this.typeHelper.getCType(p); }) }); }));
+        var _loop_4 = function (i_4) {
+            addEquality(utils_1.isFunction, function (n) { return n.parameters[i_4]; }, type(function (n) {
+                var type = _this.typeHelper.getCType(n);
+                return type instanceof ctypes_1.FuncType ? type.parameterTypes[i_4] : null;
+            }));
+        };
+        for (var i_4 = 0; i_4 < 10; i_4++) {
+            _loop_4(i_4);
+        }
+        // closures
         addEquality(utils_1.isFunction, function (n) { return n; }, type(function (node) {
-            if (!utils_1.findParentFunction(node.parent))
+            var funcsInFunction = utils_1.getAllFunctionNodesInFunction(node);
+            var scopePropDefs = {};
+            for (var _i = 0, funcsInFunction_1 = funcsInFunction; _i < funcsInFunction_1.length; _i++) {
+                var f = funcsInFunction_1[_i];
+                var fType = _this.typeHelper.getCType(f);
+                if (fType && fType.needsClosureStruct && fType.closureParams) {
+                    for (var _a = 0, _b = fType.closureParams; _a < _b.length; _a++) {
+                        var p = _b[_a];
+                        var decl = _this.typeHelper.getDeclaration(p.node);
+                        scopePropDefs[p.node.text] = { type: _this.typeHelper.getCType(p.node) || ctypes_1.PointerVarType, pos: decl.pos };
+                        if (utils_1.findParentFunction(decl) === node)
+                            _this.typeHelper.registerScopeVariable(decl);
+                    }
+                }
+            }
+            if (Object.keys(scopePropDefs).length > 0)
+                return new ctypes_1.FuncType({ scopeType: new ctypes_1.StructType(scopePropDefs) });
+            else
                 return null;
+        }));
+        addEquality(utils_1.isFunction, function (n) { return n; }, type(function (node) {
             var nodesInFunction = utils_1.getAllNodesUnder(node);
             var closureParams = [];
             nodesInFunction.filter(function (n) { return ts.isIdentifier(n); })
                 .forEach(function (ident) {
                 var identDecl = _this.typeHelper.getDeclaration(ident);
+                // if declaration of identifier is function (i.e. function param), and it is not under node
+                // (then it is defined in a parent func obviously), then add closure params of this parent function
                 if (identDecl && utils_1.isFunction(identDecl) && !utils_1.isUnder(node, identDecl)) {
                     var identDeclType = _this.typeHelper.getCType(identDecl);
-                    var _loop_4 = function (param) {
+                    var _loop_5 = function (param) {
                         if (!closureParams.some(function (p) { return p.node.text === param.node.text; }))
                             closureParams.push(param);
                     };
                     for (var _i = 0, _a = identDeclType.closureParams; _i < _a.length; _i++) {
                         var param = _a[_i];
-                        _loop_4(param);
+                        _loop_5(param);
                     }
                 }
                 else {
@@ -6535,23 +7234,17 @@ var TypeResolver = /** @class */ (function () {
                     }
                 }
             });
-            return new ctypes_1.FuncType(ctypes_1.VoidType, [], null, closureParams);
+            if (closureParams.length)
+                return new ctypes_1.FuncType({ closureParams: closureParams });
+            else
+                return null;
         }));
-        var _loop_5 = function (i_4) {
-            addEquality(utils_1.isFunction, function (n) { return n.parameters[i_4]; }, type(function (n) {
-                var type = _this.typeHelper.getCType(n);
-                return type instanceof ctypes_1.FuncType ? type.parameterTypes[i_4] : null;
-            }));
-        };
-        for (var i_4 = 0; i_4 < 10; i_4++) {
-            _loop_5(i_4);
-        }
         // statements
         addEquality(ts.isVariableDeclaration, function (n) { return n; }, function (n) { return n.initializer; });
         addEquality(ts.isVariableDeclaration, function (n) { return n; }, type(function (n) {
             var type = _this.typeHelper.getCType(n.initializer);
             if (type instanceof ctypes_1.FuncType && type.closureParams.length)
-                return new ctypes_1.FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new ctypes_1.FuncType({ needsClosureStruct: true });
             else
                 return null;
         }));
@@ -6566,9 +7259,9 @@ var TypeResolver = /** @class */ (function () {
             return type instanceof ctypes_1.ArrayType ? type.elementType : null;
         }));
         addEquality(ts.isForInStatement, function (n) { return n.initializer; }, type(ctypes_1.StringVarType));
-        addEquality(ts.isForInStatement, function (n) { return n.expression; }, type(function (n) { return new ctypes_1.DictType(ctypes_1.PointerVarType); }));
+        addEquality(ts.isForInStatement, function (n) { return n.expression; }, type(function (_) { return new ctypes_1.DictType(ctypes_1.PointerVarType); }));
         addEquality(ts.isReturnStatement, function (n) { return n.expression; }, type(function (n) { return ctypes_1.FuncType.getReturnType(_this.typeHelper, utils_1.findParentFunction(n)); }));
-        addEquality(ts.isReturnStatement, function (n) { return utils_1.findParentFunction(n); }, type(function (n) { return _this.typeHelper.getCType(n.expression) ? new ctypes_1.FuncType(_this.typeHelper.getCType(n.expression)) : null; }));
+        addEquality(ts.isReturnStatement, function (n) { return utils_1.findParentFunction(n); }, type(function (n) { return _this.typeHelper.getCType(n.expression) ? new ctypes_1.FuncType({ returnType: _this.typeHelper.getCType(n.expression) }) : null; }));
         addEquality(ts.isCaseClause, function (n) { return n.expression; }, function (n) { return n.parent.parent.expression; });
         addEquality(ts.isCatchClause, function (n) { return n.variableDeclaration; }, type(ctypes_1.StringVarType));
         this.resolveTypes(typeEqualities);
@@ -6614,6 +7307,9 @@ var TypeResolver = /** @class */ (function () {
             if (type instanceof ctypes_1.StructType && Object.keys(type.properties).length == 0)
                 this.typeOfNodeDict[k].type = new ctypes_1.DictType(ctypes_1.PointerVarType);
         }
+        this.allNodes
+            .filter(function (n) { return ts.isFunctionLike(n); })
+            .forEach(function (n) { return console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", _this.typeHelper.getCType(n).getBodyText()); });
         /*
         this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
@@ -6659,6 +7355,7 @@ var TypeHelper = /** @class */ (function () {
         this.objectLiteralsTypes = {};
         this.typeOfNodeDict = {};
         this.typeMerger = new merge_1.TypeMerger();
+        this.scopeVariables = {};
         this.typeResolver = new resolve_1.TypeResolver(typeChecker, allNodes, this, this.typeMerger, this.typeOfNodeDict);
     }
     TypeHelper.prototype.inferTypes = function () {
@@ -6734,6 +7431,16 @@ var TypeHelper = /** @class */ (function () {
             return false;
         n.end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
+    };
+    TypeHelper.prototype.registerScopeVariable = function (decl) {
+        this.scopeVariables[decl.pos] = true;
+    };
+    TypeHelper.prototype.isScopeVariableDeclaration = function (decl) {
+        return this.scopeVariables[decl.pos] || false;
+    };
+    TypeHelper.prototype.isScopeVariable = function (n) {
+        var decl = this.getDeclaration(n);
+        return decl && this.scopeVariables[decl.pos] || false;
     };
     /** Convert ts.Type to CType */
     TypeHelper.prototype.convertType = function (tsType, node) {
@@ -6994,6 +7701,32 @@ function findParentSourceFile(node) {
     return parent;
 }
 exports.findParentSourceFile = findParentSourceFile;
+function getAllFunctionNodesInFunction(node) {
+    var nodes = node.getChildren().slice();
+    var foundFuncNodes = [];
+    var cur;
+    while (cur = nodes.shift()) {
+        if (ts.isFunctionLike(cur)) {
+            foundFuncNodes.push(cur);
+        }
+        else
+            nodes.push.apply(nodes, cur.getChildren());
+    }
+    return foundFuncNodes;
+}
+exports.getAllFunctionNodesInFunction = getAllFunctionNodesInFunction;
+function getAllNodesInFunction(node) {
+    var i = 0;
+    var nodes = node.getChildren();
+    while (i < nodes.length) {
+        if (ts.isFunctionLike(nodes[i]))
+            i++;
+        else
+            nodes.push.apply(nodes, nodes[i++].getChildren());
+    }
+    return nodes;
+}
+exports.getAllNodesInFunction = getAllNodesInFunction;
 function getAllNodesUnder(node) {
     var i = 0;
     var nodes = [node];
@@ -7002,9 +7735,9 @@ function getAllNodesUnder(node) {
     return nodes;
 }
 exports.getAllNodesUnder = getAllNodesUnder;
-function isUnder(refNode, node) {
-    var parent = node;
-    while (parent && parent != refNode)
+function isUnder(container, item) {
+    var parent = item;
+    while (parent && parent != container)
         parent = parent.parent;
     return parent;
 }
