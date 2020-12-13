@@ -26,7 +26,7 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
             let self = this;
             let retValue = target.apply(self, arguments);
             let [code, statements] = processTemplate(tempString, self);
-            if (statements && scope.statements)
+            if (statements)
                 scope.statements.push(statements);
             self.resolve = function () {
                 return code;
@@ -51,15 +51,6 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
 function processTemplate(template: string, args: string | CTemplateBase): [string, string] {
 
     let statements = "";
-    //@ts-ignore
-    if (typeof global !== 'undefined' && ((global as any).process && (global as any).process.env.DEBUG)) {
-        statements = '/* ------------------------- Start [stmt] backtrace ------------------------- */\n'
-            + (new Error()).stack.split('\n').slice(1).map(e => '/* ' + e + ' */').join('\n')
-            + '\n/* ------------------------- End [stmt] backtrace ------------------------- */\n';
-        template = '/* ------------------------- Start [exp] backtrace ------------------------- */\n'
-            + (new Error()).stack.split('\n').slice(1).map(e => '/* ' + e + ' */').join('\n')
-            + '\n/* ------------------------- End [exp] backtrace ------------------------- */\n' + template;
-    }
     if (template.indexOf("{#statements}") > -1) {
         let statementsStartPos = template.indexOf("{#statements}");
         let statementsBodyStartPos = statementsStartPos + "{#statements}".length;
