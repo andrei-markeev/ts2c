@@ -72,9 +72,11 @@ export class CEmptyStatement {
 
 @CodeTemplate(`
 {#if returnTypeAndVar}
-    {returnTypeAndVar} = {expression};
-    {destructors}
-    return {returnTemp};
+    {
+        {returnTypeAndVar} = {expression};
+        {destructors}
+        return {returnTemp};
+    }
 {#else}
     {destructors}
     return {expression};
@@ -89,21 +91,11 @@ export class CReturnStatement extends CTemplateBase {
     public closureParams: { name: string, value: CExpression }[] = [];
     doCheckVarNeeded(scope: IScope, node: ts.ReturnStatement): boolean {
         let s = scope.root.memoryManager.getDestructorsForScope(node);
-        let idents = [];
+        let result = false;
         for (let e of s) {
-            // strings will not be GCed here, thanks to escape analysis
-            if (e.dict || e.array) {
-                idents.push(e.varName);
-            }
+            result = result || new RegExp('\\W' + e.varName + '\\W').test(' ' + node.getFullText() + ' ');
         }
-        function testNode(n: ts.Node): boolean {
-            let totalResult = ts.isIdentifier(n) && idents.indexOf(n.text) != -1;
-            for (let i = 0; i < n.getChildCount(); i++) {
-                totalResult ||= testNode(n.getChildAt(i));
-            }
-            return totalResult;
-        }
-        return testNode(node);
+        return result;
     }
     constructor(scope: IScope, node: ts.ReturnStatement) {
         super();

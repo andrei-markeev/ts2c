@@ -42,6 +42,8 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
                     nodeKindTemplates[nk] = newConstructor;
         }
 
+        newConstructor.prototype = target.prototype;
+
         return newConstructor;
 
     } as ClassDecorator;
