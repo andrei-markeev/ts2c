@@ -38,7 +38,8 @@ export class CVariableDeclaration extends CTemplateBase {
         super();
         const name = varDecl.name.getText();
         const type = scope.root.typeHelper.getCType(varDecl.name);
-        if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer)) {
+        const scopeVar = scope.root.typeHelper.isScopeVariableDeclaration(varDecl);
+        if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer) && !scopeVar) {
             const canUseInitializerList = varDecl.initializer.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
             if (canUseInitializerList) {
                 let s = "{ ";
@@ -54,7 +55,7 @@ export class CVariableDeclaration extends CTemplateBase {
             }
         }
 
-        if (!scope.variables.some(v => v.name === name))
+        if (!scope.variables.some(v => v.name === name) && !scopeVar)
             scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
@@ -212,6 +213,7 @@ export class CVariable extends CTemplateBase {
     private initializer: string;
     public type: CType;
     private typeHelper: TypeHelper;
+    private skip: boolean;
 
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
         super();
@@ -221,8 +223,6 @@ export class CVariable extends CTemplateBase {
             scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof ArrayType && type.isDynamicArray)
             scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
-        else if (type instanceof FuncType && type.closureParams.length)
-            scope.root.symbolsHelper.ensureClosureStruct(type, name);
 
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;
@@ -243,7 +243,7 @@ export class CVariable extends CTemplateBase {
             this.initializer = options.initializer;
         
         this.type = type;
-        this.typeHelper = scope.root.typeHelper
+        this.typeHelper = scope.root.typeHelper;
     }
     typeHasNumber(type: CType) {
         return type == NumberVarType
@@ -254,6 +254,7 @@ export class CVariable extends CTemplateBase {
     }
     resolve() {
         let varString = this.typeHelper.getTypeString(this.type);
+
 
         if (this.arraysToPointers)
             varString = varString.replace(/ \{var\}\[\d+\]/g, "* {var}");

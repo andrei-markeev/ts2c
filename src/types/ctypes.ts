@@ -112,7 +112,15 @@ export class FuncType {
         const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.instanceType : null
     }
+
+    public returnType: CType;
+    public parameterTypes?: CType[];
+    public instanceType: CType;
+    public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[];
+    public needsClosureStruct: boolean;
+    public scopeType: StructType;
     public structName: string;
+
     public getText(forceFuncType:boolean = false) {
         if (this.closureParams.length && !forceFuncType)
             return 'struct ' + this.structName + ' *';
@@ -132,13 +140,32 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         return getTypeBodyText(this.returnType) 
             + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
-            + "[[" + this.closureParams.map(p => p.node.text + "(" + p.refs.map(r => r.pos).join(",") + ")").join(", ") + (this.needsClosureStruct ? " (struct) " : "") + "]]";
+            + (this.scopeType ? " scope=" + getTypeBodyText(this.scopeType) : "")
+            + (this.closureParams.length ? " closure" : "")
+            + (this.needsClosureStruct ? "_struct" : "")
+            + (this.closureParams.length ? "={" + this.closureParams.map(p => (p.assigned ? "*" : "") + p.node.text + "(" + p.refs.map(r => r.pos).join(",") + ")").join(", ") + "}" : "");
     }
     constructor(
-        public returnType: CType,
-        public parameterTypes: CType[] = [],
-        public instanceType: CType = null,
-        public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[] = [],
-        public needsClosureStruct: boolean = false
-    ) { }
+        data: {
+            returnType?: CType,
+            parameterTypes?: CType[],
+            /** type of `new function()` */
+            instanceType?: CType,
+            /** this is used when we can manage without creating context variable */
+            closureParams?: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[],
+            /** if this function is assigned to a variable */
+            needsClosureStruct?: boolean,
+            /** function scope (all local variables), only needed if it has nested closures */
+            scopeType?: StructType,
+            structName?: string
+        }
+    ) {
+        this.returnType = data.returnType || VoidType;
+        this.parameterTypes = data.parameterTypes || [];
+        this.instanceType = data.instanceType || null;
+        this.closureParams = data.closureParams || [];
+        this.needsClosureStruct = data.needsClosureStruct || false;
+        this.scopeType = data.scopeType || null;
+        this.structName = data.structName || null;
+    }
 }

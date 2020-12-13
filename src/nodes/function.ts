@@ -30,6 +30,9 @@ export class CFunctionPrototype extends CTemplateBase {
 {funcDecl}({parameters {, }=> {this}})
 {
     {variables  {    }=> {this};\n}
+    {#if scopeVarAllocator != null}
+        {scopeVarAllocator}
+    {/if}
     {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
 
     {statements {    }=> {this}}
@@ -43,6 +46,7 @@ export class CFunction extends CTemplateBase implements IScope {
     public name: string;
     public parameters: CVariable[] = [];
     public variables: CVariable[] = [];
+    public scopeVarAllocator: CVariableAllocation = null;
     public statements: CExpression[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
@@ -72,7 +76,7 @@ export class CFunction extends CTemplateBase implements IScope {
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         if (funcType.needsClosureStruct) {
-            let closureParamVarName = root.symbolsHelper.getClosureVarName(node);
+            const closureParamVarName = root.symbolsHelper.getClosureVarName(node);
             this.parameters.push(new CVariable(this, closureParamVarName, funcType));
         } else {
             for (let p of funcType.closureParams) {
@@ -82,7 +86,11 @@ export class CFunction extends CTemplateBase implements IScope {
             }
         }
 
-        this.variables = [];
+        if (funcType.scopeType) {
+            const scopeVarName = root.symbolsHelper.getScopeVarName(node);
+            this.variables.push(new CVariable(this, scopeVarName, funcType.scopeType));
+            this.scopeVarAllocator = new CVariableAllocation(this, scopeVarName, funcType.scopeType, node);
+        }
 
         this.gcVarNames = root.memoryManager.getGCVariablesForScope(node);
         for (let gcVarName of this.gcVarNames) {
@@ -116,45 +124,49 @@ export class CFunction extends CTemplateBase implements IScope {
 @CodeTemplate(`
 {#statements}
     {#if isClosureFunc}
+        {closureParams => {scopeVarName}->{key} = {value};\n}
         {allocator}
         {closureVarName}->func = {name};
-        {closureParams => {closureVarName}->{key} = {value};\n}
+        {closureVarName}->scope = {scopeVarName};
     {/if}
 {/statements}
 {expression}`, [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
 export class CFunctionExpression extends CTemplateBase {
     public name: string;
     public expression: string = '';
-    
+
     public isClosureFunc: boolean = false;
     public allocator: CVariableAllocation;
     public closureVarName: string;
     public closureParams: { key: string, value: CExpression }[];
+    public scopeVarName: string;
 
     constructor(scope: IScope, node: ts.FunctionExpression | ts.FunctionDeclaration) {
         super();
-        const func = new CFunction(scope.root, node);
-        scope.root.functions.push(func);
-        this.name = func.name;
 
         const type = scope.root.typeHelper.getCType(node);
         const parentFunc = findParentFunction(node.parent);
-        if (parentFunc && type instanceof FuncType && type.needsClosureStruct) {
+        if (type instanceof FuncType && type.needsClosureStruct && parentFunc) {
+            const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
             this.isClosureFunc = true;
             this.closureVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            scope.root.symbolsHelper.ensureClosureStruct(type, parentFuncType, this.closureVarName);
             if (!scope.root.memoryManager.variableWasReused(node))
                 scope.variables.push(new CVariable(scope, this.closureVarName, type));
             this.allocator = new CVariableAllocation(scope, this.closureVarName, type, node);
-            const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
+
+            /** since we're anyway passing the whole scope object, probably a good idea to move this fragment into @see CFunction */
+            this.scopeVarName = parentFuncType && scope.root.symbolsHelper.getScopeVarName(node);
             const parentClosureVarName = parentFuncType && parentFuncType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
-            this.closureParams = type.closureParams.map(p => {
-                const key = p.node.text;
-                let value = key;
-                if (parentClosureVarName && parentFuncType.closureParams.some(p => p.node.text === key))
-                    value = parentClosureVarName + "->" + key;
-                return { key, value };
-            });
+            const prefix = parentClosureVarName ? parentClosureVarName + "->scope->" : "";
+            const closureParamsFromParent = parentFuncType.closureParams.map(p => ({ key: p.node.text, value: prefix + p.node.text }));
+            const paramsFromParent = type.closureParams.filter(p => scope.root.typeHelper.getDeclaration(p.node).parent === parentFunc).map(p => ({ key: p.node.text, value: p.node.text }));
+            this.closureParams = closureParamsFromParent.concat(paramsFromParent);
         }
+
+        const func = new CFunction(scope.root, node);
+        scope.root.functions.push(func);
+        this.name = func.name;
 
         if (ts.isFunctionExpression(node))
             this.expression = this.closureVarName || func.name;

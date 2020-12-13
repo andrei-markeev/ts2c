@@ -48,7 +48,7 @@ export class CCallExpression extends CTemplateBase {
                 const closureVarName = funcType && funcType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
                 let value = p.node.text;
                 if (closureVarName && funcType.closureParams.some(p => p.node.text === value))
-                    value = closureVarName + "->" + value;
+                    value = closureVarName + "->scope->" + value;
                 this.arguments.push((p.assigned ? "&" : "") + value);
             }
         }

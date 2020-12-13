@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType } from './ctypes';
 import { TypeMerger } from './merge';
+import { TypeResolver } from './resolve';
 
 export interface FieldAssignmentExpression extends ts.BinaryExpression {
     left: ts.PropertyAccessExpression | ts.ElementAccessExpression;
@@ -187,17 +188,44 @@ export function toPrimitive(t: CType) {
     return t === null || t === PointerVarType ? t : t === NumberVarType || t === BooleanVarType ? NumberVarType : StringVarType;
 }
 
-export function findParentFunction(node: ts.Node): ts.FunctionDeclaration {
+export function findParentFunction(node: ts.Node): ts.FunctionDeclaration | ts.FunctionExpression {
     let parentFunc = node;
     while (parentFunc && !isFunction(parentFunc))
         parentFunc = parentFunc.parent;
-    return <ts.FunctionDeclaration>parentFunc;
+    return <ts.FunctionDeclaration | ts.FunctionExpression>parentFunc;
 }
 export function findParentSourceFile(node: ts.Node): ts.SourceFile {
     let parent = node;
     while (!ts.isSourceFile(parent))
         parent = parent.parent;
     return parent;
+}
+
+export function getAllFunctionNodesInFunction(node: ts.FunctionExpression | ts.FunctionDeclaration) {
+    const nodes = [...node.getChildren()];
+    const foundFuncNodes = [];
+    let cur: ts.Node;
+    while (cur = nodes.shift()) {
+        if (ts.isFunctionLike(cur)) {
+            foundFuncNodes.push(cur);
+        } else
+            nodes.push.apply(nodes, cur.getChildren());
+    }
+
+    return foundFuncNodes;
+}
+
+export function getAllNodesInFunction(node: ts.FunctionExpression | ts.FunctionDeclaration) {
+    let i = 0;
+    const nodes = node.getChildren();
+    while (i < nodes.length) {
+        if (ts.isFunctionLike(nodes[i]))
+            i++;
+        else
+            nodes.push.apply(nodes, nodes[i++].getChildren());
+    }
+
+    return nodes;
 }
 
 export function getAllNodesUnder(node: ts.Node) {
@@ -208,9 +236,9 @@ export function getAllNodesUnder(node: ts.Node) {
     return nodes;
 }
 
-export function isUnder(refNode, node) {
-    let parent = node;
-    while (parent && parent != refNode)
+export function isUnder(container: ts.Node, item: ts.Node) {
+    let parent = item;
+    while (parent && parent != container)
         parent = parent.parent;
     return parent;
 }

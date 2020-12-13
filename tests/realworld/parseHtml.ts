@@ -104,5 +104,5 @@ function parseHtml(html) {
 
 }
 
-parseHtml("<html><body></body></html>");
-
+var result = parseHtml("<html><body></body></html>");
+console.log(result);

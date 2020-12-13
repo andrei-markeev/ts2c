@@ -98,12 +98,24 @@ export class TypeHelper {
     }
 
     private static syntheticNodesCounter = 0;
-    public registerSyntheticNode(n, t) {
+    public registerSyntheticNode(n: ts.Node, t: CType) {
         if (!n || !(n.flags & ts.NodeFlags.Synthesized))
             return false;
         
         n.end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
+    }
+
+    private scopeVariables: { [pos: number]: boolean } = {};
+    public registerScopeVariable(decl: ts.NamedDeclaration) {
+        this.scopeVariables[decl.pos] = true;
+    }
+    public isScopeVariableDeclaration(decl: ts.NamedDeclaration) {
+        return this.scopeVariables[decl.pos] || false;
+    }
+    public isScopeVariable(n: ts.Identifier) {
+        const decl = this.getDeclaration(n);
+        return decl && this.scopeVariables[decl.pos] || false;
     }
 
     /** Convert ts.Type to CType */

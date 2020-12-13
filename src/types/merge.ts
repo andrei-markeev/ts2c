@@ -94,12 +94,13 @@ export class TypeMerger {
         else if (type1 instanceof FuncType && type2 instanceof FuncType) {
             const { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
             const { type: instanceType, replaced: instanceTypeReplaced } = this.mergeTypes(type1.instanceType, type2.instanceType);
+            const { type: scopeType, replaced: scopeTypeReplaced } = this.mergeTypes(type1.scopeType, type2.scopeType) as { type: StructType, replaced: boolean };
             const paramCount = Math.max(type1.parameterTypes.length, type2.parameterTypes.length);
             let paramTypesReplaced = type1.parameterTypes.length !== type2.parameterTypes.length;
-            let paramTypes = [];
+            let parameterTypes = [];
             for (let i = 0; i < paramCount; i++) {
                 const { type: pType, replaced: pTypeReplaced } = this.mergeTypes(type1.parameterTypes[i], type2.parameterTypes[i]);
-                paramTypes.push(pType)
+                parameterTypes.push(pType)
                 if (pTypeReplaced)
                     paramTypesReplaced = true;
             }
@@ -110,8 +111,11 @@ export class TypeMerger {
                 closureParams.push(type1.closureParams[i] || type2.closureParams[i]);
             }
 
-            if (returnTypeReplaced || instanceTypeReplaced || paramTypesReplaced || closureParamsReplaced || type1.needsClosureStruct != type2.needsClosureStruct)
-                return { type: this.ensureNoTypeDuplicates(new FuncType(returnType, paramTypes, instanceType, closureParams, type1.needsClosureStruct || type2.needsClosureStruct)), replaced: true };
+            const needsClosureStructReplaced = type1.needsClosureStruct != type2.needsClosureStruct;
+            const needsClosureStruct = type1.needsClosureStruct || type2.needsClosureStruct;
+
+            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType({ returnType, parameterTypes, instanceType, closureParams, needsClosureStruct, scopeType })), replaced: true };
             else
                 return noChanges;
         }

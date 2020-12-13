@@ -15,10 +15,12 @@ export class CElementAccess extends CTemplateBase {
         super();
         let type: CType = null;
         let elementAccess: CExpression = null;
-        let argumentExpression: CExpression = null
+        let argumentExpression: CExpression = null;
+        let isScopeVariable: boolean = false;
 
         if (ts.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
+            isScopeVariable = scope.root.typeHelper.isScopeVariable(node);
             elementAccess = node.text;
             if (isInBoolContext(node) && type instanceof ArrayType && !type.isDynamicArray) {
                 argumentExpression = "0";
@@ -30,9 +32,10 @@ export class CElementAccess extends CTemplateBase {
         } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
             let propAccess = <ts.PropertyAccessExpression>node;
             type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (ts.isIdentifier(propAccess.expression))
+            if (ts.isIdentifier(propAccess.expression)) {
                 elementAccess = propAccess.expression.text;
-            else
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(propAccess.expression);
+            } else
                 elementAccess = new CElementAccess(scope, propAccess.expression);
 
             if (type === UniversalVarType) {
@@ -47,9 +50,10 @@ export class CElementAccess extends CTemplateBase {
             let elemAccess = <ts.ElementAccessExpression>node;
             type = scope.root.typeHelper.getCType(elemAccess.expression);
 
-            if (ts.isIdentifier(elemAccess.expression))
+            if (ts.isIdentifier(elemAccess.expression)) {
                 elementAccess = elemAccess.expression.text;
-            else
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(elemAccess.expression);
+            } else
                 elementAccess = new CElementAccess(scope, elemAccess.expression);
 
             if (type === UniversalVarType)
@@ -70,10 +74,12 @@ export class CElementAccess extends CTemplateBase {
         const parentFunc = findParentFunction(node);
         const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
         if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
-            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(elementAccess);
+            elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->scope->" + CodeTemplateFactory.templateToString(elementAccess);
         else if (parentFuncType && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
             elementAccess = "*" + CodeTemplateFactory.templateToString(elementAccess);
-        
+        else if (isScopeVariable)
+            elementAccess = scope.root.symbolsHelper.getScopeVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(elementAccess);
+
         this.simpleAccessor = new CSimpleElementAccess(scope, type, elementAccess, argumentExpression);
     }
 }

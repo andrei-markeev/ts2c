@@ -1,8 +1,8 @@
 import * as ts from 'typescript';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isNumberOp, isIntegerOp, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, findParentSourceFile, getAllNodesUnder, isFieldAssignment } from './utils';
-import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, VoidType, getTypeBodyText } from './ctypes';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction } from './utils';
+import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, VoidType } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
 import { TypeHelper } from './typehelper';
@@ -16,7 +16,7 @@ export class TypeResolver {
     constructor(
         private typeChecker: ts.TypeChecker,
         private allNodes: ts.Node[],
-        private typeHelper: TypeHelper,
+        public typeHelper: TypeHelper,
         private typeMerger: TypeMerger,
         private typeOfNodeDict: { [id: string]: { type: CType } }
     ) { }
@@ -60,7 +60,7 @@ export class TypeResolver {
         addEquality(ts.isPropertyAssignment, n => n, type(n => {
             const type = this.typeHelper.getCType(n.initializer);
             if (type instanceof FuncType && type.closureParams.length)
-                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new FuncType({ needsClosureStruct: true });
             else
                 return null;
         }))
@@ -113,7 +113,7 @@ export class TypeResolver {
         addEquality(isEqualsExpression, n => n.left, type(n => {
             const type = this.typeHelper.getCType(n.right);
             if (type instanceof FuncType && type.closureParams.length)
-                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new FuncType({ needsClosureStruct: true });
             else
                 return null;
         }));
@@ -173,10 +173,10 @@ export class TypeResolver {
         addEquality(ts.isTypeOfExpression, n => n, type(StringVarType));
         addEquality(isDeleteExpression, n => n, type(BooleanVarType));
         addEquality(isDeleteExpression, n => n.expression.expression, type(n => new DictType(UniversalVarType)));
-    
+
         // functions
         addEquality(ts.isCallExpression, n => n.expression, n => this.typeHelper.getDeclaration(n));
-        addEquality(ts.isCallExpression, n => n.expression, type(n => this.typeHelper.getCType(n) ? new FuncType(this.typeHelper.getCType(n), n.arguments.map(arg => this.typeHelper.getCType(arg))) : null));
+        addEquality(ts.isCallExpression, n => n.expression, type(n => this.typeHelper.getCType(n) ? new FuncType({ returnType: this.typeHelper.getCType(n), parameterTypes: n.arguments.map(arg => this.typeHelper.getCType(arg)) }) : null));
         addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this.typeHelper, n.expression)));
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);
@@ -190,29 +190,55 @@ export class TypeResolver {
                 const func = this.typeHelper.getDeclaration(n.expression);
                 return func && ts.isFunctionDeclaration(func) ? func.parameters[i] : null
             });
-        addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType(VoidType, [], this.typeHelper.getCType(n))));
+        addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType({ instanceType: this.typeHelper.getCType(n) })));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
-    
+
         addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this.typeHelper, n)));
         addEquality(ts.isCallExpression, n => n, type(n => StandardCallHelper.getReturnType(this.typeHelper, n)));
         for (let i = 0; i < 10; i++)
             addEquality(ts.isCallExpression, n => n.arguments[i], type(n => isLiteral(n.arguments[i]) ? null : StandardCallHelper.getArgumentTypes(this.typeHelper, n)[i]));
-            
+
         // crutch for callback argument type in foreach
         addEquality(isFunctionArgInMethodCall, n => n.parameters[0], type(n => {
             const objType = this.typeHelper.getCType(n.parent.expression.expression);
             return objType instanceof ArrayType && n.parent.expression.name.text == "forEach" ? objType.elementType : null;
         }));
 
-        addEquality(isFunction, n => n, type(n => new FuncType(VoidType, n.parameters.map(p => this.typeHelper.getCType(p)))));
+        addEquality(isFunction, n => n, type(n => new FuncType({ parameterTypes: n.parameters.map(p => this.typeHelper.getCType(p)) })));
+        for (let i = 0; i < 10; i++)
+            addEquality(isFunction, n => n.parameters[i], type(n => {
+                const type = this.typeHelper.getCType(n);
+                return type instanceof FuncType ? type.parameterTypes[i] : null
+            }));
+
+        // closures
         addEquality(isFunction, n => n, type(node => {
-            if (!findParentFunction(node.parent))
+            const funcsInFunction = getAllFunctionNodesInFunction(node);
+            const scopePropDefs = {};
+            for (const f of funcsInFunction) {
+                const fType = this.typeHelper.getCType(f) as FuncType;
+                if (fType && fType.needsClosureStruct && fType.closureParams) {
+                    for (const p of fType.closureParams) {
+                        const decl = this.typeHelper.getDeclaration(p.node);
+                        scopePropDefs[p.node.text] = { type: this.typeHelper.getCType(p.node) || PointerVarType, pos: decl.pos };
+                        if (findParentFunction(decl) === node)
+                            this.typeHelper.registerScopeVariable(decl);
+                    }
+                }
+            }
+            if (Object.keys(scopePropDefs).length > 0)
+                return new FuncType({ scopeType: new StructType(scopePropDefs) });
+            else
                 return null;
+        }));
+        addEquality(isFunction, n => n, type(node => {
             const nodesInFunction = getAllNodesUnder(node);
             const closureParams = [];
             nodesInFunction.filter(n => ts.isIdentifier(n))
                 .forEach((ident: ts.Identifier) => {
                     const identDecl = this.typeHelper.getDeclaration(ident);
+                    // if declaration of identifier is function (i.e. function param), and it is not under node
+                    // (then it is defined in a parent func obviously), then add closure params of this parent function
                     if (identDecl && isFunction(identDecl) && !isUnder(node, identDecl)) {
                         const identDeclType = this.typeHelper.getCType(identDecl) as FuncType;
                         for (let param of identDeclType.closureParams) {
@@ -236,21 +262,19 @@ export class TypeResolver {
                     }
                 });
 
-            return new FuncType(VoidType, [], null, closureParams);
+            if (closureParams.length)
+                return new FuncType({ closureParams });
+            else
+                return null;
 
         }));
-        for (let i = 0; i < 10; i++)
-            addEquality(isFunction, n => n.parameters[i], type(n => {
-                const type = this.typeHelper.getCType(n);
-                return type instanceof FuncType ? type.parameterTypes[i] : null
-            }));
 
         // statements
         addEquality(ts.isVariableDeclaration, n => n, n => n.initializer);
         addEquality(ts.isVariableDeclaration, n => n, type(n => {
             const type = this.typeHelper.getCType(n.initializer);
             if (type instanceof FuncType && type.closureParams.length)
-                return new FuncType(type.returnType, type.parameterTypes, type.instanceType, type.closureParams, true);
+                return new FuncType({ needsClosureStruct: true });
             else
                 return null;
         }))
@@ -265,9 +289,9 @@ export class TypeResolver {
             return type instanceof ArrayType ? type.elementType : null
         }));
         addEquality(ts.isForInStatement, n => n.initializer, type(StringVarType));
-        addEquality(ts.isForInStatement, n => n.expression, type(n => new DictType(PointerVarType)));
+        addEquality(ts.isForInStatement, n => n.expression, type(_ => new DictType(PointerVarType)));
         addEquality(ts.isReturnStatement, n => n.expression, type(n => FuncType.getReturnType(this.typeHelper, findParentFunction(n))));
-        addEquality(ts.isReturnStatement, n => findParentFunction(n), type(n => this.typeHelper.getCType(n.expression) ? new FuncType(this.typeHelper.getCType(n.expression)) : null));
+        addEquality(ts.isReturnStatement, n => findParentFunction(n), type(n => this.typeHelper.getCType(n.expression) ? new FuncType({ returnType: this.typeHelper.getCType(n.expression) }) : null));
         addEquality(ts.isCaseClause, n => n.expression, n => n.parent.parent.expression);
         addEquality(ts.isCatchClause, n => n.variableDeclaration, type(StringVarType));
 
@@ -319,6 +343,10 @@ export class TypeResolver {
                 this.typeOfNodeDict[k].type = new DictType(PointerVarType);
         }
 
+        this.allNodes
+            .filter(n => ts.isFunctionLike(n))
+            .forEach(n => console.log(n.getText(), "|", ts.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
+
         /*
         this.allNodes
             .filter(n => !ts.isToken(n) && !ts.isBlock(n) && n.kind != ts.SyntaxKind.SyntaxList)
@@ -327,7 +355,7 @@ export class TypeResolver {
 
     }
 
-    public setNodeType(n, t) {
+    public setNodeType(n: ts.Node, t: CType) {
         if (n && t) {
             const key = n.pos + "_" + n.end;
             if (!this.typeOfNodeDict[key])

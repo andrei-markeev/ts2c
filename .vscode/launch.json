@@ -8,15 +8,8 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/numbers/unary3.ts"],
+            "args": ["tests/funcs/nested9.ts"],
             "cwd": "${workspaceRoot}",
-            "sourceMaps": true
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Calc conformance",
-            "program": "${workspaceFolder}/calc_conformance.js",
             "sourceMaps": true
         }
     ]

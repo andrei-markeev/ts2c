@@ -3,7 +3,7 @@ import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, Fu
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
@@ -41,13 +41,13 @@ export class MemoryManager {
                     {
                         let type = this.typeHelper.getCType(node);
                         if (type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType)
-                            this.scheduleNodeDisposal(node, type !== UniversalVarType);
+                            this.scheduleNodeDisposal(node, { canReuse: type !== UniversalVarType });
                     }
                     break;
                 case ts.SyntaxKind.ObjectLiteralExpression:
                     {
                         let type = this.typeHelper.getCType(node);
-                        this.scheduleNodeDisposal(node, type !== UniversalVarType);
+                        this.scheduleNodeDisposal(node, { canReuse: type !== UniversalVarType });
                     }
                     break;
                 case ts.SyntaxKind.BinaryExpression:
@@ -65,7 +65,7 @@ export class MemoryManager {
                                     n = n.parent;
                                 const isInConsoleLog = ts.isCallExpression(n.parent) && n.parent.expression.getText() == "console.log";
                                 if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
-                                    this.scheduleNodeDisposal(binExpr, false);
+                                    this.scheduleNodeDisposal(binExpr, { canReuse: false });
                             }
                         }
 
@@ -90,12 +90,12 @@ export class MemoryManager {
                 case ts.SyntaxKind.FunctionExpression:
                 case ts.SyntaxKind.FunctionDeclaration:
                     {
+                        const type = this.typeHelper.getCType(node);
                         const parentFunc = findParentFunction(node.parent);
-                        if (parentFunc) {
-                            const type = this.typeHelper.getCType(node);
-                            if (type instanceof FuncType && type.needsClosureStruct)
-                                this.scheduleNodeDisposal(node);
-                        }
+                        if (parentFunc && type instanceof FuncType && type.needsClosureStruct)
+                            this.scheduleNodeDisposal(node, { subtype: "closure" });
+                        else if (type instanceof FuncType && type.scopeType)
+                            this.scheduleNodeDisposal(node, { subtype: "scope", canReuse: false });
                     }
                     break;
             }
@@ -193,10 +193,12 @@ export class MemoryManager {
         return null;
     }
 
-    private scheduleNodeDisposal(heapNode: ts.Node, canReuse: boolean = true) {
+    private scheduleNodeDisposal(heapNode: ts.Node, options?: { canReuse?: boolean, subtype?: string }) {
+
+        options = { canReuse: true, subtype: null, ...options };
 
         let isTemp = true;
-        if (canReuse) {
+        if (options.canReuse) {
             let existingVariable = this.tryReuseExistingVariable(heapNode);
             isTemp = existingVariable == null;
             if (!isTemp) {
@@ -207,17 +209,18 @@ export class MemoryManager {
         }
 
         let varFuncNode = findParentFunction(heapNode);
-        var topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
-        var isSimple = true;
+        let topScope: number | "main" = varFuncNode && varFuncNode.pos + 1 || "main"
+        let isSimple = true;
         if (this.isInsideLoop(heapNode))
             isSimple = false;
 
-        var scopeTree = {};
+        let scopeTree = {};
         scopeTree[topScope] = true;
 
-        var queue = [heapNode];
-        queue.push();
-        var visited = {};
+        let queue = [heapNode];
+        if (options.subtype === "scope")
+            queue = this.getStartNodesForTrekingFunctionScope(<ts.FunctionDeclaration | ts.FunctionExpression>heapNode);
+        let visited = {};
         while (queue.length > 0) {
             let node = queue.shift();
             if (visited[node.pos + "_" + node.end])
@@ -228,6 +231,8 @@ export class MemoryManager {
                 const decl = this.typeHelper.getDeclaration(node);
                 if (decl)
                     refs = this.references[decl.pos] || refs;
+            } else if (ts.isFunctionDeclaration(node)) {
+                refs = this.references[node.pos] || refs;
             }
             let returned = false;
             for (let ref of refs) {
@@ -262,10 +267,14 @@ export class MemoryManager {
                     console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");
                     queue.push(ref.parent);
                 }
+                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ParenthesizedExpression) {
+                    console.log(heapNode.getText() + " -> Found parenthesized expression.");
+                    queue.push(ref.parent);
+                }
 
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     let call = <ts.CallExpression>ref.parent;
-                    if (call.expression.kind == ts.SyntaxKind.Identifier && call.expression.pos == ref.pos) {
+                    if (ts.isIdentifier(call.expression) && call.expression === ref) {
                         console.log(heapNode.getText() + " -> Found function call!");
                         if (topScope !== "main") {
                             let funcNode = findParentFunction(call);
@@ -277,6 +286,10 @@ export class MemoryManager {
                             scopeTree[topScope] = targetScope;
                         }
                         this.addIfFoundInAssignment(heapNode, call, queue);
+                    } else if (call.expression === ref) {
+                        console.log(heapNode.getText() + " -> Found function expression call!");
+                        isSimple = false;
+                        queue.push(call);
                     } else {
                         const decl = this.typeHelper.getDeclaration(call.expression);
                         if (!decl) {
@@ -343,8 +356,9 @@ export class MemoryManager {
         else if (ts.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
         else if (isFunction(heapNode)) {
-            const maybePropertyName = ts.isPropertyAssignment(heapNode.parent) && ts.isIdentifier(heapNode.parent.name) ? heapNode.parent.name.text + "_closure" : "closure";
-            const name = heapNode.name ? heapNode.name.text + "_closure" : maybePropertyName;
+            const suffix = options.subtype || "tmp";
+            const maybePropertyName = ts.isPropertyAssignment(heapNode.parent) && ts.isIdentifier(heapNode.parent.name) ? heapNode.parent.name.text + "_" + suffix : suffix;
+            const name = heapNode.name ? heapNode.name.text + "_" + suffix : maybePropertyName;
             varName = this.symbolsHelper.addTemp(findParentSourceFile(heapNode), name);
         } else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
@@ -375,6 +389,18 @@ export class MemoryManager {
             this.scopes[sc].push(scopeInfo);
         }
 
+    }
+
+    private getStartNodesForTrekingFunctionScope(func: ts.FunctionDeclaration | ts.FunctionExpression) {
+        const allNodesInFunc = getAllNodesInFunction(func);
+        const startNodes = [];
+        for (const node of allNodesInFunc) {
+            const type = this.typeHelper.getCType(node);
+            if (type instanceof FuncType && type.needsClosureStruct)
+                startNodes.push(node);
+        }
+
+        return startNodes;
     }
 
     private addIfFoundInAssignment(varIdent: ts.Node, ref: ts.Node, queue: ts.Node[]): boolean {

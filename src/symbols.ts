@@ -34,15 +34,13 @@ export class SymbolsHelper {
         return [structs];
     }
 
-    public ensureClosureStruct(type: FuncType, name: string) {
+    public ensureClosureStruct(type: FuncType, parentFuncType: FuncType, name: string) {
         if (!type.structName)
             type.structName = name + "_t";
-        let i = 0;
-        const params = type.closureParams.reduce((a, p) => {
-            a[p.node.text] = { type: this.typeHelper.getCType(p.node), order: ++i };
-            return a;
-        }, {});
-        params["func"] = { type: type.getText(true), order: 0 };
+        const params = {
+            func: { type: type.getText(true), order: 0 },
+            scope: { type: parentFuncType.scopeType || "void *", order: 1 }
+        };
         const closureStruct = new StructType(params);
         let found = this.findStructByType(closureStruct);
         if (!found)
@@ -169,6 +167,15 @@ export class SymbolsHelper {
             this.closureVarNames[node.pos] = name;
         }
         return this.closureVarNames[node.pos];
+    }
+
+    private scopeVarNames: { [pos: number]: string } = [];
+    public getScopeVarName(node: ts.Node) {
+        if (!this.scopeVarNames[node.pos]) {
+            const name = this.addTemp(node, "scope");
+            this.scopeVarNames[node.pos] = name;
+        }
+        return this.scopeVarNames[node.pos];
     }
 
 }
