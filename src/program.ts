@@ -132,7 +132,7 @@ class HeaderFlags {
     || headerFlags.js_var_dict_inc}
     #include <assert.h>
 {/if}
-{#if headerFlags.printf || headerFlags.parse_int16_t}
+{#if headerFlags.printf || headerFlags.parse_int16_t || headerFlags.str_int16_t_cat}
     #include <stdio.h>
 {/if}
 {#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
@@ -1064,6 +1064,7 @@ export class CProgram implements IScope {
             let gcType = "ARRAY(void *)";
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
             if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
+            if (gcVarName.indexOf("_dicts") > -1) gcType = "ARRAY(DICT(void *))";
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 

@@ -247,13 +247,21 @@ export class MemoryManager {
                 if (!parentNode)
                     topScope = "main";
 
-                if (ref.kind == ts.SyntaxKind.PropertyAccessExpression) {
-                    let elemAccess = <ts.PropertyAccessExpression>ref;
-                    while (elemAccess.expression.kind == ts.SyntaxKind.PropertyAccessExpression)
-                        elemAccess = <ts.PropertyAccessExpression>elemAccess.expression;
-                    if (elemAccess.expression.kind == ts.SyntaxKind.Identifier) {
+                if (ts.isElementAccessExpression(ref) || ts.isPropertyAccessExpression(ref)) {
+                    let elemAccess = ref;
+                    while (ts.isElementAccessExpression(elemAccess.expression) || ts.isPropertyAccessExpression(elemAccess.expression))
+                        elemAccess = elemAccess.expression;
+                    if (ts.isIdentifier(elemAccess.expression)) {
                         console.log(heapNode.getText() + " -> Tracking parent variable: " + elemAccess.expression.getText() + ".");
                         queue.push({ node: elemAccess.expression, nodeFunc });
+                    }
+                }
+
+                if (ref.parent && ts.isElementAccessExpression(ref.parent) && ref.parent.argumentExpression === ref) {
+                    const type = this.typeHelper.getCType(ref.parent.expression);
+                    if (type instanceof DictType) {
+                        console.log(heapNode.getText() + " -> Property of dictionary " + ref.parent.expression.getText() + ".");
+                        queue.push({ node: ref.parent.expression, nodeFunc });
                     }
                 }
 
