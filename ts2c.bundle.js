@@ -195,19 +195,19 @@ var MemoryManager = /** @class */ (function () {
                 heapNode = existingVariable;
             }
         }
-        var varFuncNode = utils_1.findParentFunction(heapNode);
-        var topScope = varFuncNode && varFuncNode.pos + 1 || "main";
+        var topScopeNode = utils_1.findParentFunction(heapNode);
+        var topScope = topScopeNode && topScopeNode.pos + 1 || "main";
         var isSimple = true;
         if (this.isInsideLoop(heapNode))
             isSimple = false;
         var scopeTree = {};
         scopeTree[topScope] = true;
-        var queue = [heapNode];
+        var queue = [{ node: heapNode, nodeFunc: null }];
         if (options.subtype === "scope")
-            queue = this.getStartNodesForTrekingFunctionScope(heapNode);
+            queue = this.getStartNodesForTrekingFunctionScope(heapNode).map(function (n) { return ({ node: n, nodeFunc: null }); });
         var visited = {};
         while (queue.length > 0) {
-            var node = queue.shift();
+            var _a = queue.shift(), node = _a.node, nodeFunc = _a.nodeFunc;
             if (visited[node.pos + "_" + node.end])
                 continue;
             var refs = [node];
@@ -232,7 +232,7 @@ var MemoryManager = /** @class */ (function () {
                         elemAccess = elemAccess.expression;
                     if (elemAccess.expression.kind == ts.SyntaxKind.Identifier) {
                         console.log(heapNode.getText() + " -> Tracking parent variable: " + elemAccess.expression.getText() + ".");
-                        queue.push(elemAccess.expression);
+                        queue.push({ node: elemAccess.expression, nodeFunc: nodeFunc });
                     }
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
@@ -244,15 +244,15 @@ var MemoryManager = /** @class */ (function () {
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.PropertyAssignment) {
                     console.log(heapNode.getText() + " -> Detected passing to object literal: " + ref.parent.getText() + ".");
-                    queue.push(ref.parent.parent);
+                    queue.push({ node: ref.parent.parent, nodeFunc: nodeFunc });
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.ArrayLiteralExpression) {
                     console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");
-                    queue.push(ref.parent);
+                    queue.push({ node: ref.parent, nodeFunc: nodeFunc });
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.ParenthesizedExpression) {
                     console.log(heapNode.getText() + " -> Found parenthesized expression.");
-                    queue.push(ref.parent);
+                    queue.push({ node: ref.parent, nodeFunc: nodeFunc });
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
                     var call = ref.parent;
@@ -261,18 +261,25 @@ var MemoryManager = /** @class */ (function () {
                         if (topScope !== "main") {
                             var funcNode = utils_1.findParentFunction(call);
                             topScope = funcNode && funcNode.pos + 1 || "main";
-                            var targetScope = node.parent.pos + 1 + "";
+                            var targetScope = nodeFunc && nodeFunc.pos + 1 + "" || "none";
                             isSimple = false;
                             if (scopeTree[targetScope])
                                 delete scopeTree[targetScope];
                             scopeTree[topScope] = targetScope;
                         }
-                        this.addIfFoundInAssignment(heapNode, call, queue);
+                        if (ts.isReturnStatement(call.parent) && !returned) {
+                            queue.push({ node: ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name, nodeFunc: parentNode });
+                            console.log(heapNode.getText() + " -> Found variable returned from the function!");
+                            returned = true;
+                            isSimple = false;
+                        }
+                        else
+                            this.addIfFoundInAssignment(heapNode, call, queue, nodeFunc);
                     }
                     else if (call.expression === ref) {
                         console.log(heapNode.getText() + " -> Found function expression call!");
                         isSimple = false;
-                        queue.push(call);
+                        queue.push({ node: call, nodeFunc: nodeFunc });
                     }
                     else {
                         var decl = this.typeHelper.getDeclaration(call.expression);
@@ -282,7 +289,7 @@ var MemoryManager = /** @class */ (function () {
                                 var standardCallEscapeNode = standard_1.StandardCallHelper.getEscapeNode(this.typeHelper, call);
                                 if (standardCallEscapeNode) {
                                     console.log(heapNode.getText() + " escapes to '" + standardCallEscapeNode.getText() + "' via standard call '" + call.getText() + "'.");
-                                    queue.push(standardCallEscapeNode);
+                                    queue.push({ node: standardCallEscapeNode, nodeFunc: nodeFunc });
                                 }
                             }
                             else {
@@ -296,11 +303,11 @@ var MemoryManager = /** @class */ (function () {
                                 if (call.arguments[i_1].pos <= ref.pos && call.arguments[i_1].end >= ref.end) {
                                     if (funcDecl.pos + 1 == topScope) {
                                         console.log(heapNode.getText() + " -> Found recursive call with parameter " + funcDecl.parameters[i_1].name.getText());
-                                        queue.push(funcDecl.name);
+                                        queue.push({ node: funcDecl.name, nodeFunc: nodeFunc });
                                     }
                                     else {
                                         console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i_1].name.getText());
-                                        queue.push(funcDecl.parameters[i_1].name);
+                                        queue.push({ node: funcDecl.parameters[i_1].name, nodeFunc: nodeFunc });
                                     }
                                     isSimple = false;
                                 }
@@ -308,14 +315,14 @@ var MemoryManager = /** @class */ (function () {
                         }
                     }
                 }
-                else if (ref.parent && ref.parent.kind == ts.SyntaxKind.ReturnStatement && !returned) {
-                    returned = true;
-                    queue.push(ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name);
+                else if (ts.isReturnStatement(ref.parent) && !returned) {
+                    queue.push({ node: ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name, nodeFunc: parentNode });
                     console.log(heapNode.getText() + " -> Found variable returned from the function!");
+                    returned = true;
                     isSimple = false;
                 }
                 else
-                    this.addIfFoundInAssignment(heapNode, ref, queue);
+                    this.addIfFoundInAssignment(heapNode, ref, queue, nodeFunc);
             }
         }
         var type = this.typeHelper.getCType(heapNode);
@@ -365,8 +372,8 @@ var MemoryManager = /** @class */ (function () {
             used: !isTemp
         };
         this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
-        for (var _a = 0, foundScopes_1 = foundScopes; _a < foundScopes_1.length; _a++) {
-            var sc = foundScopes_1[_a];
+        for (var _b = 0, foundScopes_1 = foundScopes; _b < foundScopes_1.length; _b++) {
+            var sc = foundScopes_1[_b];
             this.scopes[sc] = this.scopes[sc] || [];
             this.scopes[sc].push(scopeInfo);
         }
@@ -382,11 +389,11 @@ var MemoryManager = /** @class */ (function () {
         }
         return startNodes;
     };
-    MemoryManager.prototype.addIfFoundInAssignment = function (varIdent, ref, queue) {
+    MemoryManager.prototype.addIfFoundInAssignment = function (varIdent, ref, queue, nodeFunc) {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
             var varDecl = ref.parent;
             if (varDecl.initializer && varDecl.initializer.pos == ref.pos) {
-                queue.push(varDecl.name);
+                queue.push({ node: varDecl.name, nodeFunc: nodeFunc });
                 console.log(varIdent.getText() + " -> Found initializer-assignment to variable " + varDecl.name.getText());
                 return true;
             }
@@ -394,7 +401,7 @@ var MemoryManager = /** @class */ (function () {
         else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
             var binaryExpr = ref.parent;
             if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.right.pos == ref.pos) {
-                queue.push(binaryExpr.left);
+                queue.push({ node: binaryExpr.left, nodeFunc: nodeFunc });
                 console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
                 return true;
             }
