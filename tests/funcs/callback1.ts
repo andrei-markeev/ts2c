@@ -2,7 +2,7 @@ function something(callback) {
     return callback("something");
 }
 const callback1 = function(value: string) {
-    return "deep inside " + value;
+    return "first callback " + value;
 }
 const callback2 = function(value: string) {
     return "second callback " + value;

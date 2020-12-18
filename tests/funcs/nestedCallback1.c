@@ -33,34 +33,42 @@ void str_int16_t_cat(char *str, int16_t num) {
 static ARRAY(void *) gc_main;
 int16_t gc_i;
 
-static const char * (*callback1)(const char *);
-static const char * (*callback2)(const char *);
-const char * something(const char * (*callback)(const char *))
+static ARRAY(void *) gc_1;
+const char * innerFunc(const char * (*callback)(const char *))
 {
-    return callback("something");
+    return callback("something from inner function");
 
 }
-const char * callback1_func(const char * value)
+const char * callback_func(const char * theThingToGiveBack)
 {
     char * tmp_result = NULL;
-    tmp_result = malloc(strlen("first callback ") + strlen(value) + 1);
+    tmp_result = malloc(strlen("deepest inside ") + strlen(theThingToGiveBack) + 1);
     assert(tmp_result != NULL);
     tmp_result[0] = '\0';
-    strcat(tmp_result, "first callback ");
-    strcat(tmp_result, value);
-    ARRAY_PUSH(gc_main, tmp_result);
+    strcat(tmp_result, "deepest inside ");
+    strcat(tmp_result, theThingToGiveBack);
+    ARRAY_PUSH(gc_1, tmp_result);
     return tmp_result;
 
 }
-const char * callback2_func(const char * value)
+const char * something()
 {
+    const char * (*callback)(const char *);
     char * tmp_result = NULL;
-    tmp_result = malloc(strlen("second callback ") + strlen(value) + 1);
+
+    ARRAY_CREATE(gc_1, 2, 0);
+
+    callback = callback_func;
+    tmp_result = malloc(strlen("Something ") + strlen(innerFunc(callback)) + 1);
     assert(tmp_result != NULL);
     tmp_result[0] = '\0';
-    strcat(tmp_result, "second callback ");
-    strcat(tmp_result, value);
+    strcat(tmp_result, "Something ");
+    strcat(tmp_result, innerFunc(callback));
     ARRAY_PUSH(gc_main, tmp_result);
+    for (gc_i = 0; gc_i < gc_1->size; gc_i++)
+        free(gc_1->data[gc_i]);
+    free(gc_1->data);
+    free(gc_1);
     return tmp_result;
 
 }
@@ -68,10 +76,7 @@ const char * callback2_func(const char * value)
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
 
-    callback1 = callback1_func;
-    callback2 = callback2_func;
-    printf("%s\n", something(callback1));
-    printf("%s\n", something(callback2));
+    printf("%s\n", something());
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);
