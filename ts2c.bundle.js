@@ -3078,6 +3078,37 @@ var CProgram = /** @class */ (function () {
                         n.kind = ts.SyntaxKind.UndefinedKeyword;
                 }
             }
+            var iifeVariant1 = ts.isFunctionExpression(n)
+                && ts.isCallExpression(n.parent)
+                && ts.isParenthesizedExpression(n.parent.parent)
+                && ts.isExpressionStatement(n.parent.parent.parent)
+                && n.parent.expression === n;
+            var iifeVariant2 = ts.isFunctionExpression(n)
+                && ts.isParenthesizedExpression(n.parent)
+                && ts.isCallExpression(n.parent.parent)
+                && ts.isExpressionStatement(n.parent.parent.parent)
+                && n.parent.parent.expression === n.parent;
+            if (iifeVariant1 || iifeVariant2) {
+                var iife = n;
+                var returns = utils_1.getAllNodesInFunction(iife).filter(ts.isReturnStatement);
+                if (returns.length === 0) {
+                    var replacee = iife.parent.parent;
+                    var statements = iife.body.statements;
+                    var replacement = ts.createBlock(statements);
+                    replacement.parent = replacee.parent;
+                    replacement.pos = replacee.pos;
+                    replacement.end = replacee.end;
+                    replacement.flags = replacee.flags;
+                    for (var _b = 0, _c = Object.getOwnPropertyNames(replacee); _b < _c.length; _b++) {
+                        var prop = _c[_b];
+                        delete replacee[prop];
+                    }
+                    for (var _d = 0, _e = Object.getOwnPropertyNames(replacement); _d < _e.length; _d++) {
+                        var prop = _e[_d];
+                        replacee[prop] = replacement[prop];
+                    }
+                }
+            }
         }
         this.typeHelper = new typehelper_1.TypeHelper(tsTypeChecker, nodes);
         this.symbolsHelper = new symbols_1.SymbolsHelper(tsTypeChecker, this.typeHelper);
@@ -3085,8 +3116,8 @@ var CProgram = /** @class */ (function () {
         this.typeHelper.inferTypes();
         this.memoryManager.scheduleNodeDisposals(nodes);
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
-        for (var _b = 0, _c = this.gcVarNames; _b < _c.length; _b++) {
-            var gcVarName = _c[_b];
+        for (var _f = 0, _g = this.gcVarNames; _f < _g.length; _f++) {
+            var gcVarName = _g[_f];
             this.headerFlags.array = true;
             if (gcVarName == "gc_main") {
                 this.headerFlags.gc_main = true;
@@ -3101,10 +3132,10 @@ var CProgram = /** @class */ (function () {
                 gcType = "ARRAY(DICT(void *))";
             this.variables.push(new variable_1.CVariable(this, gcVarName, gcType));
         }
-        for (var _d = 0, sources_2 = sources; _d < sources_2.length; _d++) {
-            var source = sources_2[_d];
-            for (var _e = 0, _f = source.statements; _e < _f.length; _e++) {
-                var s = _f[_e];
+        for (var _h = 0, sources_2 = sources; _h < sources_2.length; _h++) {
+            var source = sources_2[_h];
+            for (var _j = 0, _k = source.statements; _j < _k.length; _j++) {
+                var s = _k[_j];
                 this.statements.push(template_1.CodeTemplateFactory.createForNode(this, s));
             }
         }
