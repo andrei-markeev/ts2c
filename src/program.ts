@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { SyntaxKind_NaNKeyword } from './types/utils';
+import { getAllNodesInFunction, getAllNodesUnder, SyntaxKind_NaNKeyword } from './types/utils';
 import { CFunctionPrototype, CFunction } from './nodes/function';
 import { CRegexSearchFunction } from './nodes/regexfunc';
 import { TypeHelper } from './types/typehelper';
@@ -1043,6 +1043,33 @@ export class CProgram implements IScope {
                 if (symbol) {
                     if (tsTypeChecker.isUndefinedSymbol(symbol))
                         (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
+                }
+            }
+            const iifeVariant1 = ts.isFunctionExpression(n)
+                && ts.isCallExpression(n.parent)
+                && ts.isParenthesizedExpression(n.parent.parent)
+                && ts.isExpressionStatement(n.parent.parent.parent)
+                && n.parent.expression === n;
+            const iifeVariant2 = ts.isFunctionExpression(n)
+                && ts.isParenthesizedExpression(n.parent)
+                && ts.isCallExpression(n.parent.parent)
+                && ts.isExpressionStatement(n.parent.parent.parent)
+                && n.parent.parent.expression === n.parent;
+            if (iifeVariant1 || iifeVariant2) {
+                const iife = <ts.FunctionExpression>n;
+                const returns = getAllNodesInFunction(iife).filter(ts.isReturnStatement);
+                if (returns.length === 0) {
+                    const replacee = iife.parent.parent;
+                    const statements = iife.body.statements;
+                    const replacement = ts.createBlock(statements);
+                    replacement.parent = replacee.parent;
+                    replacement.pos = replacee.pos;
+                    replacement.end = replacee.end;
+                    replacement.flags = replacee.flags;
+                    for (const prop of Object.getOwnPropertyNames(replacee))
+                        delete replacee[prop];
+                    for (const prop of Object.getOwnPropertyNames(replacement))
+                        replacee[prop] = replacement[prop];
                 }
             }
         }
