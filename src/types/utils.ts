@@ -217,7 +217,7 @@ export function getAllFunctionNodesInFunction(node: ts.FunctionExpression | ts.F
 
 export function getAllNodesInFunction(node: ts.FunctionExpression | ts.FunctionDeclaration) {
     let i = 0;
-    const nodes = node.getChildren();
+    const nodes = [...node.getChildren()];
     while (i < nodes.length) {
         if (ts.isFunctionLike(nodes[i]))
             i++;

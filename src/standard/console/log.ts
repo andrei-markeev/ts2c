@@ -268,7 +268,7 @@ class CPrintf {
                 let opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
                 if (varType.propertyDefs[k].recursive) {
                     const objString = "[object Object]";
-                    const stringLit = ts.createLiteral(objString);
+                    const stringLit = ts.factory.createStringLiteral(objString);
                     this.elementPrintfs.push(new CPrintf(scope, stringLit, objString, StringVarType, opts));
                 } else {
                     let propAccessor = accessor + "->" + k;

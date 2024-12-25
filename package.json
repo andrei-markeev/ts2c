@@ -10,7 +10,7 @@
     "test": "tests"
   },
   "dependencies": {
-    "typescript": "2.8.3"
+    "typescript": "^5.7.2"
   },
   "devDependencies": {
     "browserify": "^13.0.1",

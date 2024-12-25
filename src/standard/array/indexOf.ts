@@ -80,11 +80,11 @@ class CArrayIndexOf extends CTemplateBase {
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
 
             // Synthesize binary node that represents comparison expression
-            const iteratorIdent = ts.createIdentifier(this.iteratorVarName);
-            const arrayElement = ts.createElementAccess(propAccess.expression, iteratorIdent);
-            const comparison = ts.createBinary(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
-            iteratorIdent.parent = arrayElement;
-            arrayElement.parent = comparison;
+            const iteratorIdent = ts.factory.createIdentifier(this.iteratorVarName);
+            const arrayElement = ts.factory.createElementAccessExpression(propAccess.expression, iteratorIdent);
+            const comparison = ts.factory.createBinaryExpression(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
+            (iteratorIdent as any).parent = arrayElement;
+            (arrayElement as any).parent = comparison;
             scope.root.typeHelper.registerSyntheticNode(iteratorIdent, NumberVarType);
             scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
             scope.root.typeHelper.registerSyntheticNode(comparison, BooleanVarType);

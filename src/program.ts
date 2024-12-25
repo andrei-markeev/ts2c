@@ -1061,11 +1061,11 @@ export class CProgram implements IScope {
                 if (returns.length === 0) {
                     const replacee = iife.parent.parent;
                     const statements = iife.body.statements;
-                    const replacement = ts.createBlock(statements);
-                    replacement.parent = replacee.parent;
-                    replacement.pos = replacee.pos;
-                    replacement.end = replacee.end;
-                    replacement.flags = replacee.flags;
+                    const replacement = ts.factory.createBlock(statements);
+                    (replacement as any).parent = replacee.parent;
+                    (replacement as any).pos = replacee.pos;
+                    (replacement as any).end = replacee.end;
+                    (replacement as any).flags = replacee.flags;
                     for (const prop of Object.getOwnPropertyNames(replacee))
                         delete replacee[prop];
                     for (const prop of Object.getOwnPropertyNames(replacement))

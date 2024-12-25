@@ -89,8 +89,8 @@ export class CNew extends CTemplateBase {
             this.allocator = new CVariableAllocation(scope, varName, funcType.instanceType, node);
         } else if (ts.isIdentifier(node.expression) && node.expression.text === "Object") {
             if (node.arguments.length === 0 || isNullOrUndefined(node.arguments[0])) {
-                const objLiteral = ts.createObjectLiteral();
-                objLiteral.parent = node;
+                const objLiteral = ts.factory.createObjectLiteralExpression();
+                (objLiteral as any).parent = node;
                 scope.root.typeHelper.registerSyntheticNode(objLiteral, PointerVarType);
                 this.expression = new CObjectLiteralExpression(scope, objLiteral);
             }

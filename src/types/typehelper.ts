@@ -102,7 +102,7 @@ export class TypeHelper {
         if (!n || !(n.flags & ts.NodeFlags.Synthesized))
             return false;
         
-        n.end = TypeHelper.syntheticNodesCounter++;
+        (n as any).end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
     }
 
@@ -133,7 +133,7 @@ export class TypeHelper {
             const structType = this.generateStructure(tsType);
             const baseType = this.typeChecker.getBaseTypeOfLiteralType(tsType);
             const cTypeTag = baseType && baseType.symbol && baseType.symbol.getJsDocTags().filter(t => t.name == "ctype")[0];
-            structType.forcedType = cTypeTag && cTypeTag.text.trim();
+            structType.forcedType = cTypeTag && cTypeTag.text.map(t => t.text).join().trim();
             structType.external = baseType && baseType.symbol && findParentSourceFile(baseType.symbol.declarations[0]).isDeclarationFile;
             return structType;
         }

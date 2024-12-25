@@ -60,9 +60,8 @@ export class CBinaryExpression extends CTemplateBase {
             return;
         }
         if (node.operatorToken.kind == ts.SyntaxKind.CommaToken) {
-            let nodeAsStatement = <ts.ExpressionStatement>ts.createNode(ts.SyntaxKind.ExpressionStatement);
-            nodeAsStatement.expression = node.left;
-            nodeAsStatement.parent = node.getSourceFile();
+            let nodeAsStatement = <ts.ExpressionStatement>ts.factory.createExpressionStatement(node.left);
+            (nodeAsStatement as any).parent = node.getSourceFile();
             scope.statements.push(CodeTemplateFactory.createForNode(scope, nodeAsStatement));
             this.expression = CodeTemplateFactory.createForNode(scope, node.right);
             return;
@@ -533,14 +532,14 @@ class CInExpression extends CTemplateBase {
         this.isUniversalVar = type === UniversalVarType;
 
         if (ts.isStringLiteral(node.left)) {
-            const ident = ts.createIdentifier(node.left.text);
-            const propAccess = ts.createPropertyAccess(node.right, ident);
-            const standardCall = ts.createCall(propAccess,[],[]);
-            ident.parent = propAccess;
+            const ident = ts.factory.createIdentifier(node.left.text);
+            const propAccess = ts.factory.createPropertyAccessExpression(node.right, ident);
+            const standardCall = ts.factory.createCallExpression(propAccess,[],[]);
+            (ident as any).parent = propAccess;
             ident.getText = () => ident.text;
-            propAccess.parent = standardCall;
+            (propAccess as any).parent = standardCall;
             propAccess.getText = () => "(" + node.right.getText() + ")." + ident.text;
-            standardCall.parent = node.parent;
+            (standardCall as any).parent = node.parent;
             standardCall.getText = () => propAccess.getText() + "()";
             if (StandardCallHelper.isStandardCall(scope.root.typeHelper, standardCall))
                 this.result = "TRUE";
@@ -629,9 +628,9 @@ class CUnaryExpression extends CTemplateBase {
                     this.operand = new CAsNumber(scope, node.operand);
                     this.after = plus ? " + 1" : " - 1";
                 } else if (isTopExpressionOfStatement) {
-                    const applyOperation = plus ? ts.createAdd : ts.createSubtract
-                    const binExpr = applyOperation(node.operand, ts.createNumericLiteral("1"));
-                    binExpr.parent = node;
+                    const applyOperation = plus ? ts.factory.createAdd : ts.factory.createSubtract
+                    const binExpr = applyOperation(node.operand, ts.factory.createNumericLiteral("1"));
+                    (binExpr as any).parent = node;
                     binExpr.getText = () => node.operand.getText() + (plus ? "+" : "-") + "1";
                     binExpr.operatorToken.getText = () => plus ? "+" : "-";
                     binExpr.right.getText = () => "1";
