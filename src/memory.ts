@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType } from './types/ctypes';
+import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType, StructType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
@@ -257,6 +257,14 @@ export class MemoryManager {
                     }
                 }
 
+                if (ref.parent && ts.isPropertyAccessExpression(ref.parent) && ref.parent.name === ref) {
+                    const type = this.typeHelper.getCType(ref.parent.expression);
+                    if (type instanceof StructType) {
+                        console.log(heapNode.getText() + " -> Property of object " + ref.parent.expression.getText() + ".");
+                        queue.push({ node: ref.parent, nodeFunc });
+                    }
+                }
+
                 if (ref.parent && ts.isElementAccessExpression(ref.parent) && ref.parent.argumentExpression === ref) {
                     const type = this.typeHelper.getCType(ref.parent.expression);
                     if (type instanceof DictType) {
@@ -273,8 +281,9 @@ export class MemoryManager {
                     }
                 }
 
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.PropertyAssignment) {
+                if (ref.parent && ts.isPropertyAssignment(ref.parent) && ref === ref.parent.initializer) {
                     console.log(heapNode.getText() + " -> Detected passing to object literal: " + ref.parent.getText() + ".");
+                    queue.push({ node: ref.parent.name, nodeFunc });
                     queue.push({ node: ref.parent.parent, nodeFunc });
                 }
                 if (ref.parent && ref.parent.kind == ts.SyntaxKind.ArrayLiteralExpression) {
