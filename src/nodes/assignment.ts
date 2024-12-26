@@ -106,8 +106,7 @@ export class CAssignment extends CTemplateBase {
             this.isObjLiteralAssignment = true;
             let objLiteral = <ts.ObjectLiteralExpression>right;
             this.objInitializers = objLiteral.properties
-                .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
-                .map(p => <ts.PropertyAssignment>p)
+                .filter(ts.isPropertyAssignment)
                 .map(p => {
                     const propName = (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text;
                     return new CAssignment(scope, argAccessor, this.isDict ? '"' + propName + '"' : propName, argType, p.initializer)

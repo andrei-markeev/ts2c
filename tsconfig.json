@@ -4,10 +4,11 @@
         "moduleResolution": "node",
         "esModuleInterop": true,
         "target": "es5",
-        "lib": ["ES2017"],
+        "lib": ["ES2015"],
         "noImplicitAny": false,
         "sourceMap": true,
         "experimentalDecorators": true,
+        "downlevelIteration": true,
         "types": []
     },
     "exclude": [

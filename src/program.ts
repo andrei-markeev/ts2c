@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { getAllNodesInFunction, getAllNodesUnder, SyntaxKind_NaNKeyword } from './types/utils';
+import { getAllNodesInFunction, SyntaxKind_NaNKeyword } from './types/utils';
 import { CFunctionPrototype, CFunction } from './nodes/function';
 import { CRegexSearchFunction } from './nodes/regexfunc';
 import { TypeHelper } from './types/typehelper';
@@ -110,6 +110,26 @@ class HeaderFlags {
     try_catch: boolean = false;
 }
 
+export const reservedCSymbolNames = [
+    "main",
+    "TRUE", "FALSE", "uint8_t", "int16_t",
+    "typedef", "struct", "unsigned", "signed", "int", "double", "long", "short", "char", "float",
+    "sizeof", "goto", "volatile", "static", "extern", "auto", "register", "union",
+    "printf", "assert", "malloc", "realloc", "memmove", "sprintf", "strcmp", "strstr",
+    "isdigit", "isspace", 'CHAR_BIT',
+    "regex_indices_struct_t", "regex_match_struct_t", "regex_func_t",
+    "ARRAY", "ARRAY_CREATE", "ARRAY_PUSH", "ARRAY_INSERT", "ARRAY_REMOVE", "ARRAY_POP",
+    "DICT", "DICT_CREATE", "DICT_SET", "DICT_GET", "dict_find_pos", "tmp_dict_pos", "tmp_dict_pos2",
+    "STR_INT16_T_BUFLEN", "str_int16_t_cmp", "str_pos", "str_rpos", "str_len",
+    "str_char_code_at", "str_substring", "str_slice", "str_int16_t_cat",
+    "array_int16_t_cmp", "array_str_cmp", "parse_int16_t",
+    "js_var_type", "js_var", "array_js_var_t", "dict_js_var_t",
+    "js_var_from", "js_var_from_int16_t", "js_var_from_uint8_t", "js_var_from_str", "js_var_from_dict",
+    "str_to_int16_t", "js_var_to_str", "js_var_to_number", "js_var_to_bool", "js_var_to_undefined",
+    "js_var_typeof", "js_var_dict_inc", "js_var_get", "js_var_eq", "js_var_op", "js_var_compute",
+    "regex_clear_matches", "regex_match",
+    "gc_main", "gc_i", "gc_j"
+];
 
 @CodeTemplate(`
 {#if headerFlags.strings || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat
@@ -1029,6 +1049,7 @@ export class CProgram implements IScope {
         nodes.sort((a, b) => a.pos - b.pos);
 
         // Post processing TypeScript AST
+        let nodesToRename = new Set<ts.Identifier>(), symbolsToRename = new Set<ts.Symbol>();
         for (let n of nodes) {
             if (ts.isIdentifier(n)) {
                 const symbol = tsTypeChecker.getSymbolAtLocation(n);
@@ -1043,6 +1064,13 @@ export class CProgram implements IScope {
                 if (symbol) {
                     if (tsTypeChecker.isUndefinedSymbol(symbol))
                         (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
+
+                    if (symbol.flags & (ts.SymbolFlags.Variable | ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Enum)) {
+                        if (reservedCSymbolNames.indexOf(symbol.name) > -1) {
+                            nodesToRename.add(n);
+                            symbolsToRename.add(symbol);
+                        }
+                    }
                 }
             }
             const iifeVariant1 = ts.isFunctionExpression(n)
@@ -1073,12 +1101,26 @@ export class CProgram implements IScope {
                 }
             }
         }
-        
+
         this.typeHelper = new TypeHelper(tsTypeChecker, nodes);
         this.symbolsHelper = new SymbolsHelper(tsTypeChecker, this.typeHelper);
         this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper);
 
         this.typeHelper.inferTypes();
+
+        // TODO: this is too hacky and fragile
+        // a proper solution would be to track down all `text` and `getText()` usages
+        // and map them to the renamed symbols
+        for (let n of nodesToRename) {
+            const newText = n.escapedText + '_';
+            (<any>n).escapedText = newText;
+            (<any>n).getText = () => newText;
+        }
+        for (let symbol of symbolsToRename) {
+            (<any>symbol).escapedName = symbol.escapedName + '_';
+        }
+        // --
+
         this.memoryManager.scheduleNodeDisposals(nodes);
 
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
