@@ -37,9 +37,9 @@ void str_int16_t_cat(char *str, int16_t num) {
 }
 static const char * s;
 static char * tmp_result = NULL;
+static char * tmp_result_4 = NULL;
 static char * tmp_result_3 = NULL;
 static char * tmp_result_2 = NULL;
-static char * tmp_result_4 = NULL;
 int main(void) {
     tmp_result = malloc(STR_INT16_T_BUFLEN + strlen("") + 1);
     assert(tmp_result != NULL);
@@ -52,22 +52,22 @@ int main(void) {
         printf("s:");
         printf(" %s\n", s);
     }
-    tmp_result_3 = malloc(strlen(s) + strlen("something") + 1);
+    tmp_result_4 = malloc(strlen(s) + strlen("something") + 1);
+    assert(tmp_result_4 != NULL);
+    tmp_result_4[0] = '\0';
+    strcat(tmp_result_4, s);
+    strcat(tmp_result_4, "something");
+    tmp_result_3 = malloc(strlen(tmp_result_4) + strlen(s) + 1);
     assert(tmp_result_3 != NULL);
     tmp_result_3[0] = '\0';
+    strcat(tmp_result_3, tmp_result_4);
     strcat(tmp_result_3, s);
-    strcat(tmp_result_3, "something");
-    tmp_result_2 = malloc(strlen(tmp_result_3) + strlen(s) + 1);
+    tmp_result_2 = malloc(strlen(tmp_result_3) + STR_INT16_T_BUFLEN + 1);
     assert(tmp_result_2 != NULL);
     tmp_result_2[0] = '\0';
     strcat(tmp_result_2, tmp_result_3);
-    strcat(tmp_result_2, s);
-    tmp_result_4 = malloc(strlen(tmp_result_2) + STR_INT16_T_BUFLEN + 1);
-    assert(tmp_result_4 != NULL);
-    tmp_result_4[0] = '\0';
-    strcat(tmp_result_4, tmp_result_2);
-    str_int16_t_cat(tmp_result_4, (5 + 4));
-    s = tmp_result_4;
+    str_int16_t_cat(tmp_result_2, (5 + 4));
+    s = tmp_result_2;
     printf("%s", s);
     printf(" %d\n", str_rpos(s, "5"));
     free((char *)tmp_result);

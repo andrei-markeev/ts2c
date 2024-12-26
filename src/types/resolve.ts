@@ -177,6 +177,15 @@ export class TypeResolver {
         // functions
         addEquality(ts.isCallExpression, n => n.expression, n => this.typeHelper.getDeclaration(n));
         addEquality(ts.isCallExpression, n => n.expression, type(n => this.typeHelper.getCType(n) ? new FuncType({ returnType: this.typeHelper.getCType(n), parameterTypes: n.arguments.map(arg => this.typeHelper.getCType(arg)) }) : null));
+        addEquality(ts.isCallExpression, n => n.expression, type(n => {
+            // nested call expression e.g. `func(1, 2)()`
+            if (ts.isCallExpression(n) && ts.isCallExpression(n.expression)) {
+                const type = this.typeHelper.getCType(n.expression);
+                if (type instanceof FuncType && type.closureParams.length)
+                    return new FuncType({ needsClosureStruct: true });
+            }
+            return null;
+        }))
         addEquality(ts.isCallExpression, n => n, type(n => FuncType.getReturnType(this.typeHelper, n.expression)));
         addEquality(ts.isParameter, n => n, n => n.name);
         addEquality(ts.isParameter, n => n, n => n.initializer);

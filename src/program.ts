@@ -185,7 +185,7 @@ class HeaderFlags {
     };
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.dict || headerFlags.js_var_plus || headerFlags.js_var_get}
+{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.gc_main || headerFlags.dict || headerFlags.js_var_plus || headerFlags.js_var_get}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\

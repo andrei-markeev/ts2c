@@ -4,7 +4,7 @@ import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
-import { FuncType, UniversalVarType, StructType, PointerVarType } from '../types/ctypes';
+import { FuncType, UniversalVarType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
 import { isNullOrUndefined, findParentFunction } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
@@ -12,6 +12,10 @@ import { CObjectLiteralExpression } from './literals';
 @CodeTemplate(`
 {#if standardCall}
     {standardCall}
+{#elseif isSimpleClosureCall}
+    {funcName}->func({arguments {, }=> {this}})
+{#elseif closureVarName}
+    ({closureVarName} = {funcName}, {closureVarName}->func({arguments {, }=> {this}}))
 {#elseif funcName}
     {funcName}({arguments {, }=> {this}})
 {#else}
@@ -21,6 +25,8 @@ export class CCallExpression extends CTemplateBase {
     public funcName: CExpression = null;
     public standardCall: CExpression = null;
     public arguments: CExpression[];
+    public isSimpleClosureCall: boolean = false;
+    public closureVarName: string = null;
     public nodeText: string;
     constructor(scope: IScope, call: ts.CallExpression) {
         super();
@@ -39,8 +45,15 @@ export class CCallExpression extends CTemplateBase {
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
         if (funcType.needsClosureStruct) {
-            this.arguments.push(this.funcName);
-            this.funcName = CodeTemplateFactory.templateToString(this.funcName) + "->func";
+            // nested calls e.g. `func(1, 2)()`;
+            if (this.funcName instanceof CCallExpression) {
+                this.closureVarName = scope.root.symbolsHelper.addTemp(call, "tmp_closure");
+                scope.variables.push(new CVariable(scope, this.closureVarName, funcType));
+                this.arguments.push(this.closureVarName)
+            } else {
+                this.arguments.push(this.funcName);
+                this.isSimpleClosureCall = true;
+            }
         } else {
             for (let p of funcType.closureParams) {
                 const parentFunc = findParentFunction(call);
