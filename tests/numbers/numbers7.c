@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+#include <ctype.h>
 
 #define TRUE 1
 #define FALSE 0

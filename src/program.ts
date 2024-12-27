@@ -158,7 +158,7 @@ export const reservedCSymbolNames = [
 {#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
     #include <limits.h>
 {/if}
-{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan}
+{#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
     #include <ctype.h>
 {/if}
 {#if headerFlags.try_catch || headerFlags.js_var_get}
