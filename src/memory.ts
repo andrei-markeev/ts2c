@@ -3,7 +3,7 @@ import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, Fu
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isNode } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
@@ -273,12 +273,14 @@ export class MemoryManager {
                     }
                 }
 
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
-                    let binaryExpr = <ts.BinaryExpression>ref.parent;
-                    if (binaryExpr.operatorToken.kind == ts.SyntaxKind.EqualsToken && binaryExpr.left.getText() == heapNode.getText()) {
-                        console.log(heapNode.getText() + " -> Detected assignment: " + binaryExpr.getText() + ".");
-                        isSimple = false;
-                    }
+                if (isEqualsExpression(ref.parent) && ref.parent.left.getText() == heapNode.getText()) {
+                    console.log(heapNode.getText() + " -> Detected assignment: " + ref.parent.getText() + ".");
+                    isSimple = false;
+                }
+
+                if (ts.isBinaryExpression(ref) && isCompoundAssignment(ref.operatorToken)) {
+                    console.log(ref.getText() + " -> is a compound assignment to variable " + ref.left.getText());
+                    queue.push({ node: ref.left, nodeFunc });
                 }
 
                 if (ref.parent && ts.isPropertyAssignment(ref.parent) && ref === ref.parent.initializer) {
@@ -437,7 +439,7 @@ export class MemoryManager {
     private addIfFoundInAssignment(varIdent: ts.Node, ref: ts.Node, queue: QueueItem[], nodeFunc: ts.FunctionDeclaration | ts.FunctionExpression): boolean {
         if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
             let varDecl = <ts.VariableDeclaration>ref.parent;
-            if (varDecl.initializer && varDecl.initializer.pos == ref.pos) {
+            if (varDecl.initializer && varDecl.initializer === ref) {
                 queue.push({ node: varDecl.name, nodeFunc });
                 console.log(varIdent.getText() + " -> Found initializer-assignment to variable " + varDecl.name.getText());
                 return true;
@@ -445,7 +447,7 @@ export class MemoryManager {
         }
         else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
             let binaryExpr = <ts.BinaryExpression>ref.parent;
-            if (binaryExpr.operatorToken.kind == ts.SyntaxKind.FirstAssignment && binaryExpr.right.pos == ref.pos) {
+            if (isEqualsExpression(binaryExpr) && binaryExpr.right === ref) {
                 queue.push({ node: binaryExpr.left, nodeFunc });
                 console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
                 return true;
