@@ -1,7 +1,10 @@
 #include <stdio.h>
+
 typedef short int16_t;
+
 static int16_t n;
 static int16_t b;
+
 int main(void) {
     n = 0;
     (n = n + 5);

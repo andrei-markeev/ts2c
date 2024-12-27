@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct gray_t {
@@ -46,11 +49,13 @@ static ARRAY(ARRAY(void *)) gc_main_arrays;
 static struct imageSrc_t * colorImage;
 static struct gray_t * grayImage;
 static int16_t i;
+
 struct gray_t * gray(struct imageSrc_t * imageSrc)
 {
     struct gray_t * imageDst;
     struct array_number_t * tmp_array = NULL;
     int16_t i;
+
     ARRAY_CREATE(tmp_array, 2, 0);
     ARRAY_PUSH(gc_main_arrays, (void *)tmp_array);
     imageDst = malloc(sizeof(*imageDst));
@@ -63,7 +68,6 @@ struct gray_t * gray(struct imageSrc_t * imageSrc)
     for (;i < 40;(i = i + 4))
         ARRAY_PUSH(imageDst->data, (imageSrc->data[i] * 299 + imageSrc->data[i + 1] * 587 + imageSrc->data[i + 2] * 114 + 500) / 1000 & 0xff);
     return imageDst;
-
 }
 
 int main(void) {

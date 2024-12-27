@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -20,17 +22,21 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 static const char * arr[2] = { "Hello", "world!" };
 static const char * str;
 static int16_t i;
@@ -55,6 +61,7 @@ static const char * tmp_array_2[3] = { "happy", "new", "year" };
 static int16_t i_3;
 static char * tmp_joined_string_5;
 static int16_t len_4;
+
 int main(void) {
     len = 0;
     for (i = 0; i < 2; i++)

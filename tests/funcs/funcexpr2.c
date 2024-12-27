@@ -1,15 +1,18 @@
 #include <stdio.h>
+
 typedef short int16_t;
+
 static int16_t arr[3] = { 1, 2, 3 };
 static int16_t* tmp_result;
+
 int16_t* func(int16_t arr[3])
 {
     int16_t i;
+
     i = 0;
     for (;i < 3;i++)
         arr[i]++;
     return arr;
-
 }
 
 int main(void) {

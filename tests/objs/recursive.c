@@ -12,6 +12,7 @@ struct tmp_obj_t {
 
 static struct obj_t * obj;
 static struct tmp_obj_t * tmp_obj = NULL;
+
 int main(void) {
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);

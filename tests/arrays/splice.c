@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -18,6 +20,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -29,11 +32,13 @@ typedef short int16_t;
     memmove(&(array->data[pos]), &(array->data[(pos) + num]), (array->size - (pos) - num) * sizeof(*array->data)); \
     array->size -= num; \
 }
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 static struct array_string_t * arr;
 static int16_t i;
 static int16_t j;
@@ -54,6 +59,7 @@ static struct array_string_t * tmp_removed_values_3;
 static int16_t i_6;
 static int16_t i_7;
 static int16_t i_8;
+
 int main(void) {
     ARRAY_CREATE(arr, 6, 6);
     arr->data[0] = "some";

@@ -1,7 +1,10 @@
 #include <stdio.h>
+
 typedef short int16_t;
 typedef unsigned short uint16_t;
+
 static int16_t number;
+
 int main(void) {
     number = 3072;
     printf("Positive:");

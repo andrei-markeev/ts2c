@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -30,15 +32,16 @@ struct nested_t {
 int16_t gc_i;
 
 static ARRAY(void *) gc_74;
+
 struct nested_t * nested()
 {
     struct nested_t * obj;
+
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);
     ARRAY_PUSH(gc_74, (void *)obj);
     obj->key = "something";
     return obj;
-
 }
 void func()
 {
@@ -54,7 +57,6 @@ void func()
         free(gc_74->data[gc_i]);
     free(gc_74->data);
     free(gc_74);
-
 }
 
 int main(void) {

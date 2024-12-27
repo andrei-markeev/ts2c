@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 struct regex_indices_struct_t {
     int16_t index;
     int16_t end;
@@ -21,6 +23,7 @@ struct regex_struct_t {
     const char * str;
     regex_func_t * func;
 };
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -41,6 +44,7 @@ struct regex_struct_t {
     }  \
     array->data[array->size++] = item; \
 }
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -54,6 +58,7 @@ int16_t str_len(const char * str) {
     }
     return len;
 }
+
 const char * str_substring(const char * str, int16_t start, int16_t end) {
     int16_t i, tmp, pos, len = str_len(str), byte_start = -1;
     char *p, *buf;
@@ -94,11 +99,13 @@ const char * str_slice(const char * str, int16_t start, int16_t end) {
         end = start;
     return str_substring(str, start, end);
 }
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {
     int16_t i;
     for (i = 0; i < groupN; i++) {
@@ -106,6 +113,7 @@ void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN
         match_info->matches[i].end = -1;
     }
 }
+
 struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {
     struct regex_match_struct_t match_info;
     struct array_string_t *match_array = NULL;
@@ -127,6 +135,7 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
 
     return match_array;
 }
+
 int16_t gc_i;
 int16_t gc_j;
 
@@ -151,10 +160,12 @@ static int16_t l;
 static struct array_string_t * tmp_result_4;
 static struct array_string_t * match_array_6;
 static int16_t m;
+
 struct regex_match_struct_t regex_2_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -204,6 +215,7 @@ struct regex_match_struct_t regex_3_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -223,6 +235,7 @@ struct regex_match_struct_t regex_3_search(const char *str, int16_t capture) {
         }
         if (state == 4) {
             end = iterator;
+
             if (next == -1) next = 3;
             if (ch == 'l') next = 4;
         }
@@ -260,6 +273,7 @@ struct regex_match_struct_t regex_4_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[3];
     if (capture) {
         result.matches = malloc(3 * sizeof(*result.matches));
@@ -267,6 +281,7 @@ struct regex_match_struct_t regex_4_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 3);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -591,6 +606,7 @@ struct regex_match_struct_t regex_5_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[1];
     if (capture) {
         result.matches = malloc(1 * sizeof(*result.matches));
@@ -598,6 +614,7 @@ struct regex_match_struct_t regex_5_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 1);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -678,6 +695,7 @@ struct regex_match_struct_t regex_6_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[3];
     if (capture) {
         result.matches = malloc(3 * sizeof(*result.matches));
@@ -685,6 +703,7 @@ struct regex_match_struct_t regex_6_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 3);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -766,6 +785,7 @@ struct regex_match_struct_t regex_7_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[1];
     if (capture) {
         result.matches = malloc(1 * sizeof(*result.matches));
@@ -773,6 +793,7 @@ struct regex_match_struct_t regex_7_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 1);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -836,6 +857,7 @@ struct regex_match_struct_t regex_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 

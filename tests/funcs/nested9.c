@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct makeCounter_func_t {
@@ -46,25 +49,22 @@ int16_t gc_i;
 static struct makeCounter_func_t * (*makeCounter)();
 static struct makeCounter_func_t * counter1;
 static struct makeCounter_func_t * counter2;
+
 void changeBy(int16_t val, int16_t* privateCounter)
 {
     (*privateCounter = *privateCounter + val);
-
 }
 void increment_func(struct increment_closure_t * closure)
 {
     changeBy(1, &closure->scope->privateCounter);
-
 }
 void decrement_func(struct increment_closure_t * closure)
 {
     changeBy(-1, &closure->scope->privateCounter);
-
 }
 int16_t value_func(struct value_closure_t * closure)
 {
     return closure->scope->privateCounter;
-
 }
 struct makeCounter_func_t * makeCounter_func()
 {
@@ -77,7 +77,7 @@ struct makeCounter_func_t * makeCounter_func()
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->privateCounter = 0;
     increment_closure = malloc(sizeof(*increment_closure));
     assert(increment_closure != NULL);
@@ -101,7 +101,6 @@ struct makeCounter_func_t * makeCounter_func()
     tmp_obj->decrement = decrement_closure;
     tmp_obj->value = value_closure;
     return tmp_obj;
-
 }
 
 int main(void) {

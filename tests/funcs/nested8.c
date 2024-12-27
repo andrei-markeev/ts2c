@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct scope_t {
@@ -49,10 +52,10 @@ static struct closure_t * f1;
 static struct closure_2_t * f2;
 static struct closure_3_t * f3;
 static int16_t f4;
+
 int16_t func_3(int16_t d, struct closure_3_t * closure)
 {
     return closure->scope->a + closure->scope->b + closure->scope->c + d + e;
-
 }
 struct closure_3_t * func_2(int16_t c, struct closure_2_t * closure)
 {
@@ -62,7 +65,7 @@ struct closure_3_t * func_2(int16_t c, struct closure_2_t * closure)
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->a = closure->scope->a;
     scope->b = closure->scope->b;
     scope->c = c;
@@ -72,7 +75,6 @@ struct closure_3_t * func_2(int16_t c, struct closure_2_t * closure)
     closure_3->func = func_3;
     closure_3->scope = scope;
     return closure_3;
-
 }
 struct closure_2_t * func(int16_t b, struct closure_t * closure)
 {
@@ -82,7 +84,7 @@ struct closure_2_t * func(int16_t b, struct closure_t * closure)
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->a = closure->scope->a;
     scope->b = b;
     closure_2 = malloc(sizeof(*closure_2));
@@ -91,7 +93,6 @@ struct closure_2_t * func(int16_t b, struct closure_t * closure)
     closure_2->func = func_2;
     closure_2->scope = scope;
     return closure_2;
-
 }
 struct closure_t * sum(int16_t a)
 {
@@ -101,7 +102,7 @@ struct closure_t * sum(int16_t a)
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->a = a;
     closure = malloc(sizeof(*closure));
     assert(closure != NULL);
@@ -109,7 +110,6 @@ struct closure_t * sum(int16_t a)
     closure->func = func;
     closure->scope = scope;
     return closure;
-
 }
 
 int main(void) {

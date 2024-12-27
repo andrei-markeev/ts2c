@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -42,6 +44,7 @@ static int16_t value;
 static int16_t i;
 static int16_t j;
 static int16_t value_2;
+
 int main(void) {
     ARRAY_CREATE(arr, 3, 3);
     arr->data[0] = 10;

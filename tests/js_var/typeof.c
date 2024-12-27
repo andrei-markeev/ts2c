@@ -2,16 +2,19 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
 struct js_var {
     enum js_var_type type;
     int16_t number;
     void *data;
 };
+
 struct js_var js_var_from(enum js_var_type type) {
     struct js_var v;
     v.type = type;
@@ -44,6 +47,7 @@ static const char * x;
 static int16_t y[3] = { 1, 2, 3 };
 static struct z_t * z;
 static struct tmp_obj_t * tmp_obj = NULL;
+
 int main(void) {
     x = "number";
     z = malloc(sizeof(*z));

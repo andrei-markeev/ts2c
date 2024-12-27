@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -68,11 +70,13 @@ const char * str_substring(const char * str, int16_t start, int16_t end) {
     buf[len] = '\0';
     return buf;
 }
+
 static const char * str;
 static const char * char_at;
 static const char * char_at_2;
 static const char * char_at_3;
 static const char * char_at_4;
+
 int main(void) {
     str = "тест test";
     printf("%d\n", str_char_code_at(str, 3));

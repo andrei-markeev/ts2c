@@ -1,5 +1,7 @@
 #include <stdio.h>
+
 static const char * x;
+
 int main(void) {
     x = "global x";
     {

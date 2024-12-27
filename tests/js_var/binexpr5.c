@@ -4,11 +4,13 @@
 #include <stdio.h>
 #include <limits.h>
 #include <ctype.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
 typedef unsigned short uint16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -24,6 +26,7 @@ typedef unsigned short uint16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -31,6 +34,7 @@ typedef unsigned short uint16_t;
         array->data[pos] = item; \
     } \
 }
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -53,6 +57,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -72,33 +77,40 @@ int16_t tmp_dict_pos2;
     } else \
         dict->values->data[tmp_dict_pos2] = value; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
 struct js_var {
     enum js_var_type type;
     int16_t number;
     void *data;
 };
+
 struct array_js_var_t {
     int16_t size;
     int16_t capacity;
     struct js_var *data;
 };
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
 };
+
 struct js_var js_var_from(enum js_var_type type) {
     struct js_var v;
     v.type = type;
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_int16_t(int16_t n) {
     struct js_var v;
     v.type = JS_VAR_INT16;
@@ -106,24 +118,28 @@ struct js_var js_var_from_int16_t(int16_t n) {
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_str(const char *s) {
     struct js_var v;
     v.type = JS_VAR_STRING;
     v.data = (void *)s;
     return v;
 }
+
 struct js_var js_var_from_array(struct array_js_var_t *arr) {
     struct js_var v;
     v.type = JS_VAR_ARRAY;
     v.data = (void *)arr;
     return v;
 }
+
 struct js_var js_var_from_dict(struct dict_js_var_t *dict) {
     struct js_var v;
     v.type = JS_VAR_DICT;
     v.data = (void *)dict;
     return v;
 }
+
 struct js_var str_to_int16_t(const char * str) {
     struct js_var v;
     const char *p = str;
@@ -153,6 +169,7 @@ struct js_var str_to_int16_t(const char * str) {
     v.number = (int16_t)r;
     return v;
 }
+
 const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
 {
     char *buf;
@@ -241,7 +258,7 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
             return result;
         }
     }
-    
+
     result.type = JS_VAR_INT16;
     switch (op) {
         case JS_VAR_MINUS:
@@ -274,6 +291,7 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     }
     return result;
 }
+
 static const char * str;
 static int16_t num;
 static struct array_js_var_t * arr0;
@@ -283,6 +301,7 @@ static struct dict_js_var_t * tmp_obj = NULL;
 static struct dict_js_var_t * obj;
 static const char * tmp_str;
 static uint8_t tmp_need_dispose;
+
 int main(void) {
     str = "17";
     num = 9;

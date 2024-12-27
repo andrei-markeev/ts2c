@@ -1,6 +1,9 @@
 #include <string.h>
+
 #include <stdio.h>
+
 typedef short int16_t;
+
 int16_t str_pos(const char * str, const char *search) {
     int16_t i;
     const char * found = strstr(str, search);
@@ -17,8 +20,10 @@ int16_t str_pos(const char * str, const char *search) {
     }
     return pos;
 }
+
 static const char * s1;
 static const char * s2;
+
 int main(void) {
     s1 = "simple test";
     s2 = "áäöß€𐍈";

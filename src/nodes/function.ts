@@ -30,9 +30,11 @@ export class CFunctionPrototype extends CTemplateBase {
 {funcDecl}({parameters {, }=> {this}})
 {
     {variables  {    }=> {this};\n}
+
     {#if scopeVarAllocator != null}
         {scopeVarAllocator}
     {/if}
+
     {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
 
     {statements {    }=> {this}}

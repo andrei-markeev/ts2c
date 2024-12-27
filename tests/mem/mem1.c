@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct state_t {
@@ -31,29 +34,28 @@ struct state_t {
 int16_t gc_i;
 
 static struct state_t * state;
+
 void print()
 {
     printf("{ ");
     printf("prop: \"%s\"", state->prop);
     printf(" }\n");
-
 }
 void saveState(struct state_t * newState)
 {
     state = newState;
-
 }
 void generateState()
 {
     struct state_t * obj;
     struct state_t * x;
+
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);
     ARRAY_PUSH(gc_main, (void *)obj);
     obj->prop = "I don't believe \"transpiling\" from TS to C is possible!";
     x = obj;
     saveState(x);
-
 }
 
 int main(void) {

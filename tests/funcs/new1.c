@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
 
 struct this_t {
@@ -9,11 +10,11 @@ struct this_t {
 };
 
 static struct this_t * x;
+
 void func1(struct this_t * this)
 {
     this->test = 10;
     this->hello = 20;
-
 }
 
 int main(void) {

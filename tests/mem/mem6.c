@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -40,6 +42,7 @@ void recurse(struct array_number_t * incoming_arr);
 void indirect_recurse(struct array_number_t * arr)
 {
     int16_t i;
+
     printf("[ ");
     for (i = 0; i < arr->size; i++) {
         if (i != 0)
@@ -48,12 +51,12 @@ void indirect_recurse(struct array_number_t * arr)
     }
     printf(" ]\n");
     recurse(arr);
-
 }
 void recurse(struct array_number_t * incoming_arr)
 {
     int16_t counter;
     struct array_number_t * new_arr;
+
     counter = ARRAY_POP(incoming_arr);
     counter--;
     ARRAY_CREATE(new_arr, 2, 0);
@@ -61,7 +64,6 @@ void recurse(struct array_number_t * incoming_arr)
     ARRAY_PUSH(new_arr, counter);
     if (counter > 0)
         indirect_recurse(new_arr);
-
 }
 
 int main(void) {

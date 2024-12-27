@@ -72,7 +72,7 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
     let ifPos;
     while ((ifPos = template.indexOf("{#if ")) > -1) {
         let posBeforeIf = ifPos;
-        while (posBeforeIf > 0 && (template[posBeforeIf - 1] == ' ' || template[posBeforeIf - 1] == '\n'))
+        while (posBeforeIf > 0 && template[posBeforeIf - 1] == ' ')
             posBeforeIf--;
         ifPos += 5;
         let conditionStartPos = ifPos;
@@ -99,11 +99,11 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
             evalText = evalText.replace(new RegExp("\\b" + k + "\\b", "g"), function (m) { return "args." + m; });
         let evalResult: boolean = eval(evalText);
         if (evalResult)
-            template = template.slice(0, posBeforeIf) + template.slice(ifPos + 1, endIfBodyPos).replace(/\n    /g, '\n') + template.slice(posAfterIf);
+            template = template.slice(0, posBeforeIf) + template.slice(ifPos + 1, endIfBodyPos).replace(/\n    /g, '\n').replace(/^\n+/, '') + template.slice(posAfterIf);
         else if (elseIfPos > -1)
             template = template.slice(0, posBeforeIf) + "{#" + template.slice(elseIfPos + 6);
         else if (elsePos > -1)
-            template = template.slice(0, posBeforeIf) + template.slice(elsePos + 7, endIfPos).replace(/\n    /g, '\n') + template.slice(posAfterIf);
+            template = template.slice(0, posBeforeIf) + template.slice(elsePos + 7, endIfPos).replace(/\n    /g, '\n').replace(/^\n+/, '') + template.slice(posAfterIf);
         else
             template = template.slice(0, posBeforeIf) + template.slice(posAfterIf);
 
@@ -140,7 +140,7 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
     if (args["resolve"] && !replaced && template.indexOf("{this}") > -1) {
         template = template.replace("{this}", () => args["resolve"]());
     }
-    template = template.replace(/^[\n]*/, '').replace(/\n\s*\n[\n\s]*\n/g, '\n\n');
+    template = template.replace(/^[\n]*/, '').replace(/\n\s*[\n\s]*\n/g, '\n\n').replace(/\{\n\s*\n/g, '{\n').replace(/\n\s*\n(\s*)\}/g, '\n$1}');
     return [template, statements];
 }
 
@@ -233,15 +233,15 @@ function replaceArray(data, k, array, statements) {
     if (array.length == 0) {
         while (pos < data.template.length && data.template[pos] == ' ')
             pos++;
-        while (pos < data.template.length && data.template[pos] == '\n')
+        if (pos < data.template.length && data.template[pos] == '\n')
             pos++;
         while (startPos > 0 && data.template[startPos - 1] == ' ')
             startPos--;
-        while (startPos > 0 && data.template[startPos - 1] == '\n')
+        if (startPos > 0 && data.template[startPos - 1] == '\n')
             startPos--;
         if (data.template[startPos] == '\n')
             startPos++;
     }
-    data.template = data.template.slice(0, startPos) + elementsResolved + data.template.slice(pos);
+    data.template = data.template.slice(0, startPos) + elementsResolved.replace(/[\n\s]+$/,'') + data.template.slice(pos);
     return true;
 }

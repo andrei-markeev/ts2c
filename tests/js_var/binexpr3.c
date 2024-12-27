@@ -5,10 +5,12 @@
 #include <limits.h>
 #include <ctype.h>
 #include <setjmp.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -29,6 +31,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -36,6 +39,7 @@ typedef short int16_t;
         array->data[pos] = item; \
     } \
 }
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -58,6 +62,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -77,38 +82,46 @@ int16_t tmp_dict_pos2;
     } else \
         dict->values->data[tmp_dict_pos2] = value; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
 struct js_var {
     enum js_var_type type;
     int16_t number;
     void *data;
 };
+
 struct array_js_var_t {
     int16_t size;
     int16_t capacity;
     struct js_var *data;
 };
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
 };
+
 struct js_var js_var_from(enum js_var_type type) {
     struct js_var v;
     v.type = type;
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_uint8_t(uint8_t b) {
     struct js_var v;
     v.type = JS_VAR_BOOL;
@@ -116,6 +129,7 @@ struct js_var js_var_from_uint8_t(uint8_t b) {
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_int16_t(int16_t n) {
     struct js_var v;
     v.type = JS_VAR_INT16;
@@ -123,24 +137,28 @@ struct js_var js_var_from_int16_t(int16_t n) {
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_str(const char *s) {
     struct js_var v;
     v.type = JS_VAR_STRING;
     v.data = (void *)s;
     return v;
 }
+
 struct js_var js_var_from_array(struct array_js_var_t *arr) {
     struct js_var v;
     v.type = JS_VAR_ARRAY;
     v.data = (void *)arr;
     return v;
 }
+
 struct js_var js_var_from_dict(struct dict_js_var_t *dict) {
     struct js_var v;
     v.type = JS_VAR_DICT;
     v.data = (void *)dict;
     return v;
 }
+
 struct js_var str_to_int16_t(const char * str) {
     struct js_var v;
     const char *p = str;
@@ -170,6 +188,7 @@ struct js_var str_to_int16_t(const char * str) {
     v.number = (int16_t)r;
     return v;
 }
+
 const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
 {
     char *buf;
@@ -242,6 +261,7 @@ struct js_var js_var_to_number(struct js_var v)
 
     return result;
 }
+
 int err_i = 0;
 jmp_buf err_jmp[10];
 #define TRY { int err_val = setjmp(err_jmp[err_i++]); if (!err_val) {
@@ -249,6 +269,7 @@ jmp_buf err_jmp[10];
 #define THROW(x) longjmp(err_jmp[--err_i], x)
 struct array_string_t * err_defs;
 #define END_TRY err_defs->size--; } }
+
 struct js_var js_var_get(struct js_var v, struct js_var arg) {
     struct js_var tmp;
     const char *key;
@@ -272,6 +293,7 @@ struct js_var js_var_get(struct js_var v, struct js_var arg) {
     } else
         return js_var_from(JS_VAR_UNDEFINED);
 }
+
 static ARRAY(void *) gc_main;
 
 struct js_var js_var_plus(struct js_var left, struct js_var right)
@@ -287,7 +309,7 @@ struct js_var js_var_plus(struct js_var left, struct js_var right)
     {
         left_as_string = js_var_to_str(left, &need_dispose_left);
         right_as_string = js_var_to_str(right, &need_dispose_right);
-        
+
         result.type = JS_VAR_STRING;
         result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
         assert(result.data != NULL);
@@ -315,6 +337,7 @@ struct js_var js_var_plus(struct js_var left, struct js_var right)
     result.number = left_to_number.number + right_to_number.number;
     return result;
 }
+
 int16_t gc_i;
 
 static int16_t num;
@@ -640,19 +663,19 @@ static char * tmp_result_87 = NULL;
 static char * tmp_result_88 = NULL;
 static char * tmp_result_89 = NULL;
 static char * tmp_result_90 = NULL;
+
 void log(struct js_var x)
 {
     const char * tmp_str;
     uint8_t tmp_need_dispose;
+
     printf("%s\n", tmp_str = js_var_to_str(x, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-
 }
 
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
-
     ARRAY_CREATE(err_defs, 2, 0);
 
     num = 10;
@@ -753,7 +776,6 @@ int main(void) {
         strcat(tmp_result_4, (tmp = js_var_to_str(static_array1->data[j], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_4);
     log(js_var_from_str(tmp_result_4));
@@ -773,7 +795,6 @@ int main(void) {
         strcat(tmp_result_5, (tmp = js_var_to_str(static_array2->data[l], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     str_int16_t_cat(tmp_result_5, num);
     ARRAY_PUSH(gc_main, tmp_result_5);
@@ -794,7 +815,6 @@ int main(void) {
         strcat(tmp_result_6, (tmp = js_var_to_str(dynamic_array1->data[n], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_6);
     log(js_var_from_str(tmp_result_6));
@@ -813,7 +833,6 @@ int main(void) {
         strcat(tmp_result_7, (tmp = js_var_to_str(dynamic_array2->data[i_3], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     str_int16_t_cat(tmp_result_7, num);
     ARRAY_PUSH(gc_main, tmp_result_7);
@@ -834,7 +853,6 @@ int main(void) {
         strcat(tmp_result_8, (tmp = js_var_to_str(dynamic_array3->data[i_5], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_8);
     log(js_var_from_str(tmp_result_8));
@@ -912,7 +930,6 @@ int main(void) {
         strcat(tmp_result_15, (tmp = js_var_to_str(static_array1->data[i_7], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_15, str);
     ARRAY_PUSH(gc_main, tmp_result_15);
@@ -934,7 +951,6 @@ int main(void) {
         strcat(tmp_result_16, (tmp = js_var_to_str(static_array2->data[i_9], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_16);
     log(js_var_from_str(tmp_result_16));
@@ -953,7 +969,6 @@ int main(void) {
         strcat(tmp_result_17, (tmp = js_var_to_str(dynamic_array1->data[i_11], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_17, str);
     ARRAY_PUSH(gc_main, tmp_result_17);
@@ -974,7 +989,6 @@ int main(void) {
         strcat(tmp_result_18, (tmp = js_var_to_str(dynamic_array2->data[i_13], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_18);
     log(js_var_from_str(tmp_result_18));
@@ -994,7 +1008,6 @@ int main(void) {
         strcat(tmp_result_20, (tmp = js_var_to_str(dynamic_array3->data[i_15], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     tmp_result_19 = malloc(strlen(tmp_result_20) + strlen(str) + 1);
     assert(tmp_result_19 != NULL);
@@ -1078,7 +1091,6 @@ int main(void) {
         strcat(tmp_result_27, (tmp = js_var_to_str(static_array1->data[i_17], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_27);
     log(js_var_from_str(tmp_result_27));
@@ -1098,7 +1110,6 @@ int main(void) {
         strcat(tmp_result_28, (tmp = js_var_to_str(static_array2->data[i_19], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_28, str_num);
     ARRAY_PUSH(gc_main, tmp_result_28);
@@ -1119,7 +1130,6 @@ int main(void) {
         strcat(tmp_result_29, (tmp = js_var_to_str(dynamic_array1->data[i_21], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_29);
     log(js_var_from_str(tmp_result_29));
@@ -1138,7 +1148,6 @@ int main(void) {
         strcat(tmp_result_30, (tmp = js_var_to_str(dynamic_array2->data[i_23], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_30, str_num);
     ARRAY_PUSH(gc_main, tmp_result_30);
@@ -1164,7 +1173,6 @@ int main(void) {
         strcat(tmp_result_31, (tmp = js_var_to_str(dynamic_array3->data[i_25], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_31);
     log(js_var_from_str(tmp_result_31));
@@ -1222,7 +1230,6 @@ int main(void) {
         strcat(tmp_result_36, (tmp = js_var_to_str(static_array1->data[i_27], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_36, bool1 ? "true" : "false");
     ARRAY_PUSH(gc_main, tmp_result_36);
@@ -1244,7 +1251,6 @@ int main(void) {
         strcat(tmp_result_37, (tmp = js_var_to_str(static_array2->data[i_29], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_37);
     log(js_var_from_str(tmp_result_37));
@@ -1263,7 +1269,6 @@ int main(void) {
         strcat(tmp_result_38, (tmp = js_var_to_str(dynamic_array1->data[i_31], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_38, bool1 ? "true" : "false");
     ARRAY_PUSH(gc_main, tmp_result_38);
@@ -1284,7 +1289,6 @@ int main(void) {
         strcat(tmp_result_39, (tmp = js_var_to_str(dynamic_array2->data[i_33], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_39);
     log(js_var_from_str(tmp_result_39));
@@ -1304,7 +1308,6 @@ int main(void) {
         strcat(tmp_result_41, (tmp = js_var_to_str(dynamic_array3->data[i_35], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     tmp_result_40 = malloc(strlen(tmp_result_41) + (5-bool1) + 1);
     assert(tmp_result_40 != NULL);
@@ -1360,7 +1363,6 @@ int main(void) {
         strcat(tmp_result_44, (tmp = js_var_to_str(static_array1->data[i_37], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_44, bool2 ? "true" : "false");
     ARRAY_PUSH(gc_main, tmp_result_44);
@@ -1382,7 +1384,6 @@ int main(void) {
         strcat(tmp_result_45, (tmp = js_var_to_str(static_array2->data[i_39], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_45);
     log(js_var_from_str(tmp_result_45));
@@ -1401,7 +1402,6 @@ int main(void) {
         strcat(tmp_result_46, (tmp = js_var_to_str(dynamic_array1->data[i_41], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_46, bool2 ? "true" : "false");
     ARRAY_PUSH(gc_main, tmp_result_46);
@@ -1422,7 +1422,6 @@ int main(void) {
         strcat(tmp_result_47, (tmp = js_var_to_str(dynamic_array2->data[i_43], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_47);
     log(js_var_from_str(tmp_result_47));
@@ -1442,7 +1441,6 @@ int main(void) {
         strcat(tmp_result_49, (tmp = js_var_to_str(dynamic_array3->data[i_45], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     tmp_result_48 = malloc(strlen(tmp_result_49) + (5-bool2) + 1);
     assert(tmp_result_48 != NULL);
@@ -1498,7 +1496,6 @@ int main(void) {
         strcat(tmp_result_52, (tmp = js_var_to_str(static_array1->data[i_47], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_52);
     log(js_var_from_str(tmp_result_52));
@@ -1523,7 +1520,6 @@ int main(void) {
         strcat(tmp_result_53, (tmp = js_var_to_str(static_array1->data[i_50], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_51 = 0; i_51 < static_array1->size; i_51++) {
         if (i_51 != 0)
@@ -1531,7 +1527,6 @@ int main(void) {
         strcat(tmp_result_53, (tmp = js_var_to_str(static_array1->data[i_51], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_53);
     log(js_var_from_str(tmp_result_53));
@@ -1557,7 +1552,6 @@ int main(void) {
         strcat(tmp_result_54, (tmp = js_var_to_str(static_array1->data[i_54], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_55 = 0; i_55 < static_array2->size; i_55++) {
         if (i_55 != 0)
@@ -1565,7 +1559,6 @@ int main(void) {
         strcat(tmp_result_54, (tmp = js_var_to_str(static_array2->data[i_55], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_54);
     log(js_var_from_str(tmp_result_54));
@@ -1590,7 +1583,6 @@ int main(void) {
         strcat(tmp_result_55, (tmp = js_var_to_str(dynamic_array1->data[i_58], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_59 = 0; i_59 < static_array1->size; i_59++) {
         if (i_59 != 0)
@@ -1598,7 +1590,6 @@ int main(void) {
         strcat(tmp_result_55, (tmp = js_var_to_str(static_array1->data[i_59], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_55);
     log(js_var_from_str(tmp_result_55));
@@ -1623,7 +1614,6 @@ int main(void) {
         strcat(tmp_result_56, (tmp = js_var_to_str(static_array1->data[i_62], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_63 = 0; i_63 < dynamic_array2->size; i_63++) {
         if (i_63 != 0)
@@ -1631,7 +1621,6 @@ int main(void) {
         strcat(tmp_result_56, (tmp = js_var_to_str(dynamic_array2->data[i_63], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_56);
     log(js_var_from_str(tmp_result_56));
@@ -1651,7 +1640,6 @@ int main(void) {
         strcat(tmp_result_58, (tmp = js_var_to_str(dynamic_array3->data[i_65], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     len_36 = static_array1->size;
     for (i_66 = 0; i_66 < static_array1->size; i_66++) {
@@ -1669,7 +1657,6 @@ int main(void) {
         strcat(tmp_result_57, (tmp = js_var_to_str(static_array1->data[i_67], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_57);
     log(js_var_from_str(tmp_result_57));
@@ -1689,7 +1676,6 @@ int main(void) {
         strcat(tmp_result_59, (tmp = js_var_to_str(static_array1->data[i_69], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_59);
     log(js_var_from_str(tmp_result_59));
@@ -1709,7 +1695,6 @@ int main(void) {
         strcat(tmp_result_60, (tmp = js_var_to_str(static_array1->data[i_71], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_60, "[object Object]");
     ARRAY_PUSH(gc_main, tmp_result_60);
@@ -1746,7 +1731,6 @@ int main(void) {
         strcat(tmp_result_61, (tmp = js_var_to_str(static_array2->data[i_73], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_61);
     log(js_var_from_str(tmp_result_61));
@@ -1771,7 +1755,6 @@ int main(void) {
         strcat(tmp_result_62, (tmp = js_var_to_str(static_array2->data[i_76], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_77 = 0; i_77 < static_array2->size; i_77++) {
         if (i_77 != 0)
@@ -1779,7 +1762,6 @@ int main(void) {
         strcat(tmp_result_62, (tmp = js_var_to_str(static_array2->data[i_77], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_62);
     log(js_var_from_str(tmp_result_62));
@@ -1804,7 +1786,6 @@ int main(void) {
         strcat(tmp_result_63, (tmp = js_var_to_str(dynamic_array1->data[i_80], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_81 = 0; i_81 < static_array2->size; i_81++) {
         if (i_81 != 0)
@@ -1812,7 +1793,6 @@ int main(void) {
         strcat(tmp_result_63, (tmp = js_var_to_str(static_array2->data[i_81], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_63);
     log(js_var_from_str(tmp_result_63));
@@ -1837,7 +1817,6 @@ int main(void) {
         strcat(tmp_result_64, (tmp = js_var_to_str(static_array2->data[i_84], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_85 = 0; i_85 < dynamic_array2->size; i_85++) {
         if (i_85 != 0)
@@ -1845,7 +1824,6 @@ int main(void) {
         strcat(tmp_result_64, (tmp = js_var_to_str(dynamic_array2->data[i_85], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_64);
     log(js_var_from_str(tmp_result_64));
@@ -1865,7 +1843,6 @@ int main(void) {
         strcat(tmp_result_66, (tmp = js_var_to_str(dynamic_array3->data[i_87], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     len_47 = static_array2->size;
     for (i_88 = 0; i_88 < static_array2->size; i_88++) {
@@ -1883,7 +1860,6 @@ int main(void) {
         strcat(tmp_result_65, (tmp = js_var_to_str(static_array2->data[i_89], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_65);
     log(js_var_from_str(tmp_result_65));
@@ -1903,7 +1879,6 @@ int main(void) {
         strcat(tmp_result_67, (tmp = js_var_to_str(static_array2->data[i_91], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_67);
     log(js_var_from_str(tmp_result_67));
@@ -1923,7 +1898,6 @@ int main(void) {
         strcat(tmp_result_68, (tmp = js_var_to_str(static_array2->data[i_93], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_68, "[object Object]");
     ARRAY_PUSH(gc_main, tmp_result_68);
@@ -1960,7 +1934,6 @@ int main(void) {
         strcat(tmp_result_69, (tmp = js_var_to_str(dynamic_array1->data[i_95], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_69);
     log(js_var_from_str(tmp_result_69));
@@ -1985,7 +1958,6 @@ int main(void) {
         strcat(tmp_result_70, (tmp = js_var_to_str(dynamic_array1->data[i_98], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_99 = 0; i_99 < dynamic_array1->size; i_99++) {
         if (i_99 != 0)
@@ -1993,7 +1965,6 @@ int main(void) {
         strcat(tmp_result_70, (tmp = js_var_to_str(dynamic_array1->data[i_99], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_70);
     log(js_var_from_str(tmp_result_70));
@@ -2018,7 +1989,6 @@ int main(void) {
         strcat(tmp_result_71, (tmp = js_var_to_str(dynamic_array1->data[i_102], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     for (i_103 = 0; i_103 < dynamic_array2->size; i_103++) {
         if (i_103 != 0)
@@ -2026,7 +1996,6 @@ int main(void) {
         strcat(tmp_result_71, (tmp = js_var_to_str(dynamic_array2->data[i_103], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_71);
     log(js_var_from_str(tmp_result_71));
@@ -2046,7 +2015,6 @@ int main(void) {
         strcat(tmp_result_73, (tmp = js_var_to_str(dynamic_array3->data[i_105], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     len_56 = dynamic_array1->size;
     for (i_106 = 0; i_106 < dynamic_array1->size; i_106++) {
@@ -2064,7 +2032,6 @@ int main(void) {
         strcat(tmp_result_72, (tmp = js_var_to_str(dynamic_array1->data[i_107], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_72);
     log(js_var_from_str(tmp_result_72));
@@ -2084,7 +2051,6 @@ int main(void) {
         strcat(tmp_result_74, (tmp = js_var_to_str(dynamic_array1->data[i_109], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_74);
     log(js_var_from_str(tmp_result_74));
@@ -2104,7 +2070,6 @@ int main(void) {
         strcat(tmp_result_75, (tmp = js_var_to_str(dynamic_array1->data[i_111], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_75, "[object Object]");
     ARRAY_PUSH(gc_main, tmp_result_75);
@@ -2141,7 +2106,6 @@ int main(void) {
         strcat(tmp_result_76, (tmp = js_var_to_str(dynamic_array2->data[i_113], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_76);
     log(js_var_from_str(tmp_result_76));
@@ -2161,7 +2125,6 @@ int main(void) {
         strcat(tmp_result_78, (tmp = js_var_to_str(dynamic_array3->data[i_115], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     len_61 = dynamic_array2->size;
     for (i_116 = 0; i_116 < dynamic_array2->size; i_116++) {
@@ -2179,7 +2142,6 @@ int main(void) {
         strcat(tmp_result_77, (tmp = js_var_to_str(dynamic_array2->data[i_117], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_77);
     log(js_var_from_str(tmp_result_77));
@@ -2199,7 +2161,6 @@ int main(void) {
         strcat(tmp_result_79, (tmp = js_var_to_str(dynamic_array2->data[i_119], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_79);
     log(js_var_from_str(tmp_result_79));
@@ -2219,7 +2180,6 @@ int main(void) {
         strcat(tmp_result_80, (tmp = js_var_to_str(dynamic_array2->data[i_121], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_80, "[object Object]");
     ARRAY_PUSH(gc_main, tmp_result_80);
@@ -2255,7 +2215,6 @@ int main(void) {
         strcat(tmp_result_81, (tmp = js_var_to_str(dynamic_array3->data[i_123], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     str_int16_t_cat(tmp_result_81, 9);
     ARRAY_PUSH(gc_main, tmp_result_81);
@@ -2275,7 +2234,6 @@ int main(void) {
         strcat(tmp_result_82, (tmp = js_var_to_str(dynamic_array3->data[i_125], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     strcat(tmp_result_82, "[object Object]");
     ARRAY_PUSH(gc_main, tmp_result_82);
@@ -2297,7 +2255,6 @@ int main(void) {
         strcat(tmp_result_83, (tmp = js_var_to_str(dynamic_array3->data[i_127], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     ARRAY_PUSH(gc_main, tmp_result_83);
     log(js_var_from_str(tmp_result_83));
@@ -2328,7 +2285,6 @@ int main(void) {
         strcat(tmp_result_84, (tmp = js_var_to_str(dynamic_array3->data[i_129], &need_dispose)));
         if (need_dispose)
             free((void *)tmp);
-        
     }
     log(js_var_plus(js_var_from_str(tmp_result_84), v_arr3));
     log(js_var_plus(js_var_from_array(dynamic_array3), v_dict1));

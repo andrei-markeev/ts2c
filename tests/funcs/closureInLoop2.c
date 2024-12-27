@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -24,6 +26,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -31,10 +34,12 @@ typedef short int16_t;
         array->data[pos] = item; \
     } \
 }
+
 #define DICT(T) struct { \
     ARRAY(const char *) index; \
     ARRAY(T) values; \
 } *
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -57,6 +62,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -76,12 +82,15 @@ int16_t tmp_dict_pos2;
     } else \
         dict->values->data[tmp_dict_pos2] = value; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 static ARRAY(void *) gc_main;
 
 struct scope_t {
@@ -98,10 +107,10 @@ static ARRAY(DICT(void *)) gc_main_dicts;
 static DICT(struct closure_t *) callInnerFunctions;
 static struct closure_t * inner0;
 static struct closure_t * inner1;
+
 int16_t func(struct closure_t * closure)
 {
     return closure->scope->x;
-
 }
 DICT(struct closure_t *) countTheNumber()
 {
@@ -112,7 +121,7 @@ DICT(struct closure_t *) countTheNumber()
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     DICT_CREATE(arrToStore, 4);
     ARRAY_PUSH(gc_main_dicts, (void *)arrToStore);
     scope->x = 0;
@@ -133,7 +142,6 @@ DICT(struct closure_t *) countTheNumber()
         DICT_SET(arrToStore, tmp_result, closure);
     }
     return arrToStore;
-
 }
 
 int main(void) {

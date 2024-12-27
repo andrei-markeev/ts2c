@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct scope_t {
@@ -36,10 +39,10 @@ int16_t gc_i;
 
 static struct closure_t * add5;
 static struct closure_t * add10;
+
 int16_t func(int16_t y, struct closure_t * closure)
 {
     return closure->scope->x + y;
-
 }
 struct closure_t * makeAdder(int16_t x)
 {
@@ -49,7 +52,7 @@ struct closure_t * makeAdder(int16_t x)
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->x = x;
     closure = malloc(sizeof(*closure));
     assert(closure != NULL);
@@ -57,7 +60,6 @@ struct closure_t * makeAdder(int16_t x)
     closure->func = func;
     closure->scope = scope;
     return closure;
-
 }
 
 int main(void) {

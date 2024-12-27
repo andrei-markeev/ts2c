@@ -3,13 +3,16 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 int str_int16_t_cmp(const char * str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     return strcmp(str, numstr);
 }
+
 int16_t str_rpos(const char * str, const char *search) {
     int16_t i;
     const char * found = strstr(str, search);
@@ -30,16 +33,19 @@ int16_t str_rpos(const char * str, const char *search) {
     }
     return pos;
 }
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 static const char * s;
 static char * tmp_result = NULL;
 static char * tmp_result_4 = NULL;
 static char * tmp_result_3 = NULL;
 static char * tmp_result_2 = NULL;
+
 int main(void) {
     tmp_result = malloc(STR_INT16_T_BUFLEN + strlen("") + 1);
     assert(tmp_result != NULL);

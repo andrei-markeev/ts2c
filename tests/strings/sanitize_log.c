@@ -1,4 +1,5 @@
 #include <stdio.h>
+
 int main(void) {
     printf("%%a%%s%%d\n");
     printf("%%\n");

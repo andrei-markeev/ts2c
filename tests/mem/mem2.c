@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -28,6 +30,7 @@ void testInNestedFunc()
 {
     struct array_number_t * obj;
     int16_t i;
+
     ARRAY_CREATE(obj, 2, 0);
     ARRAY_PUSH(obj, 200);
     obj->data[0] = 100;
@@ -40,7 +43,6 @@ void testInNestedFunc()
     printf(" ]\n");
     free(obj->data);
     free(obj);
-
 }
 
 int main(void) {

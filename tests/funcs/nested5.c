@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -24,12 +26,12 @@ struct obj_t {
 void inc_obj_a(struct obj_t * obj)
 {
     obj->a++;
-
 }
 void do_stuff()
 {
     struct obj_t * obj;
     int16_t i;
+
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);
     obj->a = 10;
@@ -42,7 +44,6 @@ void do_stuff()
     printf("b: \"%s\"", obj->b);
     printf(" }\n");
     free(obj);
-
 }
 
 int main(void) {

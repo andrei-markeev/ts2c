@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
 
 struct obj1_t {
@@ -19,6 +20,7 @@ struct tmp_obj_2_t {
 static struct obj1_t * obj1;
 static struct tmp_obj_t * tmp_obj = NULL;
 static struct tmp_obj_2_t * tmp_obj_2 = NULL;
+
 int main(void) {
     obj1 = malloc(sizeof(*obj1));
     assert(obj1 != NULL);

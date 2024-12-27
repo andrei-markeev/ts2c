@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -22,6 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 static ARRAY(void *) gc_main;
 
 struct scope_t {
@@ -36,10 +39,10 @@ struct nestedfunc_closure_t {
 int16_t gc_i;
 
 static struct nestedfunc_closure_t * tmp_closure;
+
 int16_t nestedfunc(struct nestedfunc_closure_t * closure)
 {
     return closure->scope->arg1 + closure->scope->arg2;
-
 }
 struct nestedfunc_closure_t * func1(int16_t arg1, int16_t arg2)
 {
@@ -49,7 +52,7 @@ struct nestedfunc_closure_t * func1(int16_t arg1, int16_t arg2)
     scope = malloc(sizeof(*scope));
     assert(scope != NULL);
     ARRAY_PUSH(gc_main, (void *)scope);
-    
+
     scope->arg1 = arg1;
     scope->arg2 = arg2;
     nestedfunc_closure = malloc(sizeof(*nestedfunc_closure));
@@ -58,7 +61,6 @@ struct nestedfunc_closure_t * func1(int16_t arg1, int16_t arg2)
     nestedfunc_closure->func = nestedfunc;
     nestedfunc_closure->scope = scope;
     return nestedfunc_closure;
-
 }
 
 int main(void) {

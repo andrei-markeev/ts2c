@@ -8,10 +8,10 @@ import {CExpression} from './expressions';
 struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
-{#if hasChars}
+    {#if hasChars}
         char ch;
-{/if}
-{#if groupNumber}
+    {/if}
+    {#if groupNumber}
         int16_t started[{groupNumber}];
         if (capture) {
             result.matches = malloc({groupNumber} * sizeof(*result.matches));
@@ -19,11 +19,11 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             regex_clear_matches(&result, {groupNumber});
             memset(started, 0, sizeof started);
         }
-{/if}
+    {/if}
     for (iterator = 0; iterator < len; iterator++) {
-{#if hasChars}
+        {#if hasChars}
             ch = str[iterator];
-{/if}
+        {/if}
 
 {stateBlocks}
 
@@ -34,12 +34,12 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             index++;
             state = 0;
             end = -1;
-{#if groupNumber}
+            {#if groupNumber}
                 if (capture) {
                     regex_clear_matches(&result, {groupNumber});
                     memset(started, 0, sizeof started);
                 }
-{/if}
+            {/if}
         } else {
             state = next;
             next = -1;
@@ -51,12 +51,12 @@ struct regex_match_struct_t {regexName}_search(const char *str, int16_t capture)
             iterator = index;
             index++;
             state = 0;
-{#if groupNumber}
+            {#if groupNumber}
                 if (capture) {
                     regex_clear_matches(&result, {groupNumber});
                     memset(started, 0, sizeof started);
                 }
-{/if}
+            {/if}
         }
     }
     if (end == -1 && {finals { && }=> state != {this}})
@@ -100,15 +100,15 @@ export class CRegexSearchFunction extends CTemplateBase {
 
 @CodeTemplate(`
         if (state == {stateNumber}) {
-{#if final}
+            {#if final}
                 end = iterator;
-{/if}
-{conditions {\n}=> {this}}
-{#if groupNumber && groupsToReset.length}
+            {/if}
+            {conditions {\n            }=> {this}}
+            {#if groupNumber && groupsToReset.length}
                 if (capture && next == -1) {
                     {groupsToReset {\n                    }=> started[{this}] = 0;}
                 }
-{/if}
+            {/if}
         }
 `)
 class CStateBlock extends CTemplateBase {
@@ -131,13 +131,13 @@ class CStateBlock extends CTemplateBase {
 
 @CodeTemplate(`
 {#if anyCharExcept}
-                if (next == -1 && {except { && }=> ch != '{this}'}{fixedConditions}) {nextCode}
+    if (next == -1 && {except { && }=> ch != '{this}'}{fixedConditions}) {nextCode}
 {#elseif anyChar}
-                if (next == -1{fixedConditions}) {nextCode}
+    if (next == -1{fixedConditions}) {nextCode}
 {#elseif charClass}
-                if (ch >= '{chFrom}' && ch <= '{ch}'{fixedConditions}) {nextCode}
+    if (ch >= '{chFrom}' && ch <= '{ch}'{fixedConditions}) {nextCode}
 {#else}
-                if (ch == '{ch}'{fixedConditions}) {nextCode}
+    if (ch == '{ch}'{fixedConditions}) {nextCode}
 {/if}`)
 class CharCondition extends CTemplateBase {
     public anyCharExcept: boolean = false;

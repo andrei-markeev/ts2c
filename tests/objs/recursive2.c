@@ -11,6 +11,7 @@ struct obj2_t {
 
 static struct obj1_t * obj1;
 static struct obj2_t * obj2;
+
 int main(void) {
     obj1 = malloc(sizeof(*obj1));
     assert(obj1 != NULL);

@@ -7,10 +7,10 @@ struct this_t {
 };
 
 static struct this_t * monkey;
+
 void Monkey(struct this_t * this, const char * name)
 {
     this->name = name;
-
 }
 
 int main(void) {

@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -24,25 +26,30 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 static ARRAY(void *) gc_main;
+
 int16_t gc_i;
 
 static const char * (*callback1)(const char *);
 static const char * (*callback2)(const char *);
+
 const char * something(const char * (*callback)(const char *))
 {
     return callback("something");
-
 }
 const char * callback1_func(const char * value)
 {
     char * tmp_result = NULL;
+
     tmp_result = malloc(strlen("first callback ") + strlen(value) + 1);
     assert(tmp_result != NULL);
     tmp_result[0] = '\0';
@@ -50,11 +57,11 @@ const char * callback1_func(const char * value)
     strcat(tmp_result, value);
     ARRAY_PUSH(gc_main, tmp_result);
     return tmp_result;
-
 }
 const char * callback2_func(const char * value)
 {
     char * tmp_result = NULL;
+
     tmp_result = malloc(strlen("second callback ") + strlen(value) + 1);
     assert(tmp_result != NULL);
     tmp_result[0] = '\0';
@@ -62,7 +69,6 @@ const char * callback2_func(const char * value)
     strcat(tmp_result, value);
     ARRAY_PUSH(gc_main, tmp_result);
     return tmp_result;
-
 }
 
 int main(void) {

@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -31,23 +33,24 @@ struct alloc_t {
 int16_t gc_i;
 
 static ARRAY(void *) gc_146_214;
+
 struct alloc_t * alloc()
 {
     struct alloc_t * obj;
+
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);
     ARRAY_PUSH(gc_146_214, (void *)obj);
     obj->key1 = "hello!";
     obj->key2 = "something";
     return obj;
-
 }
 struct alloc_t * f2_wrap()
 {
     struct alloc_t * a;
+
     a = alloc();
     return a;
-
 }
 void f2()
 {
@@ -65,7 +68,6 @@ void f2()
         free(gc_146_214->data[gc_i]);
     free(gc_146_214->data);
     free(gc_146_214);
-
 }
 void f1()
 {
@@ -84,7 +86,6 @@ void f1()
         free(gc_146_214->data[gc_i]);
     free(gc_146_214->data);
     free(gc_146_214);
-
 }
 
 int main(void) {

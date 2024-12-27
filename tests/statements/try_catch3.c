@@ -1,8 +1,11 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 #include <setjmp.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -18,11 +21,13 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 int err_i = 0;
 jmp_buf err_jmp[10];
 #define TRY { int err_val = setjmp(err_jmp[err_i++]); if (!err_val) {
@@ -30,9 +35,11 @@ jmp_buf err_jmp[10];
 #define THROW(x) longjmp(err_jmp[--err_i], x)
 struct array_string_t * err_defs;
 #define END_TRY err_defs->size--; } }
+
 void print(int16_t p)
 {
     const char * e;
+
     TRY
     {
         if (p == 3)
@@ -46,7 +53,6 @@ void print(int16_t p)
         e = err_defs->data[err_val - 1];
         printf("%s\n", e);
     END_TRY
-
 }
 
 int main(void) {

@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -18,12 +20,14 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 int array_int16_t_cmp(const void* a, const void* b) {
     return ( *(int16_t*)a - *(int16_t*)b );
 }
 int array_str_cmp(const void* a, const void* b) { 
     return strcmp(*(const char **)a, *(const char **)b);
 }
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
@@ -41,6 +45,7 @@ static int16_t i;
 static struct array_string_t * arr2;
 static struct array_string_t * tmp_result;
 static int16_t j;
+
 int main(void) {
     ARRAY_CREATE(arr1, 3, 3);
     arr1->data[0] = 1;

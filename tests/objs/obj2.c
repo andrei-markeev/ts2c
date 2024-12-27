@@ -13,6 +13,7 @@ struct obj2_t {
 
 static struct obj_t * obj;
 static struct obj2_t * obj2;
+
 int main(void) {
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);

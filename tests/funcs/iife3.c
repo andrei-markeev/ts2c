@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -24,22 +26,28 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 static ARRAY(void *) gc_main;
+
 int16_t gc_i;
 
 static const char * fullName;
+
 const char * func()
 {
     const char * first;
     const char * last;
     char * tmp_result_2 = NULL;
     char * tmp_result = NULL;
+
     first = "John";
     last = "Doe";
     tmp_result_2 = malloc(strlen(first) + strlen(" ") + 1);
@@ -55,7 +63,6 @@ const char * func()
     ARRAY_PUSH(gc_main, tmp_result);
     free((char *)tmp_result_2);
     return tmp_result;
-
 }
 
 int main(void) {

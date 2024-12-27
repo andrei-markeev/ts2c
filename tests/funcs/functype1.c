@@ -3,22 +3,27 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
 struct js_var {
     enum js_var_type type;
     int16_t number;
     void *data;
 };
+
 struct array_js_var_t {
     int16_t size;
     int16_t capacity;
     struct js_var *data;
 };
+
 struct js_var js_var_from_int16_t(int16_t n) {
     struct js_var v;
     v.type = JS_VAR_INT16;
@@ -26,12 +31,14 @@ struct js_var js_var_from_int16_t(int16_t n) {
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_str(const char *s) {
     struct js_var v;
     v.type = JS_VAR_STRING;
     v.data = (void *)s;
     return v;
 }
+
 const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
 {
     char *buf;
@@ -90,10 +97,10 @@ static const char * tmp_str;
 static uint8_t tmp_need_dispose;
 static struct js_var tmp_result_2;
 static struct js_var tmp_result_3;
+
 struct js_var echo(struct js_var x)
 {
     return x;
-
 }
 
 int main(void) {

@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -26,6 +28,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -33,10 +36,12 @@ typedef short int16_t;
         array->data[pos] = item; \
     } \
 }
+
 #define DICT(T) struct { \
     ARRAY(const char *) index; \
     ARRAY(T) values; \
 } *
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -59,6 +64,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -78,6 +84,7 @@ int16_t tmp_dict_pos2;
     } else \
         dict->values->data[tmp_dict_pos2] = value; \
 }
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -91,6 +98,7 @@ int16_t str_len(const char * str) {
     }
     return len;
 }
+
 static int16_t i;
 static int16_t j;
 static int16_t arr[4] = { 1, 10, 2, 6 };
@@ -99,12 +107,14 @@ static int16_t el;
 static DICT(int16_t) obj;
 static int16_t m;
 static const char * k;
+
 int main(void) {
     {
         printf("---1\n");
         goto l1_break;
         printf("---2\n");
-    } l1_break:
+    }
+     l1_break:
     i = 0;
     while(i < 3) {
         for (j = 0;j < 3;j++)
@@ -124,7 +134,8 @@ int main(void) {
             goto loop3_break;
         printf("break i = %d", i);
         printf(", j = %d\n", j);
-    } loop3_break:
+    }
+     loop3_break:
     l = 0;
     while (l < 4) {
         el = arr[l];

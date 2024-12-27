@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -23,6 +25,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -30,10 +33,12 @@ typedef short int16_t;
         array->data[pos] = item; \
     } \
 }
+
 #define DICT(T) struct { \
     ARRAY(const char *) index; \
     ARRAY(T) values; \
 } *
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -56,6 +61,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -87,6 +93,7 @@ static struct obj_t * obj;
 static DICT(void *) tmp_obj = NULL;
 static struct obj_t * temp;
 static struct tmp_obj_2_t * tmp_obj_2 = NULL;
+
 int main(void) {
     DICT_CREATE(tmp_obj, 4);
     obj = malloc(sizeof(*obj));

@@ -7,6 +7,7 @@ struct obj_t {
 };
 
 static struct obj_t * obj;
+
 int main(void) {
     obj = malloc(sizeof(*obj));
     assert(obj != NULL);

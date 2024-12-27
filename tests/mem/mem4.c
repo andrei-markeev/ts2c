@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -24,7 +26,9 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 int16_t str_pos(const char * str, const char *search) {
     int16_t i;
     const char * found = strstr(str, search);
@@ -41,19 +45,23 @@ int16_t str_pos(const char * str, const char *search) {
     }
     return pos;
 }
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 int16_t gc_i;
 
 static const char * variants[4] = { "banana", "kiwi", "pear", "plum" };
 static ARRAY(void *) gc_212;
+
 const char * alloc(int16_t n)
 {
     char * tmp_result_2 = NULL;
     char * tmp_result = NULL;
+
     if (n < 4 - 1)
     {
         const char * s;
@@ -78,7 +86,6 @@ const char * alloc(int16_t n)
         return "";
     }
     free((char *)tmp_result_2);
-
 }
 void use(int16_t index, const char * search)
 {
@@ -95,7 +102,6 @@ void use(int16_t index, const char * search)
         free(gc_212->data[gc_i]);
     free(gc_212->data);
     free(gc_212);
-
 }
 
 int main(void) {

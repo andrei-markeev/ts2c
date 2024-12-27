@@ -212,7 +212,6 @@ export const reservedCSymbolNames = [
         T *data;\\
     } *
 {/if}
-
 {#if headerFlags.array || headerFlags.dict || headerFlags.js_var_dict || headerFlags.js_var_plus || headerFlags.try_catch || headerFlags.js_var_get}
     #define ARRAY_CREATE(array, init_capacity, init_size) {\\
         array = malloc(sizeof(*array)); \\
@@ -301,7 +300,6 @@ export const reservedCSymbolNames = [
         } else \\
             dict->values->data[tmp_dict_pos2] = value; \\
     }
-
 {/if}
 
 {#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan}
@@ -957,7 +955,7 @@ export const reservedCSymbolNames = [
     }
 {/if}
 
-{userStructs => struct {name} {\n    {properties {    }=> {this};\n}};\n}
+{userStructs => struct {name} {\n    {properties {    }=> {this};\n}\n};\n}
 
 {#if headerFlags.regex}
     void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {
@@ -1013,8 +1011,8 @@ int main(void) {
     {/if}
 
     {statements {    }=> {this}}
-
     {destructors}
+
     return 0;
 }
 `)

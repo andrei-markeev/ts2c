@@ -3,8 +3,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -18,6 +21,7 @@ int16_t str_len(const char * str) {
     }
     return len;
 }
+
 const char * str_substring(const char * str, int16_t start, int16_t end) {
     int16_t i, tmp, pos, len = str_len(str), byte_start = -1;
     char *p, *buf;
@@ -63,6 +67,7 @@ void str_int16_t_cat(char *str, int16_t num) {
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 static const char * s1;
 static const char * s2;
 static const char * substr;
@@ -76,6 +81,7 @@ static const char * substr_7;
 static const char * substr_8;
 static char * tmp_result_2 = NULL;
 static const char * substr_9;
+
 int main(void) {
     s1 = "simple test";
     s2 = "áäöß€𐍈";

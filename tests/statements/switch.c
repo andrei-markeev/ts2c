@@ -3,13 +3,17 @@
 #include <assert.h>
 #include <stdio.h>
 #include <limits.h>
+
 typedef short int16_t;
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 void showMessage(int16_t message)
 {
     switch (message) {
@@ -23,7 +27,6 @@ void showMessage(int16_t message)
             printf("default message\n");
             break;
     }
-
 }
 void isGood(int16_t number)
 {
@@ -35,11 +38,11 @@ void isGood(int16_t number)
             printf("7 is a good number\n");
             break;
     }
-
 }
 void howMuch(const char * fruit)
 {
     int16_t tmp_switch;
+
     tmp_switch = !strcmp(fruit, "banana") ? 0
         : !strcmp(fruit, "apple") ? 1
         : -1;
@@ -54,18 +57,17 @@ void howMuch(const char * fruit)
             printf("not in stock\n");
             break;
     }
-
 }
 void onlyFish(const char * request)
 {
     int16_t tmp_switch;
+
     tmp_switch = !strcmp(request, "fish") ? 0
         : -1;
     switch (tmp_switch) {
         case 0:
             printf("FISH!\n");
     }
-
 }
 void ask(int16_t n)
 {
@@ -77,6 +79,7 @@ void ask(int16_t n)
     char * tmp_result_5 = NULL;
     char * tmp_result_6 = NULL;
     char * tmp_result_7 = NULL;
+
     output = "";
     switch (n) {
         case 0:
@@ -141,11 +144,11 @@ void ask(int16_t n)
     free((char *)tmp_result_5);
     free((char *)tmp_result_6);
     free((char *)tmp_result_7);
-
 }
 void isExtinct(const char * animal)
 {
     int16_t tmp_switch;
+
     tmp_switch = !strcmp(animal, "cow") ? 0
         : !strcmp(animal, "giraffe") ? 1
         : !strcmp(animal, "dog") ? 2
@@ -165,7 +168,6 @@ void isExtinct(const char * animal)
             printf("%s", animal);
             printf(" is extinct.\n");
     }
-
 }
 
 int main(void) {

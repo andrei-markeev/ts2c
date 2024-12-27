@@ -1,5 +1,7 @@
 #include <stdio.h>
+
 typedef short int16_t;
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -13,10 +15,12 @@ int16_t str_len(const char * str) {
     }
     return len;
 }
+
 static const char * s1;
 static const char * s2;
 static const char * s3;
 static const char * s4;
+
 int main(void) {
     s1 = "simple test";
     printf("%d\n", str_len(s1));
