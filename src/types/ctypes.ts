@@ -127,12 +127,30 @@ export class FuncType {
         let retType = getTypeText(this.returnType).replace(/ \{var\}\[\d+\]/g, "* {var}").replace(/^static /, "");
         if (retType.indexOf("{var}") == -1)
             retType += " {var}";
-        return retType.replace(" {var}", " (*{var})") + "("
+
+        return retType.replace("{var}", "(*{var}") + ")" + "("
             + this.parameterTypes
-                .map(t => getTypeText(t).replace(/\ {var\}/, "").replace(/^static /, ""))
+                .map(t => getTypeText(t).replace(/ \{var\}/, "").replace(/^static /, ""))
                 .concat(this.closureParams.length ? ['struct ' + this.structName + ' *'] : [])
                 .join(', ')
             + ")";
+    }
+    public getPointerToTypeText() {
+        if (this.closureParams.length)
+            return 'struct ' + this.structName + ' *';
+        let retType = this.returnType instanceof FuncType ?
+            this.returnType.getPointerToTypeText()
+        :
+            getTypeText(this.returnType).replace(/ \{var\}\[\d+\]/g, "* {var}").replace(/^static /, "");
+        if (retType.indexOf("{var}") == -1)
+            retType += " {var}";
+
+        return retType.replace("{var}", "(*{var}") + "("
+            + this.parameterTypes
+                .map(t => getTypeText(t).replace(/ \{var\}/, "").replace(/^static /, ""))
+                .concat(this.closureParams.length ? ['struct ' + this.structName + ' *'] : [])
+                .join(', ')
+            + "))";
     }
     public getBodyText() {
         const paramTypes = [].concat(this.parameterTypes);

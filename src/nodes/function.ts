@@ -70,7 +70,7 @@ export class CFunction extends CTemplateBase implements IScope {
             this.name = root.symbolsHelper.addTemp(findParentSourceFile(node), funcExprName);
         }
         const funcType = root.typeHelper.getCType(node) as FuncType;
-        this.funcDecl = new CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true });
+        this.funcDecl = new CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true, funcDecl: true });
 
         this.parameters = node.parameters.map((p, i) => {
             return new CVariable(this, (<ts.Identifier>p.name).text, funcType.parameterTypes[i], { removeStorageSpecifier: true });

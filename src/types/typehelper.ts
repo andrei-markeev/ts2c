@@ -74,7 +74,7 @@ export class TypeHelper {
     }
 
     /** Get textual representation of type of the parameter for inserting into the C code */
-    public getTypeString(source) {
+    public getTypeString(source): string {
 
         let cType = source;
         if (source && source.flags != null && source.intrinsicName != null) // ts.Type

@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "mingw64 GCC",
+            "compilerPath": "C:\\cygwin64\\bin\\gcc.exe",
+            "intelliSenseMode": "windows-gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "c:\\cygwin64\\usr\\local\\include",
+                "c:\\cygwin64\\usr\\include\\mysql"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cStandard": "c89",
+            "cppStandard": "c++14"
+        }
+    ],
+    "version": 4
+}

@@ -6,7 +6,6 @@
 .nyc_output
 .vscode/.browse.*
 .vscode/ipch
-.vscode/c_cpp_properties.json
 node_modules
 tests/coverage
 sputniktests/results.txt

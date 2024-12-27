@@ -205,15 +205,16 @@ interface CVariableOptions {
     removeStorageSpecifier?: boolean;
     arraysToPointers?: boolean;
     initializer?: string;
+    funcDecl?: boolean;
 }
 
 export class CVariable extends CTemplateBase {
     private static: boolean;
     private arraysToPointers: boolean;
     private initializer: string;
+    private funcDecl: boolean;
     public type: CType;
     private typeHelper: TypeHelper;
-    private skip: boolean;
 
     constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
         super();
@@ -241,6 +242,7 @@ export class CVariable extends CTemplateBase {
         this.arraysToPointers = options && options.arraysToPointers;
         if (options && options.initializer)
             this.initializer = options.initializer;
+        this.funcDecl = options && options.funcDecl;
         
         this.type = type;
         this.typeHelper = scope.root.typeHelper;
@@ -253,8 +255,11 @@ export class CVariable extends CTemplateBase {
             || type instanceof DictType;
     }
     resolve() {
-        let varString = this.typeHelper.getTypeString(this.type);
-
+        let varString: string;
+        if (this.funcDecl && this.type instanceof FuncType)
+            varString = this.type.getPointerToTypeText();
+        else
+            varString = this.typeHelper.getTypeString(this.type);
 
         if (this.arraysToPointers)
             varString = varString.replace(/ \{var\}\[\d+\]/g, "* {var}");
