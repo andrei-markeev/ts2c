@@ -1,4 +1,4 @@
-import {IScope} from './program';
+import { IScope } from './program';
 
 interface INode { kind: number, getText(): string };
 
@@ -16,7 +16,7 @@ export class CodeTemplateFactory {
             : "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
     }
     public static templateToString(template: string | CTemplateBase) {
-        return typeof(template) === "string" ? template : template.resolve();
+        return typeof (template) === "string" ? template : template.resolve();
     }
 }
 
@@ -41,6 +41,8 @@ export function CodeTemplate(tempString: string, nodeKind?: number | number[]): 
                 for (let nk of nodeKind)
                     nodeKindTemplates[nk] = newConstructor;
         }
+
+        newConstructor.prototype = target.prototype;
 
         return newConstructor;
 
@@ -123,15 +125,15 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
             let index = -1;
             while ((index = template.indexOf("{" + k + "}")) > -1) {
                 let spaces = '';
-                while (template.length > index && template[index-1] == ' ') {
+                while (template.length > index && template[index - 1] == ' ') {
                     index--;
-                    spaces+=' ';
+                    spaces += ' ';
                 }
                 let value = args[k];
                 if (value && value.resolve)
                     value = value.resolve();
                 if (value && typeof value === 'string')
-                    value = value.replace(/\n/g, '\n'+spaces);
+                    value = value.replace(/\n/g, '\n' + spaces);
                 template = template.replace("{" + k + "}", () => value);
                 replaced = true;
             }
@@ -226,7 +228,7 @@ function replaceArray(data, k, array, statements) {
             if (elementsResolved != "")
                 elementsResolved += separator;
             elementsResolved += resolvedElement;
-        } 
+        }
 
     }
 

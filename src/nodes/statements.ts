@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
-import { CProgram, IScope} from '../program';
+import { CProgram, IScope } from '../program';
 import { ArrayType, NumberVarType, StringVarType } from '../types/ctypes';
 import { CVariable, CVariableDeclaration, CVariableDestructors } from './variable';
 import { CExpression, CCondition } from './expressions';
@@ -71,17 +71,48 @@ export class CEmptyStatement {
 }
 
 @CodeTemplate(`
-{destructors}
-return {expression};
+{#if returnTypeAndVar}
+    {
+        {returnTypeAndVar} = {expression};
+        {destructors}
+        return {returnTemp};
+    }
+{#else}
+    {destructors}
+    return {expression};
+{/if}
 `, ts.SyntaxKind.ReturnStatement)
 export class CReturnStatement extends CTemplateBase {
     public expression: CExpression;
     public destructors: CVariableDestructors;
     public retVarName: string = null;
+    public returnTypeAndVar: string = null;
+    public returnTemp: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
+    doCheckVarNeeded(scope: IScope, node: ts.ReturnStatement): boolean {
+        let s = scope.root.memoryManager.getDestructorsForScope(node);
+        let result = false;
+        for (let e of s) {
+            result = result || new RegExp('\\W' + e.varName + '\\W').test(' ' + node.getFullText() + ' ');
+        }
+        return result;
+    }
     constructor(scope: IScope, node: ts.ReturnStatement) {
         super();
+        this.returnTemp = scope.root.symbolsHelper.addTemp(node, 'returnVal');
+        let returnType = scope.root.typeHelper.getCType(node.expression);
+        if (this.doCheckVarNeeded(scope, node)) {
+            // todo: make this less hackyy
+            let fakeVar = new CVariable(scope, '__fake', returnType, { removeStorageSpecifier: true, arraysToPointers: true });;
+            let fakeVarType = fakeVar.resolve().slice(0, -6).trim();
+            this.returnTypeAndVar = fakeVarType;
+            if (this.returnTypeAndVar.indexOf('{var}') == -1) {
+                this.returnTypeAndVar += ' {var}';
+            }
+            this.returnTypeAndVar = this.returnTypeAndVar.replace('{var}', this.returnTemp);
+        }
         this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+
         this.destructors = new CVariableDestructors(scope, node);
     }
 }
@@ -380,8 +411,7 @@ export class CForInStatement extends CTemplateBase implements IScope {
         else
             this.init = new CElementAccess(scope, node.initializer);
 
-        if (node.statement.kind == ts.SyntaxKind.Block)
-        {
+        if (node.statement.kind == ts.SyntaxKind.Block) {
             let block = <ts.Block>node.statement;
             for (let s of block.statements)
                 this.statements.push(CodeTemplateFactory.createForNode(this, s));
