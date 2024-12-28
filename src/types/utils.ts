@@ -16,7 +16,13 @@ export interface FunctionArgInMethodCall extends ts.FunctionExpression {
 export interface ForOfWithSimpleInitializer extends ts.ForOfStatement {
     initializer: ts.VariableDeclarationList;
 }
+export interface ForInWithSimpleInitializer extends ts.ForInStatement {
+    initializer: ts.VariableDeclarationList;
+}
 export interface ForOfWithExpressionInitializer extends ts.ForOfStatement {
+    initializer: ts.Identifier;
+}
+export interface ForInWithExpressionInitializer extends ts.ForInStatement {
     initializer: ts.Identifier;
 }
 
@@ -54,8 +60,17 @@ export function isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer
 export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionInitializer {
     return ts.isForOfStatement(n) && ts.isIdentifier(n.initializer);
 }
+export function isForInWithSimpleInitializer(n): n is ForInWithSimpleInitializer {
+    return ts.isForInStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
+}
+export function isForInWithIdentifierInitializer(n): n is ForInWithExpressionInitializer {
+    return ts.isForInStatement(n) && ts.isIdentifier(n.initializer);
+}
 export function isLiteral(n): n is ts.LiteralExpression {
     return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
+}
+export function isBooleanLiteral(n): n is ts.BooleanLiteral {
+    return n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
 }
 export function isUnaryExpression(n): n is ts.PrefixUnaryExpression {
     return ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n);
