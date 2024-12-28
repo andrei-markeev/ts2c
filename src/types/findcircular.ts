@@ -28,7 +28,8 @@ export class CircularTypesFinder {
                 this.checkOneAssignment(node, lvar, leftProps, right);
             }
         }
-        console.log(Object.keys(this.circularAssignments));
+        if (Object.keys(this.circularAssignments).length > 0)
+            console.log(Object.keys(this.circularAssignments));
         return this.circularAssignments;
     }
 
