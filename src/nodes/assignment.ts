@@ -1,32 +1,33 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import {CodeTemplate, CodeTemplateFactory, CTemplateBase} from '../template';
 import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types/ctypes';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import { CAsUniversalVar } from './typeconvert';
+import { getNodeText, isArrayLiteral, isObjectLiteral, isPropertyDefinition, isStringLiteral } from '../types/utils';
 
 export class AssignmentHelper {
-    public static create(scope: IScope, left: ts.Node, right: ts.Expression, inline: boolean = false) {
+    public static create(scope: IScope, left: kataw.ExpressionNode, right: kataw.ExpressionNode, inline: boolean = false) {
         let accessor;
         let varType;
         let argumentExpression;
-        if (left.kind === ts.SyntaxKind.ElementAccessExpression) {
-            let elemAccess = <ts.ElementAccessExpression>left;
-            varType = scope.root.typeHelper.getCType(elemAccess.expression);
-            if (elemAccess.expression.kind == ts.SyntaxKind.Identifier)
-                accessor = elemAccess.expression.getText();
+        if (left.kind === kataw.SyntaxKind.MemberAccessExpression) {
+            let elemAccess = <kataw.MemberAccessExpression>left;
+            varType = scope.root.typeHelper.getCType(elemAccess.member);
+            if (kataw.isIdentifier(elemAccess.member))
+                accessor = elemAccess.member.text;
             else
-                accessor = new CElementAccess(scope, elemAccess.expression);
+                accessor = new CElementAccess(scope, elemAccess.member);
 
-            if (varType instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                let ident = elemAccess.argumentExpression.getText().slice(1, -1);
+            if (varType instanceof StructType && isStringLiteral(elemAccess.expression)) {
+                let ident = elemAccess.expression.text;
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     argumentExpression = ident;
                 else
-                    argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+                    argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
             } else
-                argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+                argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
         }
         else {
             varType = scope.root.typeHelper.getCType(left);
@@ -80,16 +81,16 @@ export class CAssignment extends CTemplateBase {
     public expression: CExpression;
     public nodeText: string;
     public CR: string;
-    constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: ts.Expression, inline: boolean = false) {
+    constructor(scope: IScope, public accessor: CElementAccess | CSimpleElementAccess | string, public argumentExpression: CExpression, type: CType, right: kataw.SyntaxNode, inline: boolean = false) {
         super();
         this.CR = inline ? "" : ";\n";
-        this.isNewExpression = right.kind === ts.SyntaxKind.NewExpression;
+        this.isNewExpression = right.kind === kataw.SyntaxKind.NewExpression;
         this.isDynamicArray = type instanceof ArrayType && type.isDynamicArray;
         this.isStaticArray = type instanceof ArrayType && !type.isDynamicArray;
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
         this.isUniversalVar = type === UniversalVarType;
-        this.nodeText = right.pos < 0 ? "(synthetized node)" : right.getText();
+        this.nodeText = right.start < 0 ? "(synthetized node)" : getNodeText(right);
 
         let argType = type;
         let argAccessor = accessor;
@@ -102,20 +103,19 @@ export class CAssignment extends CTemplateBase {
         }
 
         let isTempVar = !!scope.root.memoryManager.getReservedTemporaryVarName(right);
-        if (right.kind == ts.SyntaxKind.ObjectLiteralExpression && !isTempVar) {
+        if (isObjectLiteral(right) && !isTempVar) {
             this.isObjLiteralAssignment = true;
-            let objLiteral = <ts.ObjectLiteralExpression>right;
-            this.objInitializers = objLiteral.properties
-                .filter(ts.isPropertyAssignment)
+            let objLiteral = <kataw.ObjectLiteral>right;
+            this.objInitializers = objLiteral.propertyList.properties
+                .filter(isPropertyDefinition)
                 .map(p => {
-                    const propName = (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text;
-                    return new CAssignment(scope, argAccessor, this.isDict ? '"' + propName + '"' : propName, argType, p.initializer)
+                    const propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) && p.left.text;
+                    return new CAssignment(scope, argAccessor, this.isDict ? '"' + propName + '"' : propName, argType, p.right)
                 });
-        } else if (right.kind == ts.SyntaxKind.ArrayLiteralExpression && !isTempVar) {
+        } else if (isArrayLiteral(right) && !isTempVar) {
             this.isArrayLiteralAssignment = true;
-            let arrLiteral = <ts.ArrayLiteralExpression>right;
-            this.arrayLiteralSize = arrLiteral.elements.length;
-            this.arrInitializers = arrLiteral.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
+            this.arrayLiteralSize = right.elementList.elements.length;
+            this.arrInitializers = right.elementList.elements.map((e, i) => new CAssignment(scope, argAccessor, "" + i, argType, e))
         } else if (!this.isUniversalVar && argType == UniversalVarType) {
             this.expression = new CAsUniversalVar(scope, right);
         } else

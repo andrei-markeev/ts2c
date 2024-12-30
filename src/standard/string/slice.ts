@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType } from '../../types/ctypes';
@@ -7,31 +7,31 @@ import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { getNodeText, isFieldPropertyAccess } from '../../types/utils';
 
 @StandardCallResolver
 class StringSliceResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.member))
             return false;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "slice" && objType == StringVarType;
+        let objType = typeHelper.getCType(call.expression.member);
+        return call.expression.expression.text == "slice" && objType == StringVarType;
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CStringSlice(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         // if parent is expression statement, then this is the top expression
         // and thus return value is not used, so the temporary variable will not be created
-        return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
+        return !kataw.isStatementNode(node.parent);
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "substr";
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -55,22 +55,22 @@ class CStringSlice extends CTemplateBase {
     public start: CExpression = null;
     public end: CExpression = null;
     public tempVarName: string;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        this.varAccess = new CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        let propAccess = <kataw.IndexExpression>call.expression;
+        this.varAccess = new CElementAccess(scope, propAccess.member);
+        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
 
         if (!this.topExpressionOfStatement) {
-            if (call.arguments.length == 0) {
-                console.log("Error in " + call.getText() + ". At least one parameter expected!");
+            if (call.argumentList.elements.length == 0) {
+                console.log("Error in " + getNodeText(call) + ". At least one parameter expected!");
             } else {
                 this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
                     scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
-                this.start = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
-                if (call.arguments.length >= 2)
-                    this.end = CodeTemplateFactory.createForNode(scope, call.arguments[1]);
+                this.start = CodeTemplateFactory.createForNode(scope, call.argumentList.elements[0]);
+                if (call.argumentList.elements.length >= 2)
+                    this.end = CodeTemplateFactory.createForNode(scope, call.argumentList.elements[1]);
             }
         }
         scope.root.headerFlags.str_slice = true;

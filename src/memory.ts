@@ -1,13 +1,13 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType, StructType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
-    node: ts.Node;
+    node: kataw.SyntaxNode;
     simple: boolean;
     array: boolean;
     arrayWithContents: boolean;
@@ -18,46 +18,46 @@ type VariableScopeInfo = {
 };
 
 type QueueItem = {
-    node: ts.Node;
-    nodeFunc: ts.FunctionDeclaration | ts.FunctionExpression
+    node: kataw.SyntaxNode;
+    nodeFunc: kataw.FunctionDeclaration | kataw.FunctionExpression
 };
 
 export class MemoryManager {
     private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
     private reusedVariables: { [key: string]: string } = {};
-    private originalNodes: { [key: string]: ts.Node } = {};
-    private references: { [key: string]: ts.Node[] } = {};
+    private originalNodes: { [key: string]: kataw.SyntaxNode } = {};
+    private references: { [key: string]: kataw.SyntaxNode[] } = {};
     private needsGCMain: boolean = false;
 
     constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
 
-    public scheduleNodeDisposals(nodes: ts.Node[]) {
-        nodes.filter(n => ts.isIdentifier(n)).forEach(n => {
+    public scheduleNodeDisposals(nodes: kataw.SyntaxNode[]) {
+        nodes.filter(n => kataw.isIdentifier(n)).forEach(n => {
             const decl = this.typeHelper.getDeclaration(n);
             if (decl) {
-                this.references[decl.pos] = this.references[decl.pos] || [];
-                this.references[decl.pos].push(n);
+                this.references[decl.start] = this.references[decl.start] || [];
+                this.references[decl.start].push(n);
             }
         });
         for (let node of nodes) {
             switch (node.kind) {
-                case ts.SyntaxKind.ArrayLiteralExpression:
+                case kataw.SyntaxKind.ArrayLiteral:
                     {
                         let type = this.typeHelper.getCType(node);
                         if (type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType)
                             this.scheduleNodeDisposal(node, { canReuse: type !== UniversalVarType });
                     }
                     break;
-                case ts.SyntaxKind.ObjectLiteralExpression:
+                case kataw.SyntaxKind.ObjectLiteral:
                     {
                         let type = this.typeHelper.getCType(node);
                         this.scheduleNodeDisposal(node, { canReuse: type !== UniversalVarType });
                     }
                     break;
-                case ts.SyntaxKind.BinaryExpression:
+                case kataw.SyntaxKind.BinaryExpression:
                     {
-                        let binExpr = <ts.BinaryExpression>node;
+                        let binExpr = <kataw.BinaryExpression>node;
                         const leftType = this.typeHelper.getCType(binExpr.left);
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
@@ -65,35 +65,38 @@ export class MemoryManager {
                             if (leftType == UniversalVarType || rightType == UniversalVarType)
                                 this.needsGCMain = true;
                             else {
-                                let n: ts.Node = binExpr;
-                                while (ts.isBinaryExpression(n.parent) && isPlusOp(n.parent.operatorToken.kind))
+                                let n: kataw.SyntaxNode = binExpr;
+                                while (isBinaryExpression(n.parent) && isPlusOp(n.parent.operatorToken.kind))
                                     n = n.parent;
-                                const isInConsoleLog = ts.isCallExpression(n.parent) && n.parent.expression.getText() == "console.log";
+                                let isInConsoleLog = false;
+                                if (isCall(n) && isFieldPropertyAccess(n.expression) && kataw.isIdentifier(n.expression.member) && n.expression.member.text === 'console') {
+                                    isInConsoleLog = this.symbolsHelper.isGlobalSymbol(n.expression.member) && kataw.isIdentifier(n.expression.expression) && n.expression.expression.text === 'log';
+                                }
                                 if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
                                     this.scheduleNodeDisposal(binExpr, { canReuse: false });
                             }
                         }
 
-                        if (binExpr.operatorToken.kind === ts.SyntaxKind.InKeyword
+                        if (binExpr.operatorToken.kind === kataw.SyntaxKind.InKeyword
                                 && !(rightType instanceof ArrayType)
-                                && (leftType === UniversalVarType || leftType instanceof ArrayType || leftType === NumberVarType && !ts.isNumericLiteral(binExpr.left)))
+                                && (leftType === UniversalVarType || leftType instanceof ArrayType || leftType === NumberVarType && !isNumericLiteral(binExpr.left)))
                             this.needsGCMain = true;
                             
                     }
                     break;
-                case ts.SyntaxKind.CallExpression:
+                case kataw.SyntaxKind.CallExpression:
                     {
-                        if (StandardCallHelper.needsDisposal(this.typeHelper, <ts.CallExpression>node))
+                        if (StandardCallHelper.needsDisposal(this.typeHelper, <kataw.CallExpression>node))
                             this.scheduleNodeDisposal(node);
                     }
                     break;
-                case ts.SyntaxKind.NewExpression:
+                case kataw.SyntaxKind.NewExpression:
                     {
                         this.scheduleNodeDisposal(node);
                     }
                     break;
-                case ts.SyntaxKind.FunctionExpression:
-                case ts.SyntaxKind.FunctionDeclaration:
+                case kataw.SyntaxKind.FunctionExpression:
+                case kataw.SyntaxKind.FunctionDeclaration:
                     {
                         const type = this.typeHelper.getCType(node);
                         const parentFunc = findParentFunction(node.parent);
@@ -107,9 +110,9 @@ export class MemoryManager {
         }
     }
 
-    public getGCVariablesForScope(node: ts.Node) {
+    public getGCVariablesForScope(node: kataw.SyntaxNode) {
         let parentDecl = findParentFunction(node);
-        var scopeId: string = parentDecl && parentDecl.pos + 1 + "" || "main";
+        var scopeId: string = parentDecl && parentDecl.start + 1 + "" || "main";
         let realScopeId = this.scopes[scopeId] && this.scopes[scopeId].length && this.scopes[scopeId][0].scopeId
         let gcVars = [];
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
@@ -131,8 +134,8 @@ export class MemoryManager {
         return gcVars;
     }
 
-    public getGCVariableForNode(node: ts.Node) {
-        let key = node.pos + "_" + node.end;
+    public getGCVariableForNode(node: kataw.SyntaxNode) {
+        let key = node.start + "_" + node.end;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];
 
@@ -150,9 +153,9 @@ export class MemoryManager {
             return null;
     }
 
-    public getDestructorsForScope(node: ts.Node) {
+    public getDestructorsForScope(node: kataw.SyntaxNode) {
         let parentDecl = findParentFunction(node);
-        let scopeId = parentDecl && parentDecl.pos + 1 || "main";
+        let scopeId = parentDecl && parentDecl.start + 1 || "main";
         let destructors: { varName: string, array: boolean, dict: boolean, string: boolean, arrayWithContents: boolean }[] = [];
         if (this.scopes[scopeId]) {
 
@@ -171,14 +174,14 @@ export class MemoryManager {
         return destructors;
     }
 
-    public variableWasReused(node: ts.Node) {
-        let key = node.pos + "_" + node.end;
+    public variableWasReused(node: kataw.SyntaxNode) {
+        let key = node.start + "_" + node.end;
         return !!this.reusedVariables[key];
     }
 
     /** Variables that need to be disposed are tracked by memory manager */
-    public getReservedTemporaryVarName(node: ts.Node) {
-        let key = node.pos + "_" + node.end;
+    public getReservedTemporaryVarName(node: kataw.SyntaxNode) {
+        let key = node.start + "_" + node.end;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];
         let scopeOfVar = this.scopesOfVariables[key];
@@ -190,15 +193,15 @@ export class MemoryManager {
     }
 
     /** Sometimes we can reuse existing variable instead of creating a temporary one. */
-    public tryReuseExistingVariable(node: ts.Node) {
-        if (ts.isBinaryExpression(node.parent) && ts.isIdentifier(node.parent.left) && node.parent.operatorToken.kind == ts.SyntaxKind.EqualsToken)
+    public tryReuseExistingVariable(node: kataw.SyntaxNode) {
+        if (isBinaryExpression(node.parent) && kataw.isIdentifier(node.parent.left) && node.parent.operatorToken.kind == kataw.SyntaxKind.Assign)
             return node.parent.left;
-        if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name))
-            return node.parent.name;
+        if (isVariableDeclaration(node.parent) && kataw.isIdentifier(node.parent.binding))
+            return node.parent.binding;
         return null;
     }
 
-    private scheduleNodeDisposal(heapNode: ts.Node, options?: { canReuse?: boolean, subtype?: string }) {
+    private scheduleNodeDisposal(heapNode: kataw.SyntaxNode, options?: { canReuse?: boolean, subtype?: string }) {
 
         options = { canReuse: true, subtype: null, ...options };
 
@@ -207,14 +210,14 @@ export class MemoryManager {
             let existingVariable = this.tryReuseExistingVariable(heapNode);
             isTemp = existingVariable == null;
             if (!isTemp) {
-                this.reusedVariables[heapNode.pos + "_" + heapNode.end] = existingVariable.pos + "_" + existingVariable.end;
-                this.originalNodes[existingVariable.pos + "_" + existingVariable.end] = heapNode;
+                this.reusedVariables[heapNode.start + "_" + heapNode.end] = existingVariable.start + "_" + existingVariable.end;
+                this.originalNodes[existingVariable.start + "_" + existingVariable.end] = heapNode;
                 heapNode = existingVariable;
             }
         }
 
         let topScopeNode = findParentFunction(heapNode);
-        let topScope: number | "main" = topScopeNode && topScopeNode.pos + 1 || "main";
+        let topScope: number | "main" = topScopeNode && topScopeNode.start + 1 || "main";
         let isSimple = true;
         if (this.isInsideLoop(heapNode))
             isSimple = false;
@@ -222,133 +225,138 @@ export class MemoryManager {
         let scopeTree = {};
         scopeTree[topScope] = true;
 
+        const heapNodeText = getNodeText(heapNode).trim();
+
         let queue: QueueItem[] = [{ node: heapNode, nodeFunc: null }];
         if (options.subtype === "scope")
-            queue = this.getStartNodesForTrekingFunctionScope(<ts.FunctionDeclaration | ts.FunctionExpression>heapNode).map(n => ({ node: n, nodeFunc: null }));
+            queue = this.getStartNodesForTrekingFunctionScope(<kataw.FunctionDeclaration | kataw.FunctionExpression>heapNode).map(n => ({ node: n, nodeFunc: null }));
         let visited = {};
         while (queue.length > 0) {
             const { node, nodeFunc } = queue.shift();
                 
-            if (visited[node.pos + "_" + node.end])
+            if (visited[node.start + "_" + node.end])
                 continue;
 
             let refs = [node];
-            if (node.kind == ts.SyntaxKind.Identifier) {
+            if (kataw.isIdentifier(node)) {
                 const decl = this.typeHelper.getDeclaration(node);
                 if (decl)
-                    refs = this.references[decl.pos] || refs;
-            } else if (ts.isFunctionDeclaration(node)) {
-                refs = this.references[node.pos] || refs;
+                    refs = this.references[decl.start] || refs;
+            } else if (isFunctionDeclaration(node)) {
+                refs = this.references[node.start] || refs;
             }
             let returned = false;
             for (let ref of refs) {
-                visited[ref.pos + "_" + ref.end] = true;
+                visited[ref.start + "_" + ref.end] = true;
                 let parentNode = findParentFunction(isFunction(ref) ? ref.parent : ref);
                 if (!parentNode)
                     topScope = "main";
 
-                if (ts.isElementAccessExpression(ref) || ts.isPropertyAccessExpression(ref)) {
+                if (isFieldAccess(ref)) {
                     let elemAccess = ref;
-                    while (ts.isElementAccessExpression(elemAccess.expression) || ts.isPropertyAccessExpression(elemAccess.expression))
-                        elemAccess = elemAccess.expression;
-                    if (ts.isIdentifier(elemAccess.expression)) {
-                        console.log(heapNode.getText() + " -> Tracking parent variable: " + elemAccess.expression.getText() + ".");
+                    while (isFieldAccess(elemAccess.member))
+                        elemAccess = elemAccess.member;
+                    if (kataw.isIdentifier(elemAccess.expression)) {
+                        console.log(heapNodeText + " -> Tracking parent variable: " + getNodeText(elemAccess.expression) + ".");
                         queue.push({ node: elemAccess.expression, nodeFunc });
                     }
                 }
 
-                if (ref.parent && ts.isPropertyAccessExpression(ref.parent) && ref.parent.name === ref) {
+                if (ref.parent && isFieldPropertyAccess(ref.parent) && ref.parent.expression === ref) {
                     const type = this.typeHelper.getCType(ref.parent.expression);
                     if (type instanceof StructType) {
-                        console.log(heapNode.getText() + " -> Property of object " + ref.parent.expression.getText() + ".");
+                        console.log(heapNodeText + " -> Property of object " + getNodeText(ref.parent.expression) + ".");
                         queue.push({ node: ref.parent, nodeFunc });
                     }
                 }
 
-                if (ref.parent && ts.isElementAccessExpression(ref.parent) && ref.parent.argumentExpression === ref) {
+                if (ref.parent && isFieldElementAccess(ref.parent) && ref.parent.expression === ref) {
                     const type = this.typeHelper.getCType(ref.parent.expression);
                     if (type instanceof DictType) {
-                        console.log(heapNode.getText() + " -> Property of dictionary " + ref.parent.expression.getText() + ".");
+                        console.log(heapNodeText + " -> Property of dictionary " + getNodeText(ref.parent.expression) + ".");
                         queue.push({ node: ref.parent.expression, nodeFunc });
                     }
                 }
 
-                if (isEqualsExpression(ref.parent) && ref.parent.left.getText() == heapNode.getText()) {
-                    console.log(heapNode.getText() + " -> Detected assignment: " + ref.parent.getText() + ".");
+                if (isEqualsExpression(ref.parent) && getNodeText(ref.parent.left) == heapNodeText) {
+                    console.log(heapNodeText + " -> Detected assignment: " + getNodeText(ref.parent) + ".");
                     isSimple = false;
                 }
 
-                if (ts.isBinaryExpression(ref) && isCompoundAssignment(ref.operatorToken)) {
-                    console.log(ref.getText() + " -> is a compound assignment to variable " + ref.left.getText());
+                if (isBinaryExpression(ref) && isCompoundAssignment(ref.operatorToken)) {
+                    console.log(getNodeText(ref) + " -> is a compound assignment to variable " + getNodeText(ref.left));
                     queue.push({ node: ref.left, nodeFunc });
                 }
 
-                if (ref.parent && ts.isPropertyAssignment(ref.parent) && ref === ref.parent.initializer) {
-                    console.log(heapNode.getText() + " -> Detected passing to object literal: " + ref.parent.getText() + ".");
-                    queue.push({ node: ref.parent.name, nodeFunc });
-                    queue.push({ node: ref.parent.parent, nodeFunc });
+                if (ref.parent && isPropertyDefinition(ref.parent) && ref === ref.parent.right) {
+                    console.log(heapNodeText + " -> Detected passing to object literal: " + getNodeText(ref.parent) + ".");
+                    queue.push({ node: ref.parent.left, nodeFunc });
+                    queue.push({ node: ref.parent.parent.parent, nodeFunc });
                 }
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ArrayLiteralExpression) {
-                    console.log(heapNode.getText() + " -> Detected passing to array literal: " + ref.parent.getText() + ".");
+                if (ref.parent && ref.parent.kind == kataw.SyntaxKind.ArrayLiteral) {
+                    console.log(heapNodeText + " -> Detected passing to array literal: " + getNodeText(ref.parent) + ".");
                     queue.push({ node: ref.parent, nodeFunc });
                 }
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.ParenthesizedExpression) {
-                    console.log(heapNode.getText() + " -> Found parenthesized expression.");
+                if (ref.parent && ref.parent.kind == kataw.SyntaxKind.ParenthesizedExpression) {
+                    console.log(heapNodeText + " -> Found parenthesized expression.");
                     queue.push({ node: ref.parent, nodeFunc });
                 }
 
-                if (ref.parent && ref.parent.kind == ts.SyntaxKind.CallExpression) {
-                    let call = <ts.CallExpression>ref.parent;
-                    if (ts.isIdentifier(call.expression) && call.expression === ref) {
-                        console.log(heapNode.getText() + " -> Found function call!");
+                if (ref.parent && ref.parent.kind == kataw.SyntaxKind.CallExpression) {
+                    let call = <kataw.CallExpression>ref.parent;
+                    if (kataw.isIdentifier(call.expression) && call.expression === ref) {
+                        console.log(heapNodeText + " -> Found function call!");
                         if (topScope !== "main") {
                             let funcNode = findParentFunction(call);
-                            topScope = funcNode && funcNode.pos + 1 || "main";
-                            let targetScope = nodeFunc && nodeFunc.pos + 1 + "" || "none";
+                            topScope = funcNode && funcNode.start + 1 || "main";
+                            let targetScope = nodeFunc && nodeFunc.start + 1 + "" || "none";
                             isSimple = false;
                             if (scopeTree[targetScope])
                                 delete scopeTree[targetScope];
                             scopeTree[topScope] = targetScope;
                         }
 
-                        if (ts.isReturnStatement(call.parent) && !returned) {
-                            queue.push({ node: ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name, nodeFunc: parentNode });
-                            console.log(heapNode.getText() + " -> Found variable returned from the function!");
+                        if (isReturnStatement(call.parent) && !returned) {
+                            let funcNode: kataw.SyntaxNode = parentNode;
+                            if (isFunctionDeclaration(parentNode))
+                                funcNode = parentNode.name;
+                            queue.push({ node: funcNode, nodeFunc: parentNode });
+                            console.log(heapNodeText + " -> Found variable returned from the function!");
                             returned = true;
                             isSimple = false;
                         }
                         else
                             this.addIfFoundInAssignment(heapNode, call, queue, nodeFunc);
                     } else if (call.expression === ref) {
-                        console.log(heapNode.getText() + " -> Found function expression call!");
+                        console.log(heapNodeText + " -> Found function expression call!");
                         isSimple = false;
                         queue.push({ node: call, nodeFunc });
                     } else {
-                        const decl = this.typeHelper.getDeclaration(call.expression);
+                        const decl = kataw.isIdentifier(call.expression) && this.typeHelper.getDeclaration(call.expression);
                         if (!decl) {
                             let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
 
                             if (isStandardCall) {
                                 let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
                                 if (standardCallEscapeNode) {
-                                    console.log(heapNode.getText() + " escapes to '" + standardCallEscapeNode.getText() + "' via standard call '" + call.getText() + "'.");
+                                    console.log(heapNodeText + " escapes to '" + getNodeText(standardCallEscapeNode) + "' via standard call '" + getNodeText(call) + "'.");
                                     queue.push({ node: standardCallEscapeNode, nodeFunc });
                                 }
                             } else {
-                                console.log(heapNode.getText() + " -> Detected passing to external function " + call.expression.getText() + "." + (topScope != "main" ? "Scope changed to main." : ""));
+                                console.log(heapNodeText + " -> Detected passing to external function " + getNodeText(call.expression) + "." + (topScope != "main" ? "Scope changed to main." : ""));
                                 topScope = "main";
                             }
                         }
                         else {
-                            let funcDecl = <ts.FunctionDeclaration>decl;
-                            for (let i = 0; i < call.arguments.length; i++) {
-                                if (call.arguments[i].pos <= ref.pos && call.arguments[i].end >= ref.end) {
-                                    if (funcDecl.pos + 1 == topScope) {
-                                        console.log(heapNode.getText() + " -> Found recursive call with parameter " + funcDecl.parameters[i].name.getText());
-                                        queue.push({ node: funcDecl.name, nodeFunc });
+                            const funcDecl = decl.parent as kataw.FunctionDeclaration;
+                            for (let i = 0; i < call.argumentList.elements.length; i++) {
+                                if (call.argumentList.elements[i].start <= ref.start && call.argumentList.elements[i].end >= ref.end) {
+                                    if (decl.start + 1 == topScope) {
+                                        console.log(heapNodeText + " -> Found recursive call with parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
+                                        queue.push({ node: decl, nodeFunc });
                                     } else {
-                                        console.log(heapNode.getText() + " -> Found passing to function " + call.expression.getText() + " as parameter " + funcDecl.parameters[i].name.getText());
-                                        queue.push({ node: <ts.Identifier>funcDecl.parameters[i].name, nodeFunc });
+                                        console.log(heapNodeText + " -> Found passing to function " + getNodeText(call.expression) + " as parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
+                                        queue.push({ node: funcDecl.formalParameterList.formalParameters[i], nodeFunc });
                                     }
                                     isSimple = false;
                                 }
@@ -356,9 +364,12 @@ export class MemoryManager {
                         }
                     }
                 }
-                else if (ts.isReturnStatement(ref.parent) && !returned) {
-                    queue.push({ node: ts.isFunctionExpression(parentNode) ? parentNode : parentNode.name, nodeFunc: parentNode });
-                    console.log(heapNode.getText() + " -> Found variable returned from the function!");
+                else if (isReturnStatement(ref.parent) && !returned) {
+                    let funcNode: kataw.SyntaxNode = parentNode;
+                    if (isFunctionDeclaration(parentNode))
+                        funcNode = parentNode.name;
+                    queue.push({ node: funcNode, nodeFunc: parentNode });
+                    console.log(heapNodeText + " -> Found variable returned from the function!");
                     returned = true;
                     isSimple = false;
                 }
@@ -371,37 +382,37 @@ export class MemoryManager {
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
         if (!isTemp)
-            varName = heapNode.getText().replace(/\./g,'->');
-        else if (ts.isStringLiteral(heapNode))
+            varName = heapNodeText.replace(/\./g,'->');
+        else if (isStringLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
-        else if (ts.isNumericLiteral(heapNode))
+        else if (isNumericLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
-        else if (ts.isArrayLiteralExpression(heapNode))
+        else if (isArrayLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_array");
-        else if (ts.isObjectLiteralExpression(heapNode))
+        else if (isObjectLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_obj");
-        else if (ts.isBinaryExpression(heapNode))
+        else if (isBinaryExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_result");
-        else if (ts.isPrefixUnaryExpression(heapNode))
+        else if (isUnaryExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
-        else if (ts.isCallExpression(heapNode))
+        else if (isCall(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
-        else if (ts.isIdentifier(heapNode))
+        else if (kataw.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
         else if (isFunction(heapNode)) {
             const suffix = options.subtype || "tmp";
-            const maybePropertyName = ts.isPropertyAssignment(heapNode.parent) && ts.isIdentifier(heapNode.parent.name) ? heapNode.parent.name.text + "_" + suffix : suffix;
+            const maybePropertyName = isPropertyDefinition(heapNode.parent) && kataw.isIdentifier(heapNode.parent.left) ? heapNode.parent.left.text + "_" + suffix : suffix;
             const name = heapNode.name ? heapNode.name.text + "_" + suffix : maybePropertyName;
             varName = this.symbolsHelper.addTemp(findParentSourceFile(heapNode), name);
         } else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 
         let vnode = heapNode;
-        let key = vnode.pos + "_" + vnode.end;
+        let key = vnode.start + "_" + vnode.end;
         let arrayWithContents = false;
         if (this.originalNodes[key])
             vnode = this.originalNodes[key];
-        if (vnode.kind == ts.SyntaxKind.CallExpression && new StringMatchResolver().matchesNode(this.typeHelper, <ts.CallExpression>vnode))
+        if (vnode.kind == kataw.SyntaxKind.CallExpression && new StringMatchResolver().matchesNode(this.typeHelper, <kataw.CallExpression>vnode))
             arrayWithContents = true;
 
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
@@ -409,13 +420,13 @@ export class MemoryManager {
             node: heapNode,
             simple: isSimple,
             arrayWithContents: arrayWithContents,
-            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType && ts.isArrayLiteralExpression(heapNode),
-            dict: type && type instanceof DictType || type === UniversalVarType && ts.isObjectLiteralExpression(heapNode),
+            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType && isArrayLiteral(heapNode),
+            dict: type && type instanceof DictType || type === UniversalVarType && isObjectLiteral(heapNode),
             varName: varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp
         };
-        this.scopesOfVariables[heapNode.pos + "_" + heapNode.end] = scopeInfo;
+        this.scopesOfVariables[heapNode.start + "_" + heapNode.end] = scopeInfo;
 
         for (let sc of foundScopes) {
             this.scopes[sc] = this.scopes[sc] || [];
@@ -424,7 +435,7 @@ export class MemoryManager {
 
     }
 
-    private getStartNodesForTrekingFunctionScope(func: ts.FunctionDeclaration | ts.FunctionExpression) {
+    private getStartNodesForTrekingFunctionScope(func: kataw.FunctionDeclaration | kataw.FunctionExpression) {
         const allNodesInFunc = getAllNodesInFunction(func);
         const startNodes = [];
         for (const node of allNodesInFunc) {
@@ -436,20 +447,20 @@ export class MemoryManager {
         return startNodes;
     }
 
-    private addIfFoundInAssignment(varIdent: ts.Node, ref: ts.Node, queue: QueueItem[], nodeFunc: ts.FunctionDeclaration | ts.FunctionExpression): boolean {
-        if (ref.parent && ref.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-            let varDecl = <ts.VariableDeclaration>ref.parent;
+    private addIfFoundInAssignment(varIdent: kataw.SyntaxNode, ref: kataw.SyntaxNode, queue: QueueItem[], nodeFunc: kataw.FunctionDeclaration | kataw.FunctionExpression): boolean {
+        if (ref.parent && ref.parent.kind == kataw.SyntaxKind.VariableDeclaration) {
+            let varDecl = <kataw.VariableDeclaration>ref.parent;
             if (varDecl.initializer && varDecl.initializer === ref) {
-                queue.push({ node: varDecl.name, nodeFunc });
-                console.log(varIdent.getText() + " -> Found initializer-assignment to variable " + varDecl.name.getText());
+                queue.push({ node: varDecl.binding, nodeFunc });
+                console.log(getNodeText(varIdent) + " -> Found initializer-assignment to variable " + getNodeText(varDecl.binding));
                 return true;
             }
         }
-        else if (ref.parent && ref.parent.kind == ts.SyntaxKind.BinaryExpression) {
-            let binaryExpr = <ts.BinaryExpression>ref.parent;
+        else if (ref.parent && ref.parent.kind == kataw.SyntaxKind.BinaryExpression) {
+            let binaryExpr = <kataw.BinaryExpression>ref.parent;
             if (isEqualsExpression(binaryExpr) && binaryExpr.right === ref) {
                 queue.push({ node: binaryExpr.left, nodeFunc });
-                console.log(varIdent.getText() + " -> Found assignment to variable " + binaryExpr.left.getText());
+                console.log(getNodeText(varIdent) + " -> Found assignment to variable " + getNodeText(binaryExpr.left));
                 return true;
             }
         }
@@ -457,14 +468,14 @@ export class MemoryManager {
         return false;
     }
 
-    private isInsideLoop(node: ts.Node) {
+    private isInsideLoop(node: kataw.SyntaxNode) {
         var parent = node;
         while (parent
-            && parent.kind != ts.SyntaxKind.ForInStatement
-            && parent.kind != ts.SyntaxKind.ForOfStatement
-            && parent.kind != ts.SyntaxKind.ForStatement
-            && parent.kind != ts.SyntaxKind.WhileStatement
-            && parent.kind != ts.SyntaxKind.DoStatement) {
+            && parent.kind != kataw.SyntaxKind.ForInStatement
+            && parent.kind != kataw.SyntaxKind.ForOfStatement
+            && parent.kind != kataw.SyntaxKind.ForStatement
+            && parent.kind != kataw.SyntaxKind.WhileStatement
+            && parent.kind != kataw.SyntaxKind.DoWhileStatement) {
             parent = parent.parent;
         }
         return !!parent;

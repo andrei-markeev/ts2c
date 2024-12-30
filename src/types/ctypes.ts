@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { TypeHelper } from './typehelper';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;
@@ -103,12 +103,14 @@ export class DictType {
     constructor(public elementType: CType) { }
 }
 
+export type ClosureParam = { assigned: boolean, node: kataw.Identifier, refs: kataw.Identifier[] };
+
 export class FuncType {
-    public static getReturnType(typeHelper: TypeHelper, node: ts.Node): CType {
+    public static getReturnType(typeHelper: TypeHelper, node: kataw.SyntaxNode): CType {
         const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.returnType : null;
     }
-    public static getInstanceType(typeHelper: TypeHelper, node: ts.Node): CType {
+    public static getInstanceType(typeHelper: TypeHelper, node: kataw.SyntaxNode): CType {
         const type = typeHelper.getCType(node);
         return type && type instanceof FuncType ? type.instanceType : null
     }
@@ -116,7 +118,7 @@ export class FuncType {
     public returnType: CType;
     public parameterTypes?: CType[];
     public instanceType: CType;
-    public closureParams: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[];
+    public closureParams: { assigned: boolean, node: kataw.Identifier, refs: kataw.Identifier[] }[];
     public needsClosureStruct: boolean;
     public scopeType: StructType;
     public structName: string;
@@ -161,7 +163,7 @@ export class FuncType {
             + (this.scopeType ? " scope=" + getTypeBodyText(this.scopeType) : "")
             + (this.closureParams.length ? " closure" : "")
             + (this.needsClosureStruct ? "_struct" : "")
-            + (this.closureParams.length ? "={" + this.closureParams.map(p => (p.assigned ? "*" : "") + p.node.text + "(" + p.refs.map(r => r.pos).join(",") + ")").join(", ") + "}" : "");
+            + (this.closureParams.length ? "={" + this.closureParams.map(p => (p.assigned ? "*" : "") + p.node.text + "(" + p.refs.map(r => r.start).join(",") + ")").join(", ") + "}" : "");
     }
     constructor(
         data: {
@@ -170,7 +172,7 @@ export class FuncType {
             /** type of `new function()` */
             instanceType?: CType,
             /** this is used when we can manage without creating context variable */
-            closureParams?: { assigned: boolean, node: ts.Identifier, refs: ts.Identifier[] }[],
+            closureParams?: ClosureParam[],
             /** if this function is assigned to a variable */
             needsClosureStruct?: boolean,
             /** function scope (all local variables), only needed if it has nested closures */

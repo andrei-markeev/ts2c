@@ -1,24 +1,28 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';
 import { FuncType, getTypeText } from '../types/ctypes';
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction } from '../types/utils';
+import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction, getNodeText, isPropertyDefinition, isVariableDeclaration, isCall, isFunctionDeclaration, isFunctionExpression } from '../types/utils';
 import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
 export class CFunctionPrototype extends CTemplateBase {
     public returnType: string;
     public name: string;
-    public parameters: CVariable[] = [];
-    constructor(scope: IScope, node: ts.FunctionDeclaration) {
+    public parameters: (CVariable | string)[] = [];
+    constructor(scope: IScope, node: kataw.FunctionDeclaration) {
         super();
         const funcType = scope.root.typeHelper.getCType(node) as FuncType;
         this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
 
-        this.name = node.name.getText();
-        this.parameters = node.parameters.map((p, i) => new CVariable(scope, p.name.getText(), funcType.parameterTypes[i], { removeStorageSpecifier: true }));
+        this.name = node.name.text;
+        this.parameters = node.formalParameterList.formalParameters.map((p, i) => 
+            kataw.isIdentifier(p) ?
+                new CVariable(scope, p.text, funcType.parameterTypes[i], { removeStorageSpecifier: true })
+                : "/* unsupported parameter '" + getNodeText(p) + "' */"
+        );
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(scope, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         for (let p of funcType.closureParams)
@@ -46,14 +50,14 @@ export class CFunction extends CTemplateBase implements IScope {
     public func = this;
     public funcDecl: CVariable;
     public name: string;
-    public parameters: CVariable[] = [];
+    public parameters: (CVariable | string)[] = [];
     public variables: CVariable[] = [];
     public scopeVarAllocator: CVariableAllocation = null;
     public statements: CExpression[] = [];
     public gcVarNames: string[];
     public destructors: CVariableDestructors;
 
-    constructor(public root: CProgram, node: ts.FunctionDeclaration | ts.FunctionExpression) {
+    constructor(public root: CProgram, node: kataw.FunctionDeclaration | kataw.FunctionExpression) {
         super();
 
         this.parent = root;
@@ -61,20 +65,22 @@ export class CFunction extends CTemplateBase implements IScope {
         this.name = node.name && node.name.text;
         if (!this.name) {
             let funcExprName = "func";
-            if (isEqualsExpression(node.parent) && node.parent.right == node && ts.isIdentifier(node.parent.left))
+            if (isEqualsExpression(node.parent) && node.parent.right == node && kataw.isIdentifier(node.parent.left))
                 funcExprName = node.parent.left.text + "_func";
-            if (ts.isVariableDeclaration(node.parent) && node.parent.initializer == node && ts.isIdentifier(node.parent.name))
-                funcExprName = node.parent.name.text + "_func";
-            if (ts.isPropertyAssignment(node.parent) && ts.isIdentifier(node.parent.name))
-                funcExprName = node.parent.name.text + "_func";
+            else if (isVariableDeclaration(node.parent) && node.parent.initializer == node && kataw.isIdentifier(node.parent.binding))
+                funcExprName = node.parent.binding.text + "_func";
+            else if (isPropertyDefinition(node.parent) && kataw.isIdentifier(node.parent.left))
+                funcExprName = node.parent.left.text + "_func";
             this.name = root.symbolsHelper.addTemp(findParentSourceFile(node), funcExprName);
         }
         const funcType = root.typeHelper.getCType(node) as FuncType;
         this.funcDecl = new CVariable(this, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true, funcDecl: true });
 
-        this.parameters = node.parameters.map((p, i) => {
-            return new CVariable(this, (<ts.Identifier>p.name).text, funcType.parameterTypes[i], { removeStorageSpecifier: true });
-        });
+        this.parameters = node.formalParameterList.formalParameters.map((p, i) =>
+            kataw.isIdentifier(p) ?
+                new CVariable(this, p.text, funcType.parameterTypes[i], { removeStorageSpecifier: true })
+                : "/* unsupported parameter '" + getNodeText(p) + "' */"
+        );
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
         if (funcType.needsClosureStruct) {
@@ -105,24 +111,27 @@ export class CFunction extends CTemplateBase implements IScope {
             root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 
-        node.body.statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
+        const statements = node.contents.functionStatementList.statements;
+        statements.forEach(s => this.statements.push(CodeTemplateFactory.createForNode(this, s)));
 
-        if (node.body.statements.length > 0 && node.body.statements[node.body.statements.length - 1].kind != ts.SyntaxKind.ReturnStatement) {
+        if (statements.length > 0 && statements[statements.length - 1].kind != kataw.SyntaxKind.ReturnStatement) {
             this.destructors = new CVariableDestructors(this, node);
         }
 
-        const nodesInFunction = getAllNodesUnder(node);
-        const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
-        nodesInFunction.filter(n => ts.isCallExpression(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
-            .forEach((c: ts.CallExpression) => {
-                if (ts.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
-                    const decl = root.typeHelper.getDeclaration(c.expression);
-                    if (decl && decl !== node && ts.isFunctionDeclaration(decl)) {
-                        root.functionPrototypes.push(new CFunctionPrototype(root, decl))
-                        declaredFunctionNames.push(decl.name.text);
+        if (node.name) {
+            const nodesInFunction = getAllNodesUnder(node);
+            const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
+            nodesInFunction.filter(n => isCall(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
+                .forEach((c: kataw.CallExpression) => {
+                    if (kataw.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
+                        const decl = root.typeHelper.getDeclaration(c.expression);
+                        if (decl && decl !== node.name && isFunctionDeclaration(decl)) {
+                            root.functionPrototypes.push(new CFunctionPrototype(root, decl))
+                            declaredFunctionNames.push(decl.text);
+                        }
                     }
-                }
-            });
+                });
+        }
     }
 }
 
@@ -135,7 +144,7 @@ export class CFunction extends CTemplateBase implements IScope {
         {closureVarName}->scope = {scopeVarName};
     {/if}
 {/statements}
-{expression}`, [ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.FunctionDeclaration])
+{expression}`, [kataw.SyntaxKind.FunctionExpression, kataw.SyntaxKind.FunctionDeclaration])
 export class CFunctionExpression extends CTemplateBase {
     public name: string;
     public expression: string = '';
@@ -146,7 +155,7 @@ export class CFunctionExpression extends CTemplateBase {
     public closureParams: { key: string, value: CExpression }[];
     public scopeVarName: string;
 
-    constructor(scope: IScope, node: ts.FunctionExpression | ts.FunctionDeclaration) {
+    constructor(scope: IScope, node: kataw.FunctionExpression | kataw.FunctionDeclaration) {
         super();
 
         const type = scope.root.typeHelper.getCType(node);
@@ -173,7 +182,7 @@ export class CFunctionExpression extends CTemplateBase {
         scope.root.functions.push(func);
         this.name = func.name;
 
-        if (ts.isFunctionExpression(node))
+        if (isFunctionExpression(node))
             this.expression = this.closureVarName || func.name;
     }
 }

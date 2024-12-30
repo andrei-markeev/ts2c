@@ -1,24 +1,24 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../types/ctypes';
 import { CExpression } from './expressions';
-import { CUndefined } from './literals';
+import { CNaN, CUndefined } from './literals';
 import { CAsUniversalVar } from './typeconvert';
-import { isInBoolContext, findParentFunction } from '../types/utils';
+import { isInBoolContext, findParentFunction, isFieldPropertyAccess, isFieldElementAccess, isStringLiteral } from '../types/utils';
 
 
-@CodeTemplate(`{simpleAccessor}`, [ts.SyntaxKind.ElementAccessExpression, ts.SyntaxKind.PropertyAccessExpression, ts.SyntaxKind.Identifier])
+@CodeTemplate(`{simpleAccessor}`, [kataw.SyntaxKind.MemberAccessExpression, kataw.SyntaxKind.IndexExpression, kataw.SyntaxKind.Identifier])
 export class CElementAccess extends CTemplateBase {
-    public simpleAccessor: CSimpleElementAccess;
-    constructor(scope: IScope, node: ts.Node) {
+    public simpleAccessor: CSimpleElementAccess | CNaN;
+    constructor(scope: IScope, node: kataw.ExpressionNode) {
         super();
         let type: CType = null;
         let elementAccess: CExpression = null;
         let argumentExpression: CExpression = null;
         let isScopeVariable: boolean = false;
 
-        if (ts.isIdentifier(node)) {
+        if (kataw.isIdentifier(node)) {
             type = scope.root.typeHelper.getCType(node);
             isScopeVariable = scope.root.typeHelper.isScopeVariable(node);
             elementAccess = node.text;
@@ -29,43 +29,56 @@ export class CElementAccess extends CTemplateBase {
                 const decl = scope.root.typeHelper.getDeclaration(node);
                 elementAccess = scope.root.memoryManager.getReservedTemporaryVarName(decl) || elementAccess;
             }
-        } else if (node.kind == ts.SyntaxKind.PropertyAccessExpression) {
-            let propAccess = <ts.PropertyAccessExpression>node;
-            type = scope.root.typeHelper.getCType(propAccess.expression);
-            if (ts.isIdentifier(propAccess.expression)) {
-                elementAccess = propAccess.expression.text;
-                isScopeVariable = scope.root.typeHelper.isScopeVariable(propAccess.expression);
+        } else if (isFieldPropertyAccess(node)) {
+            if (kataw.isIdentifier(node.member) && node.member.text === 'Number'
+                && kataw.isIdentifier(node.expression) && node.expression.text === 'NaN'
+                && scope.root.symbolsHelper.findSymbolScope(node.member).parent === undefined
+            ) {
+                this.simpleAccessor = new CNaN(scope);
+                return;
+            }
+            type = scope.root.typeHelper.getCType(node.member);
+            if (kataw.isIdentifier(node.member)) {
+                elementAccess = node.member.text;
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(node.member);
             } else
-                elementAccess = new CElementAccess(scope, propAccess.expression);
+                elementAccess = new CElementAccess(scope, node.member);
 
             if (type === UniversalVarType) {
-                argumentExpression = 'js_var_from_str("' + propAccess.name.text + '")';
+                argumentExpression = 'js_var_from_str("' + node.expression.text + '")';
                 scope.root.headerFlags.js_var_from_str = true;
             } else if (type instanceof DictType)
-                argumentExpression = '"' + propAccess.name.text + '"';
+                argumentExpression = '"' + node.expression.text + '"';
             else
-                argumentExpression = propAccess.name.text;
+                argumentExpression = node.expression.text;
 
-        } else if (node.kind == ts.SyntaxKind.ElementAccessExpression) {
-            let elemAccess = <ts.ElementAccessExpression>node;
-            type = scope.root.typeHelper.getCType(elemAccess.expression);
+        } else if (isFieldElementAccess(node)) {
+            if (kataw.isIdentifier(node.member) && node.member.text === 'Number'
+                && isStringLiteral(node.expression) && node.expression.text === 'NaN'
+                && scope.root.symbolsHelper.findSymbolScope(node.member).parent === undefined
+            ) {
+                this.simpleAccessor = new CNaN(scope);
+                return;
+            }
 
-            if (ts.isIdentifier(elemAccess.expression)) {
-                elementAccess = elemAccess.expression.text;
-                isScopeVariable = scope.root.typeHelper.isScopeVariable(elemAccess.expression);
+            type = scope.root.typeHelper.getCType(node.member);
+
+            if (kataw.isIdentifier(node.member)) {
+                elementAccess = node.member.text;
+                isScopeVariable = scope.root.typeHelper.isScopeVariable(node.member);
             } else
-                elementAccess = new CElementAccess(scope, elemAccess.expression);
+                elementAccess = new CElementAccess(scope, node.member);
 
             if (type === UniversalVarType)
-                argumentExpression = new CAsUniversalVar(scope, elemAccess.argumentExpression);
-            else if (type instanceof StructType && elemAccess.argumentExpression.kind == ts.SyntaxKind.StringLiteral) {
-                let ident = elemAccess.argumentExpression.getText().slice(1, -1);
+                argumentExpression = new CAsUniversalVar(scope, node.expression);
+            else if (type instanceof StructType && isStringLiteral(node.expression)) {
+                let ident = node.expression.text;
                 if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
                     argumentExpression = ident;
                 else
-                    argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+                    argumentExpression = CodeTemplateFactory.createForNode(scope, node.expression);
             } else
-                argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.argumentExpression);
+                argumentExpression = CodeTemplateFactory.createForNode(scope, node.expression);
         } else {
             type = scope.root.typeHelper.getCType(node);
             elementAccess = CodeTemplateFactory.createForNode(scope, node);
@@ -73,9 +86,9 @@ export class CElementAccess extends CTemplateBase {
 
         const parentFunc = findParentFunction(node);
         const parentFuncType = scope.root.typeHelper.getCType(parentFunc) as FuncType;
-        if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos)))
+        if (parentFuncType && parentFuncType.needsClosureStruct && parentFuncType.closureParams.some(p => p.refs.some(r => r.start === node.start)))
             elementAccess = scope.root.symbolsHelper.getClosureVarName(parentFunc) + "->scope->" + CodeTemplateFactory.templateToString(elementAccess);
-        else if (parentFuncType && parentFuncType.closureParams.some(p => p.refs.some(r => r.pos === node.pos) && p.assigned))
+        else if (parentFuncType && parentFuncType.closureParams.some(p => p.refs.some(r => r.start === node.start) && p.assigned))
             elementAccess = "*" + CodeTemplateFactory.templateToString(elementAccess);
         else if (isScopeVariable)
             elementAccess = scope.root.symbolsHelper.getScopeVarName(parentFunc) + "->" + CodeTemplateFactory.templateToString(elementAccess);

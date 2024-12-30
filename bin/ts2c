@@ -1,17 +1,34 @@
 #!/usr/bin/env node
+
+var performance = require("node:perf_hooks").performance;
 var path = require('path');
 var fs = require('fs');
-var ts = require('typescript');
+var kataw = require('kataw');
 var ts2cprogram = require(path.join(__dirname, "../src/", "program.js"));
 
 if (process.argv.length < 2)
     process.exit();
 
-var fileNames = process.argv.slice(2);
+var fileName = process.argv[2];
+if (fileName === '-v' || fileName === '--version') {
+    console.log();
+    process.exit(0);
+}
+var sourceCode = fs.readFileSync(fileName, 'utf-8');
 
-var program = ts.createProgram(fileNames, { noLib: true, allowJs: true });
+const startParse = performance.now();
+var rootNode = kataw.parseScript(sourceCode, {  }, (source, kind, message, start, end) => {
+    if (kind === 16) {
+        console.error(start, end, message);
+        process.exit(1);
+    } else
+        console.warn(start, end, message);
+});
+console.log('parse:', performance.now() - startParse);
 
-var output = new ts2cprogram.CProgram(program)["resolve"]();
-fs.writeFileSync(fileNames[0].slice(0, -3) + '.c', output);
+const startTranspile = performance.now();
+var output = new ts2cprogram.CProgram(rootNode)["resolve"]();
+console.log('transpile:', performance.now() - startTranspile);
+fs.writeFileSync(fileName.slice(0, -3) + '.c', output);
 
 process.exit();

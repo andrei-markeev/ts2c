@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, RegexVarType, StringVarType } from '../../types/ctypes';
@@ -7,35 +7,37 @@ import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { getNodeText } from '../../types/utils';
 
 @StandardCallResolver
 export class StringMatchResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+    name: 'StringMatchResolver';
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (call.expression.kind != kataw.SyntaxKind.IndexExpression)
             return false;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
+        let propAccess = <kataw.IndexExpression>call.expression;
         let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "match" && objType == StringVarType;
+        return objType == StringVarType && getNodeText(propAccess.expression) == "match";
     }
-    public objectType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;
     }
-    public argumentTypes(typeHelper: TypeHelper, call: ts.CallExpression) {
-        return call.arguments.map((a, i) => i == 0 ? RegexVarType : null);
+    public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        return call.argumentList.elements.map((a, i) => i == 0 ? RegexVarType : null);
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return new ArrayType(StringVarType, 1, true);
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CStringMatch(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
-        return node.parent.kind != ts.SyntaxKind.ExpressionStatement;
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
+        return !kataw.isStatementNode(node.parent);
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "match_array";
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -59,16 +61,16 @@ class CStringMatch extends CTemplateBase
     public argAccess: CElementAccess;
     public matchArrayVarName: string;
     public gcVarName: string = null;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         scope.root.headerFlags.str_substring = true;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        let propAccess = <kataw.IndexExpression>call.expression;
+        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
 
         if (!this.topExpressionOfStatement) {
-            if (call.arguments.length == 1) {
-                this.argAccess = new CElementAccess(scope, propAccess.expression);
-                this.regexVar = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+            if (call.argumentList.elements.length == 1) {
+                this.argAccess = new CElementAccess(scope, propAccess.member);
+                this.regexVar = CodeTemplateFactory.createForNode(scope, call.argumentList.elements[0]);
                 this.gcVarName = scope.root.memoryManager.getGCVariableForNode(call);
                 this.matchArrayVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
                 if (!scope.root.memoryManager.variableWasReused(call))
@@ -77,7 +79,7 @@ class CStringMatch extends CTemplateBase
                 scope.root.headerFlags.array = true;
                 scope.root.headerFlags.gc_iterator = true;
             } else
-                console.log("Unsupported number of parameters in " + call.getText() + ". Expected one parameter.");
+                console.log("Unsupported number of parameters in " + getNodeText(call) + ". Expected one parameter.");
         }
     }
 }

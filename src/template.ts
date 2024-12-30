@@ -1,6 +1,7 @@
-import {IScope} from './program';
+import { IScope } from './program';
+import { getNodeText } from './types/utils';
 
-interface INode { kind: number, getText(): string };
+interface INode { kind: number; };
 
 export class CTemplateBase {
     new(scope: IScope, node: INode) { };
@@ -13,7 +14,7 @@ var nodeKindTemplates: { [kind: string]: CTemplateBaseConstructor } = {};
 export class CodeTemplateFactory {
     public static createForNode(scope: IScope, node: INode): string | CTemplateBase {
         return nodeKindTemplates[node.kind] ? new nodeKindTemplates[node.kind](scope, node)
-            : "/* Unsupported node: " + node.getText().replace(/[\n\s]+/g, ' ') + " */;\n";
+            : "/* Unsupported node: " + getNodeText(node as any).replace(/[\n\s]+/g, ' ') + " */;\n";
     }
     public static templateToString(template: string | CTemplateBase) {
         return typeof(template) === "string" ? template : template.resolve();

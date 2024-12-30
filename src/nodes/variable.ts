@@ -1,27 +1,27 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, UniversalVarType, FuncType } from '../types/ctypes';
 import { AssignmentHelper, CAssignment } from './assignment';
 import { CElementAccess, CSimpleElementAccess } from './elementaccess';
-import { isNode } from '../types/utils';
+import { getNodeText, isArrayLiteral, isNode, isNumericLiteral, isStringLiteral } from '../types/utils';
 import { TypeHelper } from '../types/typehelper';
 
 
-@CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableStatement)
+@CodeTemplate(`{declarations}`, kataw.SyntaxKind.VariableStatement)
 export class CVariableStatement extends CTemplateBase {
     public declarations: CVariableDeclaration[];
-    constructor(scope: IScope, node: ts.VariableStatement)
+    constructor(scope: IScope, node: kataw.VariableStatement)
     {
         super();
         this.declarations = node.declarationList.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
     }
 }
 
-@CodeTemplate(`{declarations}`, ts.SyntaxKind.VariableDeclarationList)
+@CodeTemplate(`{declarations}`, kataw.SyntaxKind.VariableDeclarationList)
 export class CVariableDeclarationList extends CTemplateBase {
     public declarations: CVariableDeclaration[];
-    constructor(scope: IScope, node: ts.VariableDeclarationList)
+    constructor(scope: IScope, node: kataw.VariableDeclarationList)
     {
         super();
         this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
@@ -29,24 +29,28 @@ export class CVariableDeclarationList extends CTemplateBase {
 }
 
 
-@CodeTemplate(`{initializer}`, ts.SyntaxKind.VariableDeclaration)
+@CodeTemplate(`{initializer}`, kataw.SyntaxKind.VariableDeclaration)
 export class CVariableDeclaration extends CTemplateBase {
     public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
-    constructor(scope: IScope, varDecl: ts.VariableDeclaration) {
+    constructor(scope: IScope, varDecl: kataw.VariableDeclaration) {
         super();
-        const name = varDecl.name.getText();
-        const type = scope.root.typeHelper.getCType(varDecl.name);
-        const scopeVar = scope.root.typeHelper.isScopeVariableDeclaration(varDecl);
-        if (type instanceof ArrayType && !type.isDynamicArray && ts.isArrayLiteralExpression(varDecl.initializer) && !scopeVar) {
-            const canUseInitializerList = varDecl.initializer.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
+        if (!kataw.isIdentifier(varDecl.binding)) {
+            this.initializer = "/* Unsupported variable declaration binding '" + getNodeText(varDecl.binding) + "' */";
+            return;
+        }
+        const name = varDecl.binding.text;
+        const type = scope.root.typeHelper.getCType(varDecl.binding);
+        const scopeVar = kataw.isIdentifier(varDecl.binding) ? scope.root.typeHelper.isScopeVariableDeclaration(varDecl.binding) : false;
+        if (type instanceof ArrayType && !type.isDynamicArray && isArrayLiteral(varDecl.initializer) && !scopeVar) {
+            const canUseInitializerList = varDecl.initializer.elementList.elements.every(e => isNumericLiteral(e) || isStringLiteral(e));
             if (canUseInitializerList) {
                 let s = "{ ";
                 for (let i = 0; i < type.capacity; i++) {
                     if (i != 0)
                         s += ", ";
-                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elements[i]);
+                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elementList[i]);
                     s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
                 }
                 s += " }";
@@ -58,7 +62,7 @@ export class CVariableDeclaration extends CTemplateBase {
         if (!scope.variables.some(v => v.name === name) && !scopeVar)
             scope.variables.push(new CVariable(scope, name, type));
         if (varDecl.initializer)
-            this.initializer = AssignmentHelper.create(scope, varDecl.name, varDecl.initializer);
+            this.initializer = AssignmentHelper.create(scope, varDecl.binding, varDecl.initializer);
     }
 }
 
@@ -83,7 +87,7 @@ export class CVariableAllocation extends CTemplateBase {
     public needAllocateStruct: boolean;
     public needAllocateDict: boolean;
     public gcVarName: string;
-    constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: ts.Node)
+    constructor(scope: IScope, public varName: CElementAccess | CSimpleElementAccess | string, varType: CType, refNode: kataw.SyntaxNode)
     {
         super();
         this.needAllocateArray = varType instanceof ArrayType && varType.isDynamicArray;
@@ -161,7 +165,7 @@ export class CVariableDestructors extends CTemplateBase {
     public gcDictsVarName: string = null;
     public destructors: string[];
     public arrayDestructors: string[] = [];
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope, node: kataw.SyntaxNode) {
         super();
         let gcVarNames = scope.root.memoryManager.getGCVariablesForScope(node);
         for (let gc of gcVarNames)
@@ -216,14 +220,14 @@ export class CVariable extends CTemplateBase {
     public type: CType;
     private typeHelper: TypeHelper;
 
-    constructor(scope: IScope, public name: string, typeSource: CType | ts.Node, options?: CVariableOptions) {
+    constructor(scope: IScope, public name: string, typeSource: CType | kataw.SyntaxNode, options?: CVariableOptions) {
         super();
         const type = isNode(typeSource) ? scope.root.typeHelper.getCType(typeSource) : typeSource;
 
         if (type instanceof StructType)
             scope.root.symbolsHelper.ensureStruct(type, name);
         else if (type instanceof ArrayType && type.isDynamicArray)
-            scope.root.symbolsHelper.ensureArrayStruct(type.elementType);
+            scope.root.symbolsHelper.ensureArrayStruct(scope.root.typeHelper, type.elementType);
 
         if (this.typeHasNumber(type))
             scope.root.headerFlags.int16_t = true;

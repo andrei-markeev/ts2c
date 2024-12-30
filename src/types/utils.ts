@@ -1,173 +1,263 @@
-import * as ts from 'typescript';
-import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType } from './ctypes';
+import * as kataw from 'kataw';
+import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType, VoidType } from './ctypes';
 import { TypeMerger } from './merge';
-import { TypeResolver } from './resolve';
 
-export interface FieldAssignmentExpression extends ts.BinaryExpression {
-    left: ts.PropertyAccessExpression | ts.ElementAccessExpression;
+export interface FieldAssignmentExpression extends kataw.BinaryExpression {
+    left: kataw.MemberAccessExpression | kataw.IndexExpression;
 }
-export interface MethodCallExpression extends ts.CallExpression {
-    expression: ts.PropertyAccessExpression;
+export interface MethodCallExpression extends kataw.CallExpression {
+    expression: kataw.IndexExpression;
 }
-export interface FunctionArgInMethodCall extends ts.FunctionExpression {
+export interface FunctionArgInMethodCall extends kataw.FunctionExpression {
     parent: MethodCallExpression;
 }
-
-export interface ForOfWithSimpleInitializer extends ts.ForOfStatement {
-    initializer: ts.VariableDeclarationList;
+export interface PropertyDefinitionList extends kataw.PropertyDefinitionList {
+    parent: kataw.ObjectLiteral;
 }
-export interface ForInWithSimpleInitializer extends ts.ForInStatement {
-    initializer: ts.VariableDeclarationList;
-}
-export interface ForOfWithExpressionInitializer extends ts.ForOfStatement {
-    initializer: ts.Identifier;
-}
-export interface ForInWithExpressionInitializer extends ts.ForInStatement {
-    initializer: ts.Identifier;
+export interface PropertyDefinition extends kataw.PropertyDefinition {
+    parent: PropertyDefinitionList;
 }
 
-export interface DeleteExpression extends ts.DeleteExpression {
-    expression: ts.PropertyAccessExpression | ts.ElementAccessExpression;
+export interface ForOfWithSimpleInitializer extends kataw.ForOfStatement {
+    initializer: kataw.ForBinding;
+}
+export interface ForInWithSimpleInitializer extends kataw.ForInStatement {
+    initializer: kataw.ForBinding;
+}
+export interface ForOfWithExpressionInitializer extends kataw.ForOfStatement {
+    initializer: kataw.Identifier;
+}
+export interface ForInWithExpressionInitializer extends kataw.ForInStatement {
+    initializer: kataw.Identifier;
 }
 
-export function isNode(n): n is ts.Node {
-    return n && n.kind !== undefined && n.flags !== undefined && n.pos !== undefined && n.end !== undefined;
+export interface DeleteExpression extends kataw.UnaryExpression {
+    operand: kataw.IndexExpression | kataw.MemberAccessExpression;
 }
-export function isEqualsExpression(n): n is ts.BinaryExpression {
-    return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken;
+
+export function isNode(n: any): n is kataw.SyntaxNode {
+    return n && n.kind !== undefined && n.flags !== undefined && n.start !== undefined && n.end !== undefined;
 }
-export function isFieldAssignment(n): n is FieldAssignmentExpression {
-    return n && n.kind == ts.SyntaxKind.BinaryExpression && n.operatorToken.kind == ts.SyntaxKind.EqualsToken && (isFieldElementAccess(n.left) || isFieldPropertyAccess(n.left));
+export function isStringLiteral(n: kataw.SyntaxNode): n is kataw.StringLiteral {
+    return n.kind === kataw.SyntaxKind.StringLiteral;
+}
+export function isObjectLiteral(n: kataw.SyntaxNode): n is kataw.ObjectLiteral {
+    return n.kind === kataw.SyntaxKind.ObjectLiteral;
+}
+export function isArrayLiteral(n: kataw.SyntaxNode): n is kataw.ArrayLiteral {
+    return n.kind === kataw.SyntaxKind.ArrayLiteral;
+}
+export function isNumericLiteral(n: kataw.SyntaxNode): n is kataw.NumericLiteral {
+    return n.kind === kataw.SyntaxKind.NumericLiteral;
+}
+export function isBooleanLiteral(n: kataw.SyntaxNode): n is kataw.SyntaxToken<kataw.SyntaxKind.TrueKeyword | kataw.SyntaxKind.FalseKeyword> {
+    return n.kind == kataw.SyntaxKind.TrueKeyword || n.kind == kataw.SyntaxKind.FalseKeyword;
+}
+export function isLiteral(n: kataw.SyntaxNode): n is kataw.NumericLiteral | kataw.StringLiteral | kataw.RegularExpressionLiteral | kataw.SyntaxToken<kataw.SyntaxKind.TrueKeyword | kataw.SyntaxKind.FalseKeyword> {
+    return isNumericLiteral(n) || isStringLiteral(n) || n.kind === kataw.SyntaxKind.RegularExpressionLiteral || n.kind == kataw.SyntaxKind.TrueKeyword || n.kind == kataw.SyntaxKind.FalseKeyword;
+}
+
+export function isBinaryExpression(n: kataw.SyntaxNode): n is kataw.BinaryExpression | kataw.AssignmentExpression {
+    return n && n.kind == kataw.SyntaxKind.BinaryExpression || n.kind === kataw.SyntaxKind.AssignmentExpression;
+}
+export function isEqualsExpression(n: kataw.SyntaxNode): n is kataw.BinaryExpression {
+    return n && isBinaryExpression(n) && n.operatorToken.kind == kataw.SyntaxKind.Assign;
+}
+export function isFieldAssignment(n: kataw.SyntaxNode): n is FieldAssignmentExpression {
+    return n && isBinaryExpression(n) && n.operatorToken.kind == kataw.SyntaxKind.Assign && (isFieldElementAccess(n.left) || isFieldPropertyAccess(n.left));
+}
+
+export function isCall(n: kataw.SyntaxNode): n is kataw.CallExpression {
+    return n && n.kind === kataw.SyntaxKind.CallExpression;
 }
 export function isMethodCall(n): n is MethodCallExpression {
-    return ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression);
+    return isCall(n) && isFieldPropertyAccess(n.expression);
 }
-export function isFunction(n): n is ts.FunctionDeclaration | ts.FunctionExpression {
-    return ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n);
+export function isFunction(n: kataw.SyntaxNode): n is kataw.FunctionDeclaration | kataw.FunctionExpression {
+    return n.kind === kataw.SyntaxKind.FunctionDeclaration || n.kind === kataw.SyntaxKind.FunctionExpression;
+}
+export function isFunctionDeclaration(n: kataw.SyntaxNode): n is kataw.FunctionDeclaration {
+    return n.kind === kataw.SyntaxKind.FunctionDeclaration;
+}
+export function isFunctionExpression(n: kataw.SyntaxNode): n is kataw.FunctionExpression {
+    return n.kind === kataw.SyntaxKind.FunctionExpression;
+}
+export function isParameter(n: kataw.SyntaxNode): n is kataw.BindingElement {
+    return n.kind === kataw.SyntaxKind.BindingElement;
+}
+export function isReturnStatement(n: kataw.SyntaxNode): n is kataw.ReturnStatement {
+    return n.kind === kataw.SyntaxKind.ReturnStatement;
+}
+export function isVariableDeclaration(n: kataw.SyntaxNode): n is kataw.VariableDeclaration {
+    return n.kind === kataw.SyntaxKind.VariableDeclaration;
+}
+export function isForBinding(n: kataw.SyntaxNode): n is kataw.ForBinding {
+    return n.kind === kataw.SyntaxKind.ForBinding;
+}
+export function isVariableDeclarationList(n: kataw.SyntaxNode): n is kataw.VariableDeclarationList {
+    return n.kind === kataw.SyntaxKind.VariableDeclarationList;
+}
+export function isPropertyDefinition(n: kataw.SyntaxNode): n is PropertyDefinition {
+    return n.kind === kataw.SyntaxKind.PropertyDefinition;
 }
 export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
-    return ts.isFunctionExpression(n) && ts.isCallExpression(n.parent) && n.parent.arguments[0] == n && ts.isPropertyAccessExpression(n.parent.expression);
+    return isFunctionExpression(n) && isCall(n.parent) && n.parent.argumentList.elements[0] == n && isFieldPropertyAccess(n.parent.expression);
 }
-export function isFieldElementAccess(n): n is ts.ElementAccessExpression {
-    return ts.isElementAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+export function isFieldElementAccess(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression {
+    return n.kind === kataw.SyntaxKind.MemberAccessExpression;
 }
-export function isFieldPropertyAccess(n): n is ts.PropertyAccessExpression {
-    return ts.isPropertyAccessExpression(n) && (!ts.isCallExpression(n.parent) || n.parent.expression != n);
+export function isFieldPropertyAccess(n: kataw.SyntaxNode): n is kataw.IndexExpression {
+    return n.kind === kataw.SyntaxKind.IndexExpression;
+}
+export function isFieldAccess(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression | kataw.IndexExpression {
+    return n.kind === kataw.SyntaxKind.MemberAccessExpression || n.kind === kataw.SyntaxKind.IndexExpression;
+}
+export function isWithStatement(n: kataw.SyntaxNode): n is kataw.WithStatement {
+    return n.kind === kataw.SyntaxKind.WithStatement;
 }
 export function isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
-    return ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
+    return isForOfStatement(n) && isForBinding(n.initializer) && n.initializer.declarationList.declarations.length == 1;
 }
 export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionInitializer {
-    return ts.isForOfStatement(n) && ts.isIdentifier(n.initializer);
+    return isForOfStatement(n) && kataw.isIdentifier(n.initializer);
 }
 export function isForInWithSimpleInitializer(n): n is ForInWithSimpleInitializer {
-    return ts.isForInStatement(n) && ts.isVariableDeclarationList(n.initializer) && n.initializer.declarations.length == 1;
+    return isForInStatement(n) && isForBinding(n.initializer) && n.initializer.declarationList.declarations.length == 1;
 }
 export function isForInWithIdentifierInitializer(n): n is ForInWithExpressionInitializer {
-    return ts.isForInStatement(n) && ts.isIdentifier(n.initializer);
+    return isForInStatement(n) && kataw.isIdentifier(n.initializer);
 }
-export function isLiteral(n): n is ts.LiteralExpression {
-    return ts.isNumericLiteral(n) || ts.isStringLiteral(n) || ts.isRegularExpressionLiteral(n) || n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
+export function isIfStatement(n: kataw.SyntaxNode): n is kataw.IfStatement {
+    return n.kind === kataw.SyntaxKind.IfStatement;
 }
-export function isBooleanLiteral(n): n is ts.BooleanLiteral {
-    return n.kind == ts.SyntaxKind.TrueKeyword || n.kind == ts.SyntaxKind.FalseKeyword;
+export function isWhileStatement(n: kataw.SyntaxNode): n is kataw.WhileStatement {
+    return n.kind === kataw.SyntaxKind.WhileStatement;
 }
-export function isUnaryExpression(n): n is ts.PrefixUnaryExpression {
-    return ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n);
+export function isDoWhileStatement(n: kataw.SyntaxNode): n is kataw.DoWhileStatement {
+    return n.kind === kataw.SyntaxKind.DoWhileStatement;
 }
-export const SyntaxKind_NaNKeyword = ts.SyntaxKind.Count + 1;
-export function isNullOrUndefinedOrNaN(n): n is ts.Node {
-    return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword || n.kind === SyntaxKind_NaNKeyword;
+export function isForStatement(n: kataw.SyntaxNode): n is kataw.ForStatement {
+    return n.kind === kataw.SyntaxKind.ForStatement;
 }
-export function isNullOrUndefined(n): n is ts.Node {
-    return n.kind === ts.SyntaxKind.NullKeyword || n.kind === ts.SyntaxKind.UndefinedKeyword;
+export function isForOfStatement(n: kataw.SyntaxNode): n is kataw.ForOfStatement {
+    return n.kind === kataw.SyntaxKind.ForOfStatement;
+}
+export function isForInStatement(n: kataw.SyntaxNode): n is kataw.ForInStatement {
+    return n.kind === kataw.SyntaxKind.ForInStatement;
+}
+export function isCaseClause(n: kataw.SyntaxNode): n is kataw.CaseClause {
+    return n.kind === kataw.SyntaxKind.CaseClause;
+}
+export function isCatchClause(n: kataw.SyntaxNode): n is kataw.CatchClause {
+    return n.kind === kataw.SyntaxKind.Catch;
+}
+export function isBreakStatement(n: kataw.SyntaxNode): n is kataw.BreakStatement {
+    return n.kind === kataw.SyntaxKind.BreakStatement;
+}
+export function isContinueStatement(n: kataw.SyntaxNode): n is kataw.ContinueStatement {
+    return n.kind === kataw.SyntaxKind.ContinueStatement;
+}
+export function isUnaryExpression(n: kataw.SyntaxNode): n is kataw.UnaryExpression {
+    return n.kind === kataw.SyntaxKind.UnaryExpression;
+}
+export function isParenthesizedExpression(n: kataw.SyntaxNode): n is kataw.ParenthesizedExpression {
+    return n.kind === kataw.SyntaxKind.ParenthesizedExpression;
+}
+export function isConditionalExpression(n: kataw.SyntaxNode): n is kataw.ConditionalExpression {
+    return n.kind === kataw.SyntaxKind.ConditionalExpression;
+}
+export const SyntaxKind_NaNIdentifier = 16636 as kataw.TokenSyntaxKind;
+export function isNullOrUndefinedOrNaN(n: kataw.SyntaxNode): n is kataw.SyntaxNode {
+    return n.kind === kataw.SyntaxKind.NullKeyword || n.kind === kataw.SyntaxKind.UndefinedKeyword || n.kind === SyntaxKind_NaNIdentifier;
+}
+export function isNullOrUndefined(n: kataw.SyntaxNode): n is kataw.SyntaxNode {
+    return n.kind === kataw.SyntaxKind.NullKeyword || n.kind === kataw.SyntaxKind.UndefinedKeyword;
 }
 export function isDeleteExpression(n): n is DeleteExpression {
-    return ts.isDeleteExpression(n) && (ts.isPropertyAccessExpression(n.expression) || ts.isElementAccessExpression(n.expression));
+    return isUnaryExpression(n) && n.operandToken.kind === kataw.SyntaxKind.DeleteKeyword && (isFieldPropertyAccess(n.operand) || isFieldElementAccess(n.operand));
 }
-export function isThisKeyword(n): n is ts.Node {
-    return n.kind === ts.SyntaxKind.ThisKeyword;
+export function isVoidExpression(n: kataw.SyntaxNode): n is kataw.UnaryExpression {
+    return isUnaryExpression(n) && n.operandToken.kind === kataw.SyntaxKind.VoidKeyword;
 }
-export function isCompoundAssignment(n: ts.Node) {
-    if (ts.isBinaryExpression(n))
-        return n.operatorToken.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.operatorToken.kind <= ts.SyntaxKind.LastCompoundAssignment;
+export function isTypeofExpression(n: kataw.SyntaxNode): n is kataw.UnaryExpression {
+    return isUnaryExpression(n) && n.operandToken.kind === kataw.SyntaxKind.TypeofKeyword;
+}
+export function isThisKeyword(n: kataw.SyntaxNode): n is kataw.SyntaxToken<kataw.SyntaxKind.ThisKeyword> {
+    return n.kind === kataw.SyntaxKind.ThisKeyword;
+}
+export function isCompoundAssignment(n: kataw.SyntaxNode) {
+    if (isBinaryExpression(n))
+        return kataw.isAssignOp(n.operatorToken);
     else
-        return n.kind >= ts.SyntaxKind.FirstCompoundAssignment && n.kind <= ts.SyntaxKind.LastCompoundAssignment;
+        return kataw.isAssignOp(n);
 }
 
-export function isNumberOp(op: ts.SyntaxKind) {
-    return [
-        ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken,
-        ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken,
-        ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken,
-        ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken,
-    ].indexOf(op) > -1;
+export function isNumberOp(op: kataw.SyntaxKind) {
+    return op === kataw.SyntaxKind.Subtract || op === kataw.SyntaxKind.SubtractAssign
+        || op === kataw.SyntaxKind.Multiply || op === kataw.SyntaxKind.MultiplyAssign
+        || op === kataw.SyntaxKind.Divide || op === kataw.SyntaxKind.DivideAssign
+        || op === kataw.SyntaxKind.Modulo || op === kataw.SyntaxKind.ModuloAssign;
 }
-export function isIntegerOp(op: ts.SyntaxKind) {
-    return [
-        ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
-        ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
-        ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
-        ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken,
-        ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken
-    ].indexOf(op) > -1;
+export function isIntegerOp(op: kataw.SyntaxKind) {
+    return op === kataw.SyntaxKind.ShiftLeft || op === kataw.SyntaxKind.ShiftLeftAssign
+        || op === kataw.SyntaxKind.ShiftRight || op === kataw.SyntaxKind.ShiftRightAssign
+        || op === kataw.SyntaxKind.LogicalShiftRight || op === kataw.SyntaxKind.LogicalShiftRightAssign
+        || op === kataw.SyntaxKind.BitwiseOr || op === kataw.SyntaxKind.BitwiseOrAssign
+        || op === kataw.SyntaxKind.BitwiseAnd || op === kataw.SyntaxKind.BitwiseAndAssign;
 }
-export function isRelationalOp(op: ts.SyntaxKind) {
-    return [
-        ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
-        ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken
-    ].indexOf(op) > -1;
+export function isRelationalOp(op: kataw.SyntaxKind) {
+    return op === kataw.SyntaxKind.LessThan || op === kataw.SyntaxKind.LessThanOrEqual
+        || op === kataw.SyntaxKind.GreaterThan || op === kataw.SyntaxKind.GreaterThanOrEqual
 }
-export function isEqualityOp(op: ts.SyntaxKind) {
-    return [
-        ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, 
-        ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
-    ].indexOf(op) > -1;
+export function isEqualityOp(op: kataw.SyntaxKind) {
+    return op === kataw.SyntaxKind.LooseEqual || op === kataw.SyntaxKind.StrictEqual
+        || op === kataw.SyntaxKind.LooseNotEqual || op ===kataw.SyntaxKind.StrictNotEqual
 }
-export function isLogicOp(op: ts.SyntaxKind) {
-    return [
-        ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken
-    ].indexOf(op) > -1;
+export function isLogicOp(op: kataw.SyntaxKind) {
+    return op === kataw.SyntaxKind.LogicalOr || op === kataw.SyntaxKind.LogicalAnd;
 }
-export function isPlusOp(op: ts.SyntaxKind) {
-    return op == ts.SyntaxKind.PlusToken || op == ts.SyntaxKind.PlusEqualsToken;
+export function isPlusOp(op: kataw.SyntaxKind) {
+    return op == kataw.SyntaxKind.Add || op == kataw.SyntaxKind.AddAssign;
 }
 
-export function isStringLiteralAsIdentifier(n: ts.Node): n is ts.StringLiteral {
-    return ts.isStringLiteral(n) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(n.text);
+export function isStringLiteralAsIdentifier(n: kataw.SyntaxNode): n is kataw.StringLiteral {
+    return isStringLiteral(n) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(n.text);
 }
 
-export function isInBoolContext(n: ts.Node) {
-    while (ts.isBinaryExpression(n.parent) && isLogicOp(n.parent.operatorToken.kind))
+export function isInBoolContext(n: kataw.SyntaxNode) {
+    while (isBinaryExpression(n.parent) && isLogicOp(n.parent.operatorToken.kind))
         n = n.parent;
-    return ts.isPrefixUnaryExpression(n.parent) && n.parent.operator === ts.SyntaxKind.ExclamationToken
-        || ts.isIfStatement(n.parent) && n.parent.expression === n
-        || ts.isWhileStatement(n.parent) && n.parent.expression === n
-        || ts.isDoStatement(n.parent) && n.parent.expression === n
-        || ts.isForStatement(n.parent) && n.parent.condition === n;
+    return isUnaryExpression(n.parent) && n.parent.operandToken.kind === kataw.SyntaxKind.Negate
+        || isIfStatement(n.parent) && n.parent.expression === n
+        || isWhileStatement(n.parent) && n.parent.expression === n
+        || isDoWhileStatement(n.parent) && n.parent.expression === n
+        || isForStatement(n.parent) && n.parent.condition === n;
 }
 
-export function isSimpleNode(n: ts.Node) {
-    return ts.isStringLiteral(n) || ts.isNumericLiteral(n) || ts.isIdentifier(n);
+export function isSimpleNode(n: kataw.SyntaxNode) {
+    return isStringLiteral(n) || isNumericLiteral(n) || kataw.isIdentifier(n);
 }
 
-export function isSideEffectExpression(n: ts.Node) {
+export function isSideEffectExpression(n: kataw.SyntaxNode) {
     return isEqualsExpression(n) || isCompoundAssignment(n)
-        || isUnaryExpression(n) && n.operator === ts.SyntaxKind.PlusPlusToken
-        || isUnaryExpression(n) && n.operator === ts.SyntaxKind.MinusMinusToken
-        || ts.isCallExpression(n)
-        || ts.isNewExpression(n);
+        || isUnaryExpression(n) && n.operandToken.kind === kataw.SyntaxKind.Increment
+        || isUnaryExpression(n) && n.operandToken.kind === kataw.SyntaxKind.Decrement
+        || isCall(n)
+        || isNewExpression(n);
 }
-export function operandsToNumber(leftType: CType, op: ts.SyntaxKind, rightType: CType) {
+export function isNewExpression(n: kataw.SyntaxNode): n is kataw.NewExpression {
+    return n.kind === kataw.SyntaxKind.NewExpression;
+}
+export function operandsToNumber(leftType: CType, op: kataw.SyntaxKind, rightType: CType) {
     return isNumberOp(op) || isIntegerOp(op)
-        || op == ts.SyntaxKind.PlusToken && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
+        || op == kataw.SyntaxKind.Add && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
         || isRelationalOp(op) && (leftType !== StringVarType || rightType !== StringVarType);
 }
 
-export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftType: CType, op: ts.SyntaxKind, rightType: CType) {
-    if (op === ts.SyntaxKind.EqualsToken)
+export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftType: CType, op: kataw.SyntaxKind, rightType: CType) {
+    if (op === kataw.SyntaxKind.Assign)
         return rightType;
-    if (isRelationalOp(op) || isEqualityOp(op) || op === ts.SyntaxKind.InKeyword || op === ts.SyntaxKind.InstanceOfKeyword)
+    if (isRelationalOp(op) || isEqualityOp(op) || op === kataw.SyntaxKind.InKeyword || op === kataw.SyntaxKind.InstanceofKeyword)
         return BooleanVarType;
     if (leftType == null || rightType == null)
         return null;
@@ -175,7 +265,7 @@ export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftT
         return mergeTypes(leftType, rightType).type;
     if (isNumberOp(op) || isIntegerOp(op))
         return toNumberCanBeNaN(leftType) || toNumberCanBeNaN(rightType) ? UniversalVarType : NumberVarType;
-    if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.PlusEqualsToken)
+    if (op === kataw.SyntaxKind.Add || op === kataw.SyntaxKind.AddAssign)
         return leftType === UniversalVarType || rightType === UniversalVarType ? UniversalVarType 
             : toPrimitive(leftType) === StringVarType || toPrimitive(rightType) === StringVarType ? StringVarType
             : toPrimitive(leftType) === NumberVarType && toPrimitive(rightType) == NumberVarType ? NumberVarType
@@ -185,11 +275,17 @@ export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftT
     return null;
 }
 
-export function getUnaryExprResultType(op: ts.SyntaxKind, operandType: CType) {
-    if (op === ts.SyntaxKind.ExclamationToken) {
+export function getUnaryExprResultType(op: kataw.SyntaxKind, operandType: CType) {
+    if (op === kataw.SyntaxKind.Negate) { // exclam
         return BooleanVarType;
-    } else if (op === ts.SyntaxKind.TildeToken) {
+    } else if (op === kataw.SyntaxKind.Complement) { // tilde
         return NumberVarType;
+    } else if (op === kataw.SyntaxKind.DeleteKeyword) {
+        return BooleanVarType;
+    } else if (op === kataw.SyntaxKind.VoidKeyword) {
+        return UniversalVarType;
+    } else if (op === kataw.SyntaxKind.TypeofKeyword) {
+        return StringVarType;
     } else {
         return toNumberCanBeNaN(operandType) ? UniversalVarType : NumberVarType;
     }
@@ -203,59 +299,80 @@ export function toPrimitive(t: CType) {
     return t === null || t === PointerVarType ? t : t === NumberVarType || t === BooleanVarType ? NumberVarType : StringVarType;
 }
 
-export function findParentFunction(node: ts.Node): ts.FunctionDeclaration | ts.FunctionExpression {
+export function findParentFunction(node: kataw.SyntaxNode): kataw.FunctionDeclaration | kataw.FunctionExpression {
     let parentFunc = node;
     while (parentFunc && !isFunction(parentFunc))
         parentFunc = parentFunc.parent;
-    return <ts.FunctionDeclaration | ts.FunctionExpression>parentFunc;
+    return <kataw.FunctionDeclaration | kataw.FunctionExpression>parentFunc;
 }
-export function findParentSourceFile(node: ts.Node): ts.SourceFile {
+export function findParentSourceFile(node: kataw.SyntaxNode): kataw.RootNode {
     let parent = node;
-    while (!ts.isSourceFile(parent))
+    while (parent.kind !== kataw.SyntaxKind.RootNode)
         parent = parent.parent;
-    return parent;
+    return <kataw.RootNode>parent;
 }
 
-export function getAllFunctionNodesInFunction(node: ts.FunctionExpression | ts.FunctionDeclaration) {
-    const nodes = [...node.getChildren()];
+export function getAllFunctionNodesInFunction(node: kataw.FunctionExpression | kataw.FunctionDeclaration) {
+    const nodes = [...getChildNodes(node)];
     const foundFuncNodes = [];
-    let cur: ts.Node;
+    let cur: kataw.SyntaxNode;
     while (cur = nodes.shift()) {
-        if (ts.isFunctionLike(cur)) {
+        if (isFunction(cur)) {
             foundFuncNodes.push(cur);
         } else
-            nodes.push.apply(nodes, cur.getChildren());
+            nodes.push.apply(nodes, getChildNodes(cur));
     }
 
     return foundFuncNodes;
 }
 
-export function getAllNodesInFunction(node: ts.FunctionExpression | ts.FunctionDeclaration) {
+export function getAllNodesInFunction(node: kataw.FunctionExpression | kataw.FunctionDeclaration) {
     let i = 0;
-    const nodes = [...node.getChildren()];
+    const nodes = [...getChildNodes(node)];
     while (i < nodes.length) {
-        if (ts.isFunctionLike(nodes[i]))
+        if (isFunction(nodes[i]))
             i++;
         else
-            nodes.push.apply(nodes, nodes[i++].getChildren());
+            nodes.push.apply(nodes, getChildNodes(nodes[i++]));
     }
 
     return nodes;
 }
 
-export function getAllNodesUnder(node: ts.Node) {
+const transform = kataw.createTransform();
+export function getChildNodes(node: kataw.SyntaxNode) {
+    const children = [];
+    function visit(node) {
+        children.push(node);
+        kataw.visitEachChild(transform, node, visit);
+        return null;
+    }
+    kataw.visitEachChild(transform, node, visit);
+    return children;
+}
+
+export function getAllNodesUnder(node: kataw.SyntaxNode) {
     let i = 0;
     const nodes = [node];
     while (i < nodes.length)
-        nodes.push.apply(nodes, nodes[i++].getChildren());
+        nodes.push.apply(nodes, getChildNodes(nodes[i++]));
     return nodes;
 }
 
-export function isUnder(container: ts.Node, item: ts.Node) {
+export function isUnder(container: kataw.SyntaxNode, item: kataw.SyntaxNode) {
     let parent = item;
-    while (parent && parent != container)
+    while (parent && parent !== container)
         parent = parent.parent;
     return parent;
+}
+
+export function getNodeText(node: kataw.SyntaxNode) {
+    if (node.start === -1)
+        return "(synthesized node " + kataw.SyntaxKind[node.kind] + ")";
+    let root = node;
+    while (root.parent)
+        root = root.parent;
+    return (root as kataw.RootNode).source.substring(node.start, node.end);
 }
 
 export function hasType(refType, type) {

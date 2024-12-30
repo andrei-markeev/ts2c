@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { ArrayType, StructType, DictType, UniversalVarType, StringVarType, NumberVarType, BooleanVarType } from '../types/ctypes';
@@ -7,19 +7,20 @@ import { CAssignment } from './assignment';
 import { CRegexSearchFunction } from './regexfunc';
 import { CExpression } from './expressions';
 import { CAsUniversalVar } from './typeconvert';
+import { isNumericLiteral, isPropertyDefinition, isStringLiteral, SyntaxKind_NaNIdentifier } from '../types/utils';
 
 @CodeTemplate(`
 {#if universalWrapper}
     js_var_from_array({expression})
 {#else}
     {expression}
-{/if}`, ts.SyntaxKind.ArrayLiteralExpression)
+{/if}`, kataw.SyntaxKind.ArrayLiteral)
 class CArrayLiteralExpression extends CTemplateBase {
     public expression: string;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, node: ts.ArrayLiteralExpression) {
+    constructor(scope: IScope, node: kataw.ArrayLiteral) {
         super();
-        let arrSize = node.elements.length;
+        let arrSize = node.elementList.elements.length;
         let type = scope.root.typeHelper.getCType(node);
         if (type === UniversalVarType) {
             type = new ArrayType(UniversalVarType, 0, true);
@@ -28,14 +29,14 @@ class CArrayLiteralExpression extends CTemplateBase {
         }
         if (type instanceof ArrayType) {
             let varName: string;
-            let canUseInitializerList = node.elements.every(e => e.kind == ts.SyntaxKind.NumericLiteral || e.kind == ts.SyntaxKind.StringLiteral);
+            let canUseInitializerList = node.elementList.elements.every(e => isNumericLiteral(e) || isStringLiteral(e));
             if (!type.isDynamicArray && canUseInitializerList) {
                 varName = scope.root.symbolsHelper.addTemp(node, "tmp_array");
                 let s = "{ ";
                 for (let i = 0; i < arrSize; i++) {
                     if (i != 0)
                         s += ", ";
-                    let cExpr = CodeTemplateFactory.createForNode(scope, node.elements[i]);
+                    let cExpr = CodeTemplateFactory.createForNode(scope, node.elementList.elements[i]);
                     s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
                 }
                 s += " }";
@@ -62,7 +63,7 @@ class CArrayLiteralExpression extends CTemplateBase {
                 }
 
                 for (let i = 0; i < arrSize; i++) {
-                    let assignment = new CAssignment(scope, varName, i + "", type, node.elements[i])
+                    let assignment = new CAssignment(scope, varName, i + "", type, node.elementList.elements[i])
                     scope.statements.push(assignment);
                 }
             }
@@ -84,7 +85,7 @@ class CArrayLiteralExpression extends CTemplateBase {
     js_var_from_dict({expression})
 {#else}
     {expression}
-{/if}`, ts.SyntaxKind.ObjectLiteralExpression)
+{/if}`, kataw.SyntaxKind.ObjectLiteral)
 export class CObjectLiteralExpression extends CTemplateBase {
     public expression: string = '';
     public isStruct: boolean;
@@ -92,7 +93,7 @@ export class CObjectLiteralExpression extends CTemplateBase {
     public universalWrapper: boolean = false;
     public allocator: CVariableAllocation;
     public initializers: CAssignment[];
-    constructor(scope: IScope, node: ts.ObjectLiteralExpression) {
+    constructor(scope: IScope, node: kataw.ObjectLiteral) {
         super();
         let type = scope.root.typeHelper.getCType(node);
         if (type === UniversalVarType) {
@@ -109,14 +110,13 @@ export class CObjectLiteralExpression extends CTemplateBase {
                 scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
             
             this.allocator = new CVariableAllocation(scope, varName, type, node);
-            this.initializers = node.properties
-                 .filter(p => p.kind == ts.SyntaxKind.PropertyAssignment)
-                 .map(p => <ts.PropertyAssignment>p)
-                 .map(p => {
-                     const propName = (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text;
-                     return new CAssignment(scope, varName, this.isDict ? '"' + propName + '"' : propName, type, p.initializer)
-                 });
-            
+            this.initializers = node.propertyList.properties
+                .filter(p => isPropertyDefinition(p))
+                .map(p => {
+                    let propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) && p.left.text;
+                    return new CAssignment(scope, varName, this.isDict ? '"' + propName + '"' : propName, type, p.right)
+                });
+
             this.expression = varName;
         } else
             this.expression = "/* Unsupported use of object literal expression */";
@@ -125,10 +125,10 @@ export class CObjectLiteralExpression extends CTemplateBase {
 
 var regexNames = {};
 
-@CodeTemplate(`{expression}`, ts.SyntaxKind.RegularExpressionLiteral)
+@CodeTemplate(`{expression}`, kataw.SyntaxKind.RegularExpressionLiteral)
 class CRegexLiteralExpression extends CTemplateBase {
     public expression: string = '';
-    constructor(scope: IScope, node: ts.RegularExpressionLiteral) {
+    constructor(scope: IScope, node: kataw.RegularExpressionLiteral) {
         super();
         let template = node.text;
         if (!regexNames[template]) {
@@ -140,13 +140,13 @@ class CRegexLiteralExpression extends CTemplateBase {
     }
 }
 
-@CodeTemplate(`{value}`, ts.SyntaxKind.StringLiteral)
+@CodeTemplate(`{value}`, kataw.SyntaxKind.StringLiteral)
 export class CString extends CTemplateBase {
     public value: CExpression;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, nodeOrString: ts.StringLiteral | string) {
+    constructor(scope: IScope, nodeOrString: kataw.StringLiteral | string) {
         super();
-        let s = typeof nodeOrString === 'string' ? '"' + nodeOrString + '"' : nodeOrString.getText();
+        let s = typeof nodeOrString === 'string' ? '"' + nodeOrString + '"' : nodeOrString.rawText.trim();
         s = s.replace(/\\u([A-Fa-f0-9]{4})/g, (match, g1) => String.fromCharCode(parseInt(g1, 16)));
         if (s.indexOf("'") == 0)
             this.value = '"' + s.replace(/"/g, '\\"').replace(/([^\\])\\'/g, "$1'").slice(1, -1) + '"';
@@ -158,30 +158,30 @@ export class CString extends CTemplateBase {
     }
 }
 
-@CodeTemplate(`{value}`, ts.SyntaxKind.NumericLiteral)
+@CodeTemplate(`{value}`, kataw.SyntaxKind.NumericLiteral)
 export class CNumber {
     public value: CExpression;
     public universalWrapper: boolean = false;
-    constructor(scope: IScope, node: ts.Node) {
-        this.value = node.getText();
+    constructor(scope: IScope, node: kataw.NumericLiteral) {
+        this.value = ""+node.text;
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
             this.value = new CAsUniversalVar(scope, this.value, NumberVarType);
     }
 }
 
-@CodeTemplate(`{value}`, [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword])
+@CodeTemplate(`{value}`, [kataw.SyntaxKind.TrueKeyword, kataw.SyntaxKind.FalseKeyword])
 export class CBoolean extends CTemplateBase {
     public value: CExpression;
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope, node: kataw.SyntaxToken<kataw.SyntaxKind.TrueKeyword | kataw.SyntaxKind.FalseKeyword>) {
         super();
-        this.value = node.kind == ts.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
+        this.value = node.kind == kataw.SyntaxKind.TrueKeyword ? "TRUE" : "FALSE";
         scope.root.headerFlags.bool = true;
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
             this.value = new CAsUniversalVar(scope, this.value, BooleanVarType);
     }
 }
 
-@CodeTemplate(`js_var_from(JS_VAR_NULL)`, ts.SyntaxKind.NullKeyword)
+@CodeTemplate(`js_var_from(JS_VAR_NULL)`, kataw.SyntaxKind.NullKeyword)
 export class CNull extends CTemplateBase {
     constructor(scope: IScope) {
         super();
@@ -189,7 +189,7 @@ export class CNull extends CTemplateBase {
     }
 }
 
-@CodeTemplate(`js_var_from(JS_VAR_UNDEFINED)`, ts.SyntaxKind.UndefinedKeyword)
+@CodeTemplate(`js_var_from(JS_VAR_UNDEFINED)`, kataw.SyntaxKind.UndefinedKeyword)
 export class CUndefined extends CTemplateBase {
     constructor(scope: IScope) {
         super();
@@ -197,15 +197,15 @@ export class CUndefined extends CTemplateBase {
     }
 }
 
-@CodeTemplate(`js_var_from(JS_VAR_NAN)`, ts.SyntaxKind.Count + 1)
+@CodeTemplate(`js_var_from(JS_VAR_NAN)`, SyntaxKind_NaNIdentifier)
 export class CNaN extends CTemplateBase {
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope) {
         super();
         scope.root.headerFlags.js_var_from = true;
     }
 }
 
-@CodeTemplate(`this`, ts.SyntaxKind.ThisKeyword)
+@CodeTemplate(`this`, kataw.SyntaxKind.ThisKeyword)
 export class CThis extends CTemplateBase {
-    constructor(scope: IScope, node: ts.Node) { super(); }
+    constructor(scope: IScope, node: kataw.SyntaxToken<kataw.SyntaxKind.ThisKeyword>) { super(); }
 }
