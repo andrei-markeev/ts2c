@@ -1,33 +1,34 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplateFactory } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { TypeHelper } from '../../types/typehelper';
 import { CElementAccess } from '../../nodes/elementaccess';
+import { isFieldPropertyAccess } from '../../types/utils';
 
 @StandardCallResolver
 class StringToStringResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.member))
             return false;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.expression);
-        return ["toString", "valueOf"].indexOf(propAccess.name.getText()) > -1 && objType == StringVarType;
+        let objType = typeHelper.getCType(call.expression.member);
+        return objType == StringVarType &&
+            (call.expression.expression.text == "toString" || call.expression.expression.text == "valueOf");
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
-        return CodeTemplateFactory.createForNode(scope, <ts.PropertyAccessExpression>node.expression) as CElementAccess;
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
+        return CodeTemplateFactory.createForNode(scope, <kataw.IndexExpression>node.expression) as CElementAccess;
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return false;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }

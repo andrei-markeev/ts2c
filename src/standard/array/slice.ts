@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, NumberVarType } from '../../types/ctypes';
@@ -7,31 +7,31 @@ import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess, CSimpleElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { isBinaryExpression, isFieldPropertyAccess, isNumericLiteral, isUnaryExpression, isVariableDeclaration } from '../../types/utils';
 
 @StandardCallResolver
 class ArraySliceResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "slice" && objType instanceof ArrayType;
+        let objType = typeHelper.getCType(call.expression.member);
+        return call.expression.expression.text === "slice" && objType instanceof ArrayType;
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let { size, dynamic, elementType } = getSliceParams(typeHelper, call);
         return new ArrayType(elementType, size, dynamic);
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CArraySlice(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let { dynamic } = getSliceParams(typeHelper, call);
-        return call.parent.kind != ts.SyntaxKind.ExpressionStatement && dynamic;
+        return !kataw.isStatementNode(call.parent) && dynamic;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "tmp_slice";
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -75,22 +75,22 @@ class CArraySlice extends CTemplateBase {
     public simpleSlice: boolean = false;
     public simpleSliceSize: number = 0;
     public simpleSliceStart: number = 0;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
         if (this.topExpressionOfStatement)
             return;
 
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        let varType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
-        let varAccess = new CElementAccess(scope, propAccess.expression);
+        let propAccess = <kataw.IndexExpression>call.expression;
+        let varType = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
+        let varAccess = new CElementAccess(scope, propAccess.member);
         this.arraySize = new CSimpleElementAccess(scope, varType, varAccess, "length");
         this.arrayDataAccess = new CArrayDataAccess(scope, varAccess, varType.isDynamicArray);
 
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
         scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
 
-        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
+        let args = call.argumentList.elements.map(a => CodeTemplateFactory.createForNode(scope, a));
         this.startIndexArg = args[0];
         this.endIndexArg = args.length == 2 ? args[1] : null;
 
@@ -101,7 +101,7 @@ class CArraySlice extends CTemplateBase {
             this.simpleSliceSize = size;
             const reuseVariable = tryReuseExistingVariable(call);
             if (reuseVariable)
-                this.tempVarName = reuseVariable.getText();
+                this.tempVarName = reuseVariable.text;
             else {
                 this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "tmp_slice");
                 scope.variables.push(new CVariable(scope, this.tempVarName, new ArrayType(varType.elementType, this.simpleSliceSize, false)));
@@ -110,7 +110,7 @@ class CArraySlice extends CTemplateBase {
         }        
        
         this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-        let arrayType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
+        let arrayType = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
         let tempVarType = new ArrayType(arrayType.elementType, 0, true);
         if (!scope.root.memoryManager.variableWasReused(call))
             scope.variables.push(new CVariable(scope, this.tempVarName, tempVarType));
@@ -137,26 +137,26 @@ class CArrayDataAccess {
     constructor(scope: IScope, public elementAccess: CElementAccess, public isDynamicArray: boolean) {}
 }
 
-function getSliceParams(typeHelper: TypeHelper, call: ts.CallExpression) {
+function getSliceParams(typeHelper: TypeHelper, call: kataw.CallExpression) {
     let params = { start: 0, size: 0, dynamic: true, elementType: null };
-    if (!ts.isPropertyAccessExpression(call.expression))
+    if (!isFieldPropertyAccess(call.expression))
         return params;
-    let objType = typeHelper.getCType(call.expression.expression);
+    let objType = typeHelper.getCType(call.expression.member);
     if (!(objType instanceof ArrayType))
         return params;
     params.elementType = objType.elementType;
     let reuseVar = tryReuseExistingVariable(call);
     let reuseVarType = reuseVar && typeHelper.getCType(reuseVar);
     let reuseVarIsDynamicArray = reuseVar && reuseVarType instanceof ArrayType && reuseVarType.isDynamicArray;
-    let isSimpleSlice = !reuseVarIsDynamicArray && !objType.isDynamicArray && call.arguments.every(a => ts.isNumericLiteral(a) || ts.isPrefixUnaryExpression(a) && a.operator == ts.SyntaxKind.MinusToken && ts.isNumericLiteral(a.operand));
+    let isSimpleSlice = !reuseVarIsDynamicArray && !objType.isDynamicArray && call.argumentList.elements.every(a => isNumericLiteral(a) || isUnaryExpression(a) && a.operandToken.kind == kataw.SyntaxKind.Subtract && isNumericLiteral(a.operand));
     if (isSimpleSlice) {
         let arraySize = objType.capacity;
-        let startIndexArg = +call.arguments[0].getText();
-        if (call.arguments.length == 1) {
+        let startIndexArg = (<kataw.NumericLiteral>call.argumentList.elements[0]).text;
+        if (call.argumentList.elements.length == 1) {
             params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
             params.size = startIndexArg < 0 ? -startIndexArg : arraySize - startIndexArg;
         } else {
-            let endIndexArg = +call.arguments[1].getText();
+            let endIndexArg = (<kataw.NumericLiteral>call.argumentList.elements[1]).text;
             params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
             params.size = (endIndexArg < 0 ? arraySize + endIndexArg : endIndexArg) - params.start;
         }
@@ -165,16 +165,15 @@ function getSliceParams(typeHelper: TypeHelper, call: ts.CallExpression) {
     return params;
 }
 
-function tryReuseExistingVariable(node: ts.Node) {
-    if (node.parent.kind == ts.SyntaxKind.BinaryExpression) {
-        let assignment = <ts.BinaryExpression>node.parent;
-        if (assignment.left.kind == ts.SyntaxKind.Identifier)
-            return assignment.left;
+function tryReuseExistingVariable(node: kataw.SyntaxNode): kataw.Identifier {
+    if (isBinaryExpression(node.parent)) {
+        if (kataw.isIdentifier(node.parent.left))
+            return node.parent.left;
     }
-    if (node.parent.kind == ts.SyntaxKind.VariableDeclaration) {
-        let assignment = <ts.VariableDeclaration>node.parent;
-        if (assignment.name.kind == ts.SyntaxKind.Identifier)
-            return assignment.name;
+    if (isVariableDeclaration(node.parent)) {
+        let assignment = <kataw.VariableDeclaration>node.parent;
+        if (kataw.isIdentifier(assignment.binding))
+            return assignment.binding;
     }
     return null;
 }

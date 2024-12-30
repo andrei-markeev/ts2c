@@ -1,56 +1,55 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
 import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, VoidType, PointerVarType } from './ctypes';
 import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
-import { findParentSourceFile } from './utils';
+import { SymbolsHelper } from '../symbols';
 
 
 export class TypeHelper {
 
     private arrayLiteralsTypes: { [litArrayPos: number]: CType } = {};
-    private objectLiteralsTypes: { [litObjectPos: number]: CType } = {};
     private typeOfNodeDict: { [id: string]: { type: CType } } = {};
     private typeMerger: TypeMerger = new TypeMerger();
     private typeResolver: TypeResolver;
 
-    constructor(private typeChecker: ts.TypeChecker, allNodes: ts.Node[]) {
-        this.typeResolver = new TypeResolver(typeChecker, allNodes, this, this.typeMerger, this.typeOfNodeDict);
+    constructor(private symbolsHelper: SymbolsHelper) {
+        this.typeResolver = new TypeResolver(this, symbolsHelper, this.typeMerger, this.typeOfNodeDict);
     }
 
-    public inferTypes() {
-        this.typeResolver.inferTypes();
+    public inferTypes(nodes: kataw.SyntaxNode[]) {
+        this.typeResolver.inferTypes(nodes);
     }
 
     /** Get C type of TypeScript node */
-    public getCType(node: ts.Node): CType {
+    public getCType(node: kataw.SyntaxNode): CType {
         if (!node || !node.kind)
             return null;
 
-        let found = this.typeOfNodeDict[node.pos + "_" + node.end];
+        let found = this.typeOfNodeDict[node.start + "_" + node.end];
         if (found)
             return found.type;
 
         switch (node.kind) {
-            case ts.SyntaxKind.NumericLiteral:
+            case kataw.SyntaxKind.NumericLiteral:
                 return NumberVarType;
-            case ts.SyntaxKind.TrueKeyword:
-            case ts.SyntaxKind.FalseKeyword:
+            case kataw.SyntaxKind.TrueKeyword:
+            case kataw.SyntaxKind.FalseKeyword:
                 return BooleanVarType;
-            case ts.SyntaxKind.StringLiteral:
+            case kataw.SyntaxKind.StringLiteral:
                 return StringVarType;
-            case ts.SyntaxKind.RegularExpressionLiteral:
+            case kataw.SyntaxKind.RegularExpressionLiteral:
                 return RegexVarType;
-            case ts.SyntaxKind.ArrayLiteralExpression:
+            case kataw.SyntaxKind.ArrayLiteral:
                 {
-                    if (!this.arrayLiteralsTypes[node.pos])
-                        this.determineArrayType(<ts.ArrayLiteralExpression>node);
-                    return this.arrayLiteralsTypes[node.pos];
+                    if (!this.arrayLiteralsTypes[node.start])
+                        this.determineArrayType(<kataw.ArrayLiteral>node);
+                    return this.arrayLiteralsTypes[node.start];
                 }
-            case ts.SyntaxKind.CallExpression:
+            case kataw.SyntaxKind.CallExpression:
                 {
-                    let call = <ts.CallExpression>node;
+                    let call = <kataw.CallExpression>node;
                     let retType = StandardCallHelper.getReturnType(this, call);
                     if (retType)
                         return retType;
@@ -70,40 +69,40 @@ export class TypeHelper {
             return "/* Cannot determine variable type from source " + JSON.stringify(cType) + "*/";
     }
 
-    public getDeclaration(n: ts.Node) {
-        let s = this.typeChecker.getSymbolAtLocation(n);
-        return s && <ts.NamedDeclaration>s.valueDeclaration;
+    public getDeclaration(n: kataw.Identifier): kataw.Identifier {
+        let s = this.symbolsHelper.getSymbolAtLocation(n);
+        return s && s.valueDeclaration;
     }
 
     private static syntheticNodesCounter = 0;
-    public registerSyntheticNode(n: ts.Node, t: CType) {
-        if (!n || !(n.flags & ts.NodeFlags.Synthesized))
+    public registerSyntheticNode(n: kataw.SyntaxNode, t: CType) {
+        if (!n/* || !(n.flags & ts.NodeFlags.Synthesized)*/)
             return false;
         
-        (n as any).end = TypeHelper.syntheticNodesCounter++;
+        n.end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
     }
 
     private scopeVariables: { [pos: number]: boolean } = {};
-    public registerScopeVariable(decl: ts.NamedDeclaration) {
-        this.scopeVariables[decl.pos] = true;
+    public registerScopeVariable(decl: kataw.Identifier) {
+        this.scopeVariables[decl.start] = true;
     }
-    public isScopeVariableDeclaration(decl: ts.NamedDeclaration) {
-        return this.scopeVariables[decl.pos] || false;
+    public isScopeVariableDeclaration(decl: kataw.Identifier) {
+        return this.scopeVariables[decl.start] || false;
     }
-    public isScopeVariable(n: ts.Identifier) {
+    public isScopeVariable(n: kataw.Identifier) {
         const decl = this.getDeclaration(n);
-        return decl && this.scopeVariables[decl.pos] || false;
+        return decl && this.scopeVariables[decl.start] || false;
     }
 
-    private determineArrayType(arrLiteral: ts.ArrayLiteralExpression): ArrayType {
+    private determineArrayType(arrLiteral: kataw.ArrayLiteral): ArrayType {
         let elementType: CType = PointerVarType;
-        let cap = arrLiteral.elements.length;
+        let cap = arrLiteral.elementList.elements.length;
         if (cap > 0)
-            elementType = this.getCType(arrLiteral.elements[0]) || PointerVarType;
+            elementType = this.getCType(arrLiteral.elementList.elements[0]) || PointerVarType;
 
         let type = new ArrayType(elementType, cap, false);
-        this.arrayLiteralsTypes[arrLiteral.pos] = type;
+        this.arrayLiteralsTypes[arrLiteral.start] = type;
         return type;
     }
 }

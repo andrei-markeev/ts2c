@@ -1,29 +1,30 @@
-import * as ts from 'typescript';
-import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess } from './utils';
+import * as kataw from 'kataw';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isVariableDeclaration, isObjectLiteral, isPropertyDefinition, isStringLiteralAsIdentifier } from './utils';
+import { SymbolsHelper } from '../symbols';
 
 export class CircularTypesFinder {
-    constructor(private allNodes: ts.Node[], private typeChecker: ts.TypeChecker) { }
+    constructor(private allNodes: kataw.SyntaxNode[], private symbolsHelper: SymbolsHelper) { }
 
     private assignments: { [key: string]: string[] } = {};
-    private circularAssignments: { [pos: number]: { node: ts.Node, propChain: string[] } } = {};
+    private circularAssignments: { [pos: number]: { node: kataw.SyntaxNode, propChain: string[] } } = {};
 
     public findCircularAssignments() {
         this.circularAssignments = {};
         this.assignments = {};
         for (const node of this.allNodes) {
-            if (isEqualsExpression(node) || ts.isVariableDeclaration(node)) {
-                const left = isEqualsExpression(node) ? node.left : node.name;
+            if (isEqualsExpression(node) || isVariableDeclaration(node)) {
+                const left = isEqualsExpression(node) ? node.left : node.binding;
                 const right = isEqualsExpression(node) ? node.right : node.initializer;
                 if (!left || !right)
                     continue;
                 let lvar = left;
                 const leftProps = [];
                 while (isFieldPropertyAccess(lvar) || isFieldElementAccess(lvar)) {
-                    if (isFieldPropertyAccess(lvar))
-                        leftProps.unshift(lvar.name.text);
-                    else if (isFieldElementAccess(lvar))
-                        leftProps.unshift(lvar.argumentExpression.getText().slice(1, -1));
-                    lvar = lvar.expression;
+                    if (isFieldPropertyAccess(lvar) && kataw.isIdentifier(lvar.expression))
+                        leftProps.unshift(lvar.expression.text);
+                    else if (isFieldElementAccess(lvar) && isStringLiteralAsIdentifier(lvar.expression))
+                        leftProps.unshift(lvar.expression.text);
+                    lvar = lvar.member;
                 }
                 this.checkOneAssignment(node, lvar, leftProps, right);
             }
@@ -33,29 +34,29 @@ export class CircularTypesFinder {
         return this.circularAssignments;
     }
 
-    private checkOneAssignment(refNode: ts.Node, left: ts.Node, leftProps: string[], right: ts.Node) {
-        if (ts.isObjectLiteralExpression(right)) {
-            for (const prop of right.properties) {
-                if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name))
-                    this.checkOneAssignment(refNode, left, leftProps.concat(prop.name.text), prop.initializer);
+    private checkOneAssignment(refNode: kataw.SyntaxNode, left: kataw.SyntaxNode, leftProps: string[], right: kataw.SyntaxNode) {
+        if (isObjectLiteral(right)) {
+            for (const prop of right.propertyList.properties) {
+                if (isPropertyDefinition(prop) && kataw.isIdentifier(prop.left))
+                    this.checkOneAssignment(refNode, left, leftProps.concat(prop.left.text), prop.right);
             }
             return;
         }
         const rightProps = [];
         while (isFieldPropertyAccess(right) || isFieldElementAccess(right)) {
-            if (isFieldPropertyAccess(right))
-                rightProps.unshift(right.name.text);
-            else if (isFieldElementAccess(right))
-                rightProps.unshift(right.argumentExpression.getText().slice(1, -1));
+            if (isFieldPropertyAccess(right) && kataw.isIdentifier(right.expression))
+                rightProps.unshift(right.expression.text);
+            else if (isFieldElementAccess(right) && isStringLiteralAsIdentifier(right.expression))
+                rightProps.unshift(right.expression.text);
             right = right.expression;
         }
-        const symbolRight = this.typeChecker.getSymbolAtLocation(right);
-        const symbolLeft = this.typeChecker.getSymbolAtLocation(left);
+        const symbolRight = this.symbolsHelper.getSymbolAtLocation(right);
+        const symbolLeft = this.symbolsHelper.getSymbolAtLocation(left);
         if (symbolRight && symbolLeft) {
-            const key = symbolLeft.valueDeclaration.pos + "->" + leftProps.map(p => p + "->").join("");
-            const value = symbolRight.valueDeclaration.pos + "->" + rightProps.map(p => p + "->").join("");
+            const key = symbolLeft.valueDeclaration.start + "->" + leftProps.map(p => p + "->").join("");
+            const value = symbolRight.valueDeclaration.start + "->" + rightProps.map(p => p + "->").join("");
             if (key.indexOf(value) === 0 || Object.keys(this.assignments).filter(k => k.indexOf(value) === 0).some(k => this.assignments[k].some(a => key.indexOf(a) === 0)))
-                this.circularAssignments[refNode.pos] = { node: symbolLeft.valueDeclaration, propChain: leftProps };
+                this.circularAssignments[refNode.start] = { node: symbolLeft.valueDeclaration, propChain: leftProps };
             this.assignments[key] = (this.assignments[key] || []).concat(value);
         }
     }

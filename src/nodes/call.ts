@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { IScope } from '../program';
 import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
@@ -6,7 +6,7 @@ import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
-import { isNullOrUndefined, findParentFunction } from '../types/utils';
+import { isNullOrUndefined, findParentFunction, getNodeText } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
 
 @CodeTemplate(`
@@ -20,7 +20,7 @@ import { CObjectLiteralExpression } from './literals';
     {funcName}({arguments {, }=> {this}})
 {#else}
     /* Unsupported function call: {nodeText} */
-{/if}`, ts.SyntaxKind.CallExpression)
+{/if}`, kataw.SyntaxKind.CallExpression)
 export class CCallExpression extends CTemplateBase {
     public funcName: CExpression = null;
     public standardCall: CExpression = null;
@@ -28,7 +28,7 @@ export class CCallExpression extends CTemplateBase {
     public isSimpleClosureCall: boolean = false;
     public closureVarName: string = null;
     public nodeText: string;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
 
         this.standardCall = StandardCallHelper.createTemplate(scope, call);
@@ -38,12 +38,12 @@ export class CCallExpression extends CTemplateBase {
         // calling function that uses "this"
         const funcType = scope.root.typeHelper.getCType(call.expression) as FuncType;
         if (!funcType || funcType.instanceType != null) {
-            this.nodeText = call.getText();
+            this.nodeText = getNodeText(call);
             return;
         }
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
-        this.arguments = call.arguments.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        this.arguments = call.argumentList.elements.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
         if (funcType.needsClosureStruct) {
             // nested calls e.g. `func(1, 2)()`;
             if (this.funcName instanceof CCallExpression) {
@@ -78,37 +78,41 @@ export class CCallExpression extends CTemplateBase {
     {expression}
 {#else}
     /* Unsupported 'new' expression {nodeText} */
-{/if}`, ts.SyntaxKind.NewExpression)
+{/if}`, kataw.SyntaxKind.NewExpression)
 export class CNew extends CTemplateBase {
     public funcName: CExpression = "";
     public arguments: CExpression[];
     public allocator: CVariableAllocation | string = ""; 
     public expression: CExpression = "";
     public nodeText: string;
-    constructor(scope: IScope, node: ts.NewExpression) {
+    constructor(scope: IScope, node: kataw.NewExpression) {
         super();
 
-        const decl = scope.root.typeHelper.getDeclaration(node.expression);
-        if (decl && ts.isIdentifier(node.expression)) {
+        const decl = kataw.isIdentifier(node.expression) ? scope.root.typeHelper.getDeclaration(node.expression) : null;
+        if (decl) {
             const funcType = scope.root.typeHelper.getCType(decl) as FuncType;
 
             this.funcName = CodeTemplateFactory.createForNode(scope, node.expression);
-            this.arguments = node.arguments.map(arg => CodeTemplateFactory.createForNode(scope, arg));
+            this.arguments = node.argumentList.elements.map(arg => CodeTemplateFactory.createForNode(scope, arg));
             
             const varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             if (!scope.root.memoryManager.variableWasReused(node))
                 scope.variables.push(new CVariable(scope, varName, funcType.instanceType))
             this.arguments.unshift(varName);
             this.allocator = new CVariableAllocation(scope, varName, funcType.instanceType, node);
-        } else if (ts.isIdentifier(node.expression) && node.expression.text === "Object") {
-            if (node.arguments.length === 0 || isNullOrUndefined(node.arguments[0])) {
-                const objLiteral = ts.factory.createObjectLiteralExpression();
-                (objLiteral as any).parent = node;
+            return;
+        } else if (kataw.isIdentifier(node.expression) && node.expression.text === "Object") {
+            const isRootScopeObject = scope.root.symbolsHelper.findSymbolScope(node.expression).parent === undefined;
+            if (isRootScopeObject && node.argumentList.elements.length === 0 || isNullOrUndefined(node.argumentList.elements[0])) {
+                const propList = kataw.createPropertyDefinitionList([], false, kataw.NodeFlags.None, -1, -1);
+                const objLiteral = kataw.createObjectLiteral(propList, kataw.NodeFlags.None, -1, -1);
+                objLiteral.parent = node;
                 scope.root.typeHelper.registerSyntheticNode(objLiteral, PointerVarType);
                 this.expression = new CObjectLiteralExpression(scope, objLiteral);
             }
+            return;
         }
 
-        this.nodeText = node.getText();
+        this.nodeText = getNodeText(node);
     }
 }

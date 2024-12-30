@@ -1,9 +1,9 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { StringVarType, CType, UniversalVarType, NumberVarType, BooleanVarType, ArrayType, StructType, DictType } from "../types/ctypes";
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from "../template";
 import { CExpression } from "./expressions";
 import { IScope } from "../program";
-import { isNode } from "../types/utils";
+import { isNode, isNumericLiteral } from "../types/utils";
 import { CArraySize, CSimpleElementAccess } from "./elementaccess";
 import { CVariable } from "./variable";
 
@@ -31,7 +31,7 @@ export class CAsUniversalVar extends CTemplateBase {
     public isArray: boolean;
     public isDict: boolean;
     public expression: CExpression;
-    constructor (scope: IScope, expr: ts.Node | CExpression, type?: CType) {
+    constructor (scope: IScope, expr: kataw.SyntaxNode | CExpression, type?: CType) {
         super();
         this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
@@ -79,7 +79,7 @@ export class CAsNumber extends CTemplateBase {
     public isUniversalVar: boolean;
     public isSingleElementStaticArray: boolean = false;
     public arrayFirstElementAsNumber: CExpression;
-    constructor(scope: IScope, expr: ts.Node | CExpression, public type?: CType) {
+    constructor(scope: IScope, expr: kataw.SyntaxNode | CExpression, public type?: CType) {
         super();
         this.expression = isNode(expr) ? CodeTemplateFactory.createForNode(scope, expr) : expr;
         type = type || isNode(expr) && scope.root.typeHelper.getCType(expr);
@@ -150,11 +150,11 @@ export class CAsString extends CTemplateBase {
     public arraySize: CArraySize;
     public arrayStrLen: CAsString_Length;
     public arrayElementCat: CAsString_Concat;
-    constructor(scope: IScope, node: ts.Node) {
+    constructor(scope: IScope, node: kataw.SyntaxNode) {
         super();
         const type = scope.root.typeHelper.getCType(node);
         this.arg = CodeTemplateFactory.createForNode(scope, node);
-        this.isNumberLiteral = ts.isNumericLiteral(node);
+        this.isNumberLiteral = isNumericLiteral(node);
         this.isNumber = !this.isNumberLiteral && type === NumberVarType;
         this.isString = type === StringVarType;
         this.isBoolean = type === BooleanVarType;
@@ -228,7 +228,7 @@ export class CAsString_Length extends CTemplateBase {
     public needDisposeVarName: string;
     public lengthVarName: string;
     public iteratorVarName: string;
-    constructor(scope: IScope, node: ts.Node, public arg: CExpression, public type: CType) {
+    constructor(scope: IScope, node: kataw.SyntaxNode, public arg: CExpression, public type: CType) {
         super();
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;
@@ -296,7 +296,7 @@ export class CAsString_Concat extends CTemplateBase {
     public iteratorVarName: string;
     public arrayElementCat: CAsString_Concat;
     public arraySize: CArraySize;
-    constructor(scope: IScope, node: ts.Node, public buf: CExpression, public arg: CExpression, public type: CType) {
+    constructor(scope: IScope, node: kataw.SyntaxNode, public buf: CExpression, public arg: CExpression, public type: CType) {
         super();
         this.isNumber = type === NumberVarType;
         this.isString = type === StringVarType;

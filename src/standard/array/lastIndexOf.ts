@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { ArrayType, NumberVarType, BooleanVarType } from '../../types/ctypes';
@@ -7,29 +7,29 @@ import { CVariable } from '../../nodes/variable';
 import { CBinaryExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { isFieldPropertyAccess } from '../../types/utils';
 
 @StandardCallResolver
 class ArrayLastIndexOfResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (call.expression.kind != ts.SyntaxKind.PropertyAccessExpression)
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.expression);
-        return propAccess.name.getText() == "lastIndexOf" && objType instanceof ArrayType;
+        let objType = typeHelper.getCType(call.expression.member);
+        return call.expression.expression.text === "lastIndexOf" && objType instanceof ArrayType;
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return NumberVarType;
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CArrayLastIndexOf(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return false;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -64,13 +64,12 @@ class CArrayLastIndexOf extends CTemplateBase {
     public comparison: CBinaryExpression;
     public staticArraySize: string = '';
     public varAccess: CElementAccess = null;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
-        let propAccess = <ts.PropertyAccessExpression>call.expression;
+        let propAccess = <kataw.IndexExpression>call.expression;
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
         this.varAccess = new CElementAccess(scope, propAccess.expression);
-        let args = call.arguments.map(a => CodeTemplateFactory.createForNode(scope, a));
-        this.topExpressionOfStatement = call.parent.kind == ts.SyntaxKind.ExpressionStatement;
+        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");
@@ -80,11 +79,13 @@ class CArrayLastIndexOf extends CTemplateBase {
             scope.variables.push(new CVariable(scope, this.iteratorVarName, NumberVarType));
 
             // Synthesize binary node that represents comparison expression
-            const iteratorIdent = ts.factory.createIdentifier(this.iteratorVarName);
-            const arrayElement = ts.factory.createElementAccessExpression(propAccess.expression, iteratorIdent);
-            const comparison = ts.factory.createBinaryExpression(arrayElement, ts.SyntaxKind.EqualsEqualsToken, call.arguments[0]);
-            (iteratorIdent as any).parent = arrayElement;
-            (arrayElement as any).parent = comparison;
+            const iteratorIdent = kataw.createIdentifier(this.iteratorVarName, this.iteratorVarName, kataw.NodeFlags.NoChildren, -1, -1);
+            const arrayElement = kataw.createMemberAccessExpression(propAccess.member, iteratorIdent, -1, -1);
+            const equalsToken = kataw.createToken(kataw.SyntaxKind.LooseEqual, kataw.NodeFlags.NoChildren, -1, -1);
+            const comparison = kataw.createBinaryExpression(arrayElement, equalsToken, call.argumentList.elements[0], kataw.NodeFlags.None, -1, -1);
+            iteratorIdent.parent = arrayElement;
+            equalsToken.parent = comparison;
+            arrayElement.parent = comparison;
             scope.root.typeHelper.registerSyntheticNode(iteratorIdent, NumberVarType);
             scope.root.typeHelper.registerSyntheticNode(arrayElement, objType.elementType);
             scope.root.typeHelper.registerSyntheticNode(comparison, BooleanVarType);

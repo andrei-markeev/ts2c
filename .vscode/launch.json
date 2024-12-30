@@ -8,7 +8,7 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/funcs/nested12.ts"],
+            "args": ["tests/numbers/numbers5.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

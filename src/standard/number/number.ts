@@ -1,30 +1,37 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolver } from '../../standard';
 import { NumberVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CExpression } from '../../nodes/expressions';
 import { TypeHelper } from '../../types/typehelper';
+import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
 @StandardCallResolver
 class NumberCallResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        return ts.isIdentifier(call.expression) && call.expression.text == "Number";
+    numberSymbol: SymbolInfo;
+    symbolHelper: SymbolsHelper;
+    public addSymbols(symbolHelper: SymbolsHelper): void {
+        this.symbolHelper = symbolHelper;
+        this.numberSymbol = symbolHelper.registerSyntheticSymbol(null, 'Number');
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
-        const type = typeHelper.getCType(call.arguments[0]);
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        return kataw.isIdentifier(call.expression) && call.expression.text == "Number" && this.symbolHelper.getSymbolAtLocation(call.expression) === this.numberSymbol;
+    }
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        const type = typeHelper.getCType(call.argumentList.elements[0]);
         return type == NumberVarType ? NumberVarType : UniversalVarType;
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CNumberCall(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return false;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -38,12 +45,12 @@ class NumberCallResolver implements IResolver {
 class CNumberCall extends CTemplateBase {
     public call: string = "";
     public arg: CExpression;
-    constructor(scope: IScope, call: ts.CallExpression) {
+    constructor(scope: IScope, call: kataw.CallExpression) {
         super();
 
-        this.arg = CodeTemplateFactory.createForNode(scope, call.arguments[0]);
+        this.arg = CodeTemplateFactory.createForNode(scope, call.argumentList.elements[0]);
 
-        const type = scope.root.typeHelper.getCType(call.arguments[0]);
+        const type = scope.root.typeHelper.getCType(call.argumentList.elements[0]);
         if (type != NumberVarType && type != UniversalVarType) {
             this.call = "str_to_int16_t";
             scope.root.headerFlags.str_to_int16_t = true;

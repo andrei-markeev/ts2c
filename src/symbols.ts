@@ -1,20 +1,157 @@
-import * as ts from 'typescript'
+import * as kataw from 'kataw'
 import { CType, StructType, ArrayType, NumberVarType, FuncType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
-import { findParentFunction } from './types/utils';
+import { findParentFunction, getNodeText, isFieldAccess, isPropertyDefinition, isStringLiteral } from './types/utils';
 import { reservedCSymbolNames } from './program';
+
+export interface SymbolInfo {
+    id: number;
+    parent: SymbolInfo | undefined;
+    valueDeclaration: kataw.Identifier | undefined;
+    references: kataw.Identifier[];
+    members: SymbolInfo[];
+}
+
+export interface SymbolScope {
+    symbols: Record<string, SymbolInfo>;
+    parent: SymbolScope;
+    start: number;
+    end: number;
+}
 
 export class SymbolsHelper {
 
-    constructor(private typeChecker: ts.TypeChecker, private typeHelper: TypeHelper) { }
+    constructor() { }
 
     private userStructs: { [name: string]: StructType } = {};
     private arrayStructs: CType[] = [];
 
-    public getStructsAndFunctionPrototypes() {
+    private scopes: SymbolScope[] = [];
+    private nextId = 1;
+
+    public createSymbolScope(start: number, end: number) {
+        const currentScope = this.scopes.find(s => start >= s.start && end <= s.end);
+        const newScope = {
+            symbols: {},
+            parent: currentScope,
+            start: start,
+            end: end
+        };
+        this.scopes.push(newScope);
+        return newScope;
+    }
+
+    public registerSymbol(node: kataw.Identifier) {
+        const [path, parent] = this.getSymbolPath(node);
+        if (!path)
+            return;
+        this.findSymbolScope(node).symbols[path] = {
+            id: this.nextId++,
+            parent: parent,
+            valueDeclaration: node,
+            references: [node],
+            members: []
+        };
+    }
+
+    public registerSyntheticSymbol(parentSymbol: SymbolInfo | null, name: string) {
+        let symbolPath = name;
+        if (parentSymbol)
+            symbolPath = parentSymbol.id + ":" + symbolPath;
+
+        const symbol = {
+            id: this.nextId++,
+            parent: parentSymbol,
+            valueDeclaration: undefined,
+            references: [],
+            members: []
+        };
+
+        this.scopes[0].symbols[symbolPath] = symbol;
+
+        return symbol;
+    }
+
+    public addReference(node: kataw.Identifier) {
+        const symbol = this.getSymbolAtLocation(node);
+        if (!symbol) {
+            console.warn("Cannot add reference: symbol not found for node " + getNodeText(node));
+            return;
+        }
+
+        symbol.references.push(node);
+    }
+
+    public getSymbolAtLocation(node: kataw.SyntaxNode) {
+        const [symbolPath] = this.getSymbolPath(node);
+        if (!symbolPath)
+            return;
+        let scope = this.findSymbolScope(node)
+        let found: SymbolInfo | undefined = undefined;
+        while (scope && !found) {
+            found = scope.symbols[symbolPath];
+            scope = scope.parent;
+        }
+        return found;
+    }
+
+    private getSymbolPath(node: kataw.SyntaxNode) {
+        let parentSymbol: SymbolInfo = null;
+        let mustHaveParent = false;
+        if (isPropertyDefinition(node.parent) && node.parent.left === node) {
+            // don't track symbols inside of object literals
+            return [null, null];
+        } else if (isFieldAccess(node.parent) && node.parent.expression === node) {
+            mustHaveParent = true;
+            parentSymbol = this.getSymbolAtLocation(node.parent.member);
+        }
+
+        if (mustHaveParent && !parentSymbol) {
+            console.warn("Cannot infer parent symbol for node " + getNodeText(node));
+            return [null, null];
+        }
+
+        let symbolPath = null;
+        if (kataw.isIdentifier(node))
+            symbolPath = node.text;
+        else if (isStringLiteral(node))
+            symbolPath = node.text;
+        else {
+            console.warn("Cannot determine symbol path from node " + getNodeText(node))
+            return [null, null];
+        }
+
+        if (parentSymbol)
+            symbolPath = parentSymbol.id + ":" + symbolPath;
+
+        return [symbolPath, parentSymbol];
+    }
+
+    public findSymbolScope(node: kataw.SyntaxNode) {
+        return this.scopes.find(s => node.start >= s.start && node.end <= s.end);
+    }
+
+    public isGlobalSymbol(node: kataw.Identifier) {
+        const symbol = this.getSymbolAtLocation(node);
+        if (!symbol)
+            return false;
+        if (symbol.parent)
+            return false;
+        if (!symbol.valueDeclaration)
+            return true;
+        const scope = this.findSymbolScope(symbol.valueDeclaration);
+        return !scope.parent;
+    }
+
+    public addStandardSymbols() {
+        this.registerSyntheticSymbol(null, 'NaN');
+        this.registerSyntheticSymbol(null, 'undefined');
+    }
+
+    public getStructsAndFunctionPrototypes(typeHelper: TypeHelper) {
 
         for (let arrElemType of this.arrayStructs) {
-            let elementTypeText = this.typeHelper.getTypeString(arrElemType);
+            let elementTypeText = typeHelper.getTypeString(arrElemType);
             let structName = ArrayType.getArrayStructName(elementTypeText);
             this.userStructs[structName] = new StructType({
                 size: { type: NumberVarType, order: 1 },
@@ -57,8 +194,8 @@ export class SymbolsHelper {
             this.userStructs[structType.structName] = structType;
     }
 
-    public ensureArrayStruct(elementType: CType) {
-        if (this.arrayStructs.every(s => this.typeHelper.getTypeString(s) !== this.typeHelper.getTypeString(elementType)))
+    public ensureArrayStruct(typeHelper: TypeHelper, elementType: CType) {
+        if (this.arrayStructs.every(s => typeHelper.getTypeString(s) !== typeHelper.getTypeString(elementType)))
             this.arrayStructs.push(elementType);
     }
 
@@ -100,10 +237,10 @@ export class SymbolsHelper {
     /** Generate name for a new iterator variable and register it in temporaryVariables table.
      * Generated name is guarantied not to conflict with any existing names in specified scope.
      */
-    public addIterator(scopeNode: ts.Node): string {
+    public addIterator(scopeNode: kataw.SyntaxNode): string {
         let parentFunc = findParentFunction(scopeNode);
-        let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-        let existingSymbolNames = this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
+        let scopeId = parentFunc && parentFunc.start + 1 || 'main';
+        let existingSymbolNames = Object.keys(this.findSymbolScope(scopeNode).symbols);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
@@ -127,10 +264,10 @@ export class SymbolsHelper {
     /** Generate name for a new temporary variable and register it in temporaryVariables table.
      * Generated name is guarantied not to conflict with any existing names in specified scope.
      */
-    public addTemp(scopeNode: ts.Node, proposedName: string, reserve: boolean = true): string {
+    public addTemp(scopeNode: kataw.SyntaxNode, proposedName: string, reserve: boolean = true): string {
         let parentFunc = findParentFunction(scopeNode);
-        let scopeId = parentFunc && parentFunc.pos + 1 || 'main';
-        let existingSymbolNames = scopeNode == null ? [] : this.typeChecker.getSymbolsInScope(scopeNode, ts.SymbolFlags.Variable).map(s => s.name);
+        let scopeId = parentFunc && parentFunc.start + 1 || 'main';
+        let existingSymbolNames = scopeNode == null ? [] : Object.keys(this.findSymbolScope(scopeNode).symbols);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
         existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
@@ -147,21 +284,21 @@ export class SymbolsHelper {
     }
 
     private closureVarNames: { [pos: number]: string } = [];
-    public getClosureVarName(node: ts.Node) {
-        if (!this.closureVarNames[node.pos]) {
+    public getClosureVarName(node: kataw.SyntaxNode) {
+        if (!this.closureVarNames[node.start]) {
             const name = this.addTemp(node, "closure");
-            this.closureVarNames[node.pos] = name;
+            this.closureVarNames[node.start] = name;
         }
-        return this.closureVarNames[node.pos];
+        return this.closureVarNames[node.start];
     }
 
     private scopeVarNames: { [pos: number]: string } = [];
-    public getScopeVarName(node: ts.Node) {
-        if (!this.scopeVarNames[node.pos]) {
+    public getScopeVarName(node: kataw.SyntaxNode) {
+        if (!this.scopeVarNames[node.start]) {
             const name = this.addTemp(node, "scope");
-            this.scopeVarNames[node.pos] = name;
+            this.scopeVarNames[node.start] = name;
         }
-        return this.scopeVarNames[node.pos];
+        return this.scopeVarNames[node.start];
     }
 
 }

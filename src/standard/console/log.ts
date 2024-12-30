@@ -1,34 +1,45 @@
-import * as ts from 'typescript';
+import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { StandardCallResolver, IResolver } from '../../standard';
-import { isSideEffectExpression, getAllNodesUnder } from '../../types/utils';
+import { isSideEffectExpression, getAllNodesUnder, isFieldPropertyAccess, isStringLiteral, isBinaryExpression } from '../../types/utils';
 import { CAssignment } from '../../nodes/assignment';
 import { CString } from '../../nodes/literals';
 import { TypeHelper } from '../../types/typehelper';
+import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
 @StandardCallResolver
-class ConsoleLogResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: ts.CallExpression) {
-        if (!ts.isPropertyAccessExpression(call.expression))
-            return false;
-        return call.expression.getText() == "console.log";
+export class ConsoleLogResolver implements IResolver {
+    consoleSymbol: SymbolInfo;
+    symbolHelper: SymbolsHelper;
+    public addSymbols(symbolHelper: SymbolsHelper): void {
+        this.symbolHelper = symbolHelper;
+        this.consoleSymbol = symbolHelper.registerSyntheticSymbol(null, 'console');
+        symbolHelper.registerSyntheticSymbol(this.consoleSymbol, 'log');
     }
-    public returnType(typeHelper: TypeHelper, call: ts.CallExpression) {
+    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
+        if (!isFieldPropertyAccess(call.expression))
+            return false;
+        const propAccess = call.expression;
+        if (this.symbolHelper.getSymbolAtLocation(propAccess.member) !== this.consoleSymbol)
+            return false;
+        return kataw.isIdentifier(propAccess.expression) && propAccess.expression.text === 'log';
+    }
+    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return VoidType;
     }
-    public createTemplate(scope: IScope, node: ts.CallExpression) {
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CConsoleLog(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return false;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: ts.CallExpression) {
+    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return null;
     }
 }
@@ -45,17 +56,17 @@ class CConsoleLog extends CTemplateBase {
     public printfCalls: CPrintf[] = [];
     public printfCall: CPrintf = null;
 
-    constructor(scope: IScope, node: ts.CallExpression) {
+    constructor(scope: IScope, node: kataw.CallExpression) {
         super();
         let printfs = [];
-        let printNodes = node.arguments;
+        let printNodes = node.argumentList.elements;
         for (let i = 0; i < printNodes.length; i++) {
             let printNode = printNodes[i];
             let nodeExpressions = processBinaryExpressions(scope, printNode);
             
             let stringLit = '';
             nodeExpressions = nodeExpressions.reduce((a, c) => {
-                if (ts.isStringLiteral(c.node))
+                if (isStringLiteral(c.node))
                     stringLit += CodeTemplateFactory.templateToString(new CString(scope, c.node)).slice(1, -1);
                 else {
                     a.push(c);
@@ -74,7 +85,7 @@ class CConsoleLog extends CTemplateBase {
             for (let j = 0; j < nodeExpressions.length; j++) {
                 const { node, prefix, postfix } = nodeExpressions[j];
                 const type = scope.root.typeHelper.getCType(node);
-                const nodesUnder: ts.Node[] = getAllNodesUnder(node);
+                const nodesUnder: kataw.SyntaxNode[] = getAllNodesUnder(node);
                 const hasSideEffects = nodesUnder.some(n => isSideEffectExpression(n));
                 let accessor = "";
                 if (hasSideEffects && (type instanceof ArrayType || type instanceof StructType || type instanceof DictType || type === UniversalVarType))
@@ -85,10 +96,10 @@ class CConsoleLog extends CTemplateBase {
                     if (tempVarType instanceof ArrayType && !tempVarType.isDynamicArray)
                         tempVarType = getTypeText(tempVarType.elementType) + "*";
                     scope.variables.push(new CVariable(scope, tempVarName, tempVarType));
-                    printfs.push(new CAssignment(scope, tempVarName, null, tempVarType, <ts.Expression>node, false));
+                    printfs.push(new CAssignment(scope, tempVarName, null, tempVarType, node, false));
                     accessor = tempVarName;
                 }
-                else if (ts.isStringLiteral(node))
+                else if (isStringLiteral(node))
                     accessor = CodeTemplateFactory.templateToString(new CString(scope, node)).slice(1, -1).replace(/%/g, "%%");
                 else
                     accessor = CodeTemplateFactory.templateToString(CodeTemplateFactory.createForNode(scope, node));
@@ -106,14 +117,13 @@ class CConsoleLog extends CTemplateBase {
     }
 }
 
-function processBinaryExpressions(scope: IScope, printNode: ts.Node): { node: ts.Node, prefix: string, postfix: string }[] {
+function processBinaryExpressions(scope: IScope, printNode: kataw.SyntaxNode): { node: kataw.SyntaxNode, prefix: string, postfix: string }[] {
     let type = scope.root.typeHelper.getCType(printNode);
-    if (type == StringVarType && ts.isBinaryExpression(printNode)) {
-        let binExpr = <ts.BinaryExpression>printNode;
-        if (binExpr.operatorToken.kind == ts.SyntaxKind.PlusToken)
+    if (type == StringVarType && isBinaryExpression(printNode)) {
+        if (printNode.operatorToken.kind == kataw.SyntaxKind.Add)
         {
-            let left = processBinaryExpressions(scope, binExpr.left);
-            let right = processBinaryExpressions(scope, binExpr.right);
+            let left = processBinaryExpressions(scope, printNode.left);
+            let right = processBinaryExpressions(scope, printNode.right);
             return [].concat(left, right);
         }
     }
@@ -207,8 +217,8 @@ class CPrintf {
     public POSTFIX: string;
     public INDENT: string = '';
 
-    constructor(scope: IScope, printNode: ts.Node, public accessor: string, varType: CType, options: PrintfOptions) {
-        this.isStringLiteral = varType == StringVarType && printNode.kind == ts.SyntaxKind.StringLiteral;
+    constructor(scope: IScope, printNode: kataw.SyntaxNode, public accessor: string, varType: CType, options: PrintfOptions) {
+        this.isStringLiteral = varType == StringVarType && printNode.kind == kataw.SyntaxKind.StringLiteral;
         this.isCString = varType == StringVarType;
         this.isRegex = varType == RegexVarType;
         this.isInteger = varType == NumberVarType;
@@ -268,7 +278,7 @@ class CPrintf {
                 let opts = { quotedString: true, propName: k, indent: this.INDENT + "    " };
                 if (varType.propertyDefs[k].recursive) {
                     const objString = "[object Object]";
-                    const stringLit = ts.factory.createStringLiteral(objString);
+                    const stringLit = kataw.createStringLiteral(objString, objString, 0, -1, -1);
                     this.elementPrintfs.push(new CPrintf(scope, stringLit, objString, StringVarType, opts));
                 } else {
                     let propAccessor = accessor + "->" + k;

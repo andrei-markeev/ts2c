@@ -1,5 +1,5 @@
-import * as ts from 'typescript'
-import { getAllNodesInFunction, SyntaxKind_NaNKeyword } from './types/utils';
+var performance = require("node:perf_hooks").performance;
+import * as kataw from 'kataw';
 import { CFunctionPrototype, CFunction } from './nodes/function';
 import { CRegexSearchFunction } from './nodes/regexfunc';
 import { TypeHelper } from './types/typehelper';
@@ -7,6 +7,8 @@ import { SymbolsHelper } from './symbols';
 import { MemoryManager } from './memory';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from './template';
 import { CVariable, CVariableDestructors } from './nodes/variable';
+import { isFieldAccess, isFunction, isFunctionDeclaration, isPropertyDefinition, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
+import { StandardCallHelper } from './standard';
 
 // these imports are here only because it is necessary to run decorators
 import './nodes/statements';
@@ -1032,33 +1034,59 @@ export class CProgram implements IScope {
     public typeHelper: TypeHelper;
     public symbolsHelper: SymbolsHelper;
     public memoryManager: MemoryManager;
-    constructor(tsProgram: ts.Program) {
+    constructor(rootNode: kataw.RootNode) {
 
-        const tsTypeChecker = tsProgram.getTypeChecker();
-        const sources = tsProgram.getSourceFiles().filter(s => !s.isDeclarationFile);
+        this.symbolsHelper = new SymbolsHelper();
+        this.symbolsHelper.createSymbolScope(rootNode.start, rootNode.end);
+        this.symbolsHelper.addStandardSymbols();
+        StandardCallHelper.addSymbols(this.symbolsHelper);
 
-        let nodes: ts.Node[] = [];
-        for (let source of sources) {
-            let i = nodes.length;
-            nodes = nodes.concat(source.getChildren());
-            while (i < nodes.length)
-                nodes.push.apply(nodes, nodes[i++].getChildren());
+        const nodes: kataw.SyntaxNode[] = [rootNode];
+        const transform = kataw.createTransform();
+        const createVisitor = (parent: kataw.SyntaxNode) => {
+            return (n: kataw.SyntaxNode) => {
+                n.parent = parent;
+                nodes.push(n);
+                // TODO: imports
+                if (kataw.isIdentifier(n)) {
+                    if (isFunctionDeclaration(n.parent))
+                        this.symbolsHelper.registerSymbol(n);
+                    else if (n.parent.kind === kataw.SyntaxKind.FormalParameterList)
+                        this.symbolsHelper.registerSymbol(n);
+                    else if (isVariableDeclaration(n.parent))
+                        this.symbolsHelper.registerSymbol(n);
+                    else if (isPropertyDefinition(n.parent) && n.parent.left === n)
+                        this.symbolsHelper.registerSymbol(n);
+                    else if (isFieldAccess(n.parent))
+                        this.symbolsHelper.addReference(n);
+                    else
+                        this.symbolsHelper.addReference(n);
+
+                    if (n.text === "NaN" && this.symbolsHelper.isGlobalSymbol(n))
+                        n.kind = SyntaxKind_NaNIdentifier;
+                    else if (n.text === "Number" && this.symbolsHelper.isGlobalSymbol(n) && isFieldAccess(n.parent) && n.parent.member === n && kataw.isIdentifier(n.parent.expression) && n.parent.expression.text === 'NaN')
+                        n.kind = SyntaxKind_NaNIdentifier;
+                } else if (isFunction(n)) {
+                    this.symbolsHelper.createSymbolScope(n.formalParameterList.start, n.end);
+                } else if (isWithStatement(n)) {
+                    this.symbolsHelper.createSymbolScope(n.statement.start, n.end);
+                    // TODO: add symbols from n.expression into scope
+                }
+
+                kataw.visitEachChild(transform, n, createVisitor(n));
+                return n;
+            }
         }
-        nodes.sort((a, b) => a.pos - b.pos);
+        kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
+        nodes.sort((a, b) => a.start - b.start);
 
+
+        /*
         // Post processing TypeScript AST
         let nodesToRename = new Set<ts.Identifier>(), symbolsToRename = new Set<ts.Symbol>();
         for (let n of nodes) {
             if (ts.isIdentifier(n)) {
                 const symbol = tsTypeChecker.getSymbolAtLocation(n);
-                if (!symbol && n.text == "NaN" && !ts.isPropertyAssignment(n)) {
-                    if (ts.isElementAccessExpression(n.parent) || ts.isPropertyAccessExpression(n.parent)) {
-                        if (ts.isIdentifier(n.parent.expression) && n.parent.expression.text == "Number")
-                            (<any>n.parent.kind) = SyntaxKind_NaNKeyword;
-                    } else
-                        (<any>n.kind) = SyntaxKind_NaNKeyword;
-                }
-                
                 if (symbol) {
                     if (tsTypeChecker.isUndefinedSymbol(symbol))
                         (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
@@ -1099,13 +1127,16 @@ export class CProgram implements IScope {
                 }
             }
         }
+        */
 
-        this.typeHelper = new TypeHelper(tsTypeChecker, nodes);
-        this.symbolsHelper = new SymbolsHelper(tsTypeChecker, this.typeHelper);
+        this.typeHelper = new TypeHelper(this.symbolsHelper);
         this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper);
 
-        this.typeHelper.inferTypes();
+        const startInferTypes = performance.now();
+        this.typeHelper.inferTypes(nodes);
+        console.log('infer types:', performance.now() - startInferTypes);
 
+        /*
         // TODO: this is too hacky and fragile
         // a proper solution would be to track down all `text` and `getText()` usages
         // and map them to the renamed symbols
@@ -1118,6 +1149,8 @@ export class CProgram implements IScope {
             (<any>symbol).escapedName = symbol.escapedName + '_';
         }
         // --
+
+        */
 
         this.memoryManager.scheduleNodeDisposals(nodes);
 
@@ -1135,11 +1168,10 @@ export class CProgram implements IScope {
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
-        for (let source of sources)
-            for (let s of source.statements)
-                this.statements.push(CodeTemplateFactory.createForNode(this, s));
+        for (let s of rootNode.statements)
+            this.statements.push(CodeTemplateFactory.createForNode(this, s));
 
-        let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes();
+        let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes(this.typeHelper);
         this.headerFlags.array_string_t = this.headerFlags.array_string_t || structs.filter(s => s.name == "array_string_t").length > 0;
         this.headerFlags.js_var_array = this.headerFlags.js_var_array || structs.filter(s => s.name == "array_js_var_t").length > 0;
         this.headerFlags.js_var_dict = this.headerFlags.js_var_dict || structs.filter(s => s.name == "dict_js_var_t").length > 0;
