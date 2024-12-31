@@ -1,6 +1,6 @@
-var u1:any = "123";
-var u2:any = "abc";
-var u3:any = [12];
+var u1 = "123";
+var u2 = "abc";
+var u3 = [12];
 u3.push("15");
 console.log(10 - u1++, u1);
 console.log(10 - u1--, u1);

@@ -17,7 +17,7 @@ if (fileName === '-v' || fileName === '--version') {
 var sourceCode = fs.readFileSync(fileName, 'utf-8');
 
 const startParse = performance.now();
-var rootNode = kataw.parseScript(sourceCode, {  }, (source, kind, message, start, end) => {
+var rootNode = kataw.parseScript(sourceCode, { impliedStrict: true }, (source, kind, message, start, end) => {
     if (kind === 16) {
         console.error(start, end, message);
         process.exit(1);

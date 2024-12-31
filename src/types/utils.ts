@@ -355,8 +355,7 @@ export function getChildNodes(node: kataw.SyntaxNode) {
     const children = [];
     function visit(node) {
         children.push(node);
-        kataw.visitEachChild(transform, node, visit);
-        return null;
+        return node;
     }
     kataw.visitEachChild(transform, node, visit);
     return children;

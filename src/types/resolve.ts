@@ -2,7 +2,7 @@ import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
 import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer } from './utils';
-import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, getTypeBodyText, ClosureParam } from './ctypes';
+import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
 import { TypeHelper } from './typehelper';
@@ -210,9 +210,9 @@ export class TypeResolver {
         for (let i = 0; i < 10; i++)
             addEquality(isCall, n => n.argumentList.elements[i], n => {
                 const decl = kataw.isIdentifier(n.expression) ? this.typeHelper.getDeclaration(n.expression) : null;
-                if (decl && isFunctionDeclaration(decl)) {
-                    if (this.typeHelper.getCType(decl.formalParameterList.formalParameters[i]) instanceof FuncType)
-                        return decl.formalParameterList.formalParameters[i];
+                if (decl && isFunctionDeclaration(decl.parent)) {
+                    if (this.typeHelper.getCType(decl.parent.formalParameterList.formalParameters[i]) instanceof FuncType)
+                        return decl.parent.formalParameterList.formalParameters[i];
                 }
                 return null;
             });
@@ -394,7 +394,7 @@ export class TypeResolver {
         allNodes
             .filter(n => !kataw.isKeyword(n) && n.kind !== kataw.SyntaxKind.Block)
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", JSON.stringify(this.typeHelper.getCType(n))));
-        */        
+        */
 
     }
 
