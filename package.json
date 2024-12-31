@@ -10,8 +10,7 @@
     "test": "tests"
   },
   "dependencies": {
-    "kataw": "file:../kataw",
-    "typescript": "^5.7.2"
+    "kataw": "file:../kataw"
   },
   "devDependencies": {
     "browserify": "^13.0.1",
@@ -24,7 +23,7 @@
     ]
   },
   "browserify-shim": {
-    "typescript": "global:ts"
+    "kataw": "global:kataw"
   },
   "scripts": {
     "prepublishOnly": "tsc",

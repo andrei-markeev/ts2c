@@ -4,7 +4,7 @@ import { IScope } from '../program';
 import { ArrayType, StructType, DictType, NumberVarType, BooleanVarType, CType, UniversalVarType, FuncType } from '../types/ctypes';
 import { AssignmentHelper, CAssignment } from './assignment';
 import { CElementAccess, CSimpleElementAccess } from './elementaccess';
-import { getNodeText, isArrayLiteral, isNode, isNumericLiteral, isStringLiteral } from '../types/utils';
+import { getNodeText, isArrayLiteral, isNode, isNumericLiteral, isStringLiteral, isVariableDeclarationList } from '../types/utils';
 import { TypeHelper } from '../types/typehelper';
 
 
@@ -18,23 +18,26 @@ export class CVariableStatement extends CTemplateBase {
     }
 }
 
-@CodeTemplate(`{declarations}`, kataw.SyntaxKind.VariableDeclarationList)
+@CodeTemplate(`{declarations}`, [kataw.SyntaxKind.VariableDeclarationList, kataw.SyntaxKind.LexicalDeclaration])
 export class CVariableDeclarationList extends CTemplateBase {
     public declarations: CVariableDeclaration[];
-    constructor(scope: IScope, node: kataw.VariableDeclarationList)
+    constructor(scope: IScope, node: kataw.VariableDeclarationList | kataw.LexicalDeclaration)
     {
         super();
-        this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
+        if (isVariableDeclarationList(node))
+            this.declarations = node.declarations.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration);
+        else
+            this.declarations = node.binding.bindingList.map(d => CodeTemplateFactory.createForNode(scope, d) as CVariableDeclaration)
     }
 }
 
 
-@CodeTemplate(`{initializer}`, kataw.SyntaxKind.VariableDeclaration)
+@CodeTemplate(`{initializer}`, [kataw.SyntaxKind.VariableDeclaration, kataw.SyntaxKind.LexicalBinding])
 export class CVariableDeclaration extends CTemplateBase {
     public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
-    constructor(scope: IScope, varDecl: kataw.VariableDeclaration) {
+    constructor(scope: IScope, varDecl: kataw.VariableDeclaration | kataw.LexicalBinding) {
         super();
         if (!kataw.isIdentifier(varDecl.binding)) {
             this.initializer = "/* Unsupported variable declaration binding '" + getNodeText(varDecl.binding) + "' */";
@@ -50,7 +53,7 @@ export class CVariableDeclaration extends CTemplateBase {
                 for (let i = 0; i < type.capacity; i++) {
                     if (i != 0)
                         s += ", ";
-                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elementList[i]);
+                    let cExpr = CodeTemplateFactory.createForNode(scope, varDecl.initializer.elementList.elements[i]);
                     s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
                 }
                 s += " }";

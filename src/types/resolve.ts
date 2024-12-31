@@ -1,7 +1,7 @@
 import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause } from './utils';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall } from './utils';
 import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, getTypeBodyText, ClosureParam } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
@@ -110,8 +110,8 @@ export class TypeResolver {
                 return null;
         }))
         addEquality(isFieldPropertyAccess, n => n, n => n.expression);
-        addEquality(isFieldPropertyAccess, n => n.member, type(n => struct(getNodeText(n.expression), n.start, this.typeHelper.getCType(n) || PointerVarType)));
-        addEquality(isFieldPropertyAccess, n => n, type(n => {
+        addEquality(isFieldPropertyAccessNotMethodCall, n => n.member, type(n => struct(getNodeText(n.expression), n.start, this.typeHelper.getCType(n) || PointerVarType)));
+        addEquality(isFieldPropertyAccessNotMethodCall, n => n, type(n => {
             const type = this.typeHelper.getCType(n.member);
             return type instanceof StructType ? type.properties[getNodeText(n.expression)]
                 : type instanceof ArrayType && getNodeText(n.expression) == "length" ? NumberVarType
@@ -121,7 +121,7 @@ export class TypeResolver {
                 : type === UniversalVarType ? UniversalVarType
                 : null;
         }));
-        addEquality(isFieldElementAccess, n => n.member, type(n => {
+        addEquality(isFieldElementAccessNotMethodCall, n => n.member, type(n => {
             const type = this.typeHelper.getCType(n.expression);
             const elementType = this.typeHelper.getCType(n) || PointerVarType;
             return isStringLiteralAsIdentifier(n.expression) ? struct(n.expression.text, n.start, elementType)
@@ -130,7 +130,7 @@ export class TypeResolver {
                 : type == StringVarType ? new DictType(elementType)
                 : null
         }));
-        addEquality(isFieldElementAccess, n => n, type(n => {
+        addEquality(isFieldElementAccessNotMethodCall, n => n, type(n => {
             const type = this.typeHelper.getCType(n.member);
             return isStringLiteral(n.expression) && type instanceof StructType ? type.properties[n.expression.text]
                 : isStringLiteral(n.expression) && type instanceof ArrayType && n.expression.text == "length" ? NumberVarType
@@ -241,7 +241,7 @@ export class TypeResolver {
         addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType({ instanceType: this.typeHelper.getCType(n) })));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
 
-        addEquality(isMethodCall, n => n.expression.expression, type(n => StandardCallHelper.getObjectType(this.typeHelper, n)));
+        addEquality(isMethodCall, n => n.expression.member, type(n => StandardCallHelper.getObjectType(this.typeHelper, n)));
         addEquality(isCall, n => n, type(n => StandardCallHelper.getReturnType(this.typeHelper, n)));
         for (let i = 0; i < 10; i++)
             addEquality(isCall, n => n.argumentList.elements[i], type(n => isLiteral(n.argumentList.elements[i]) ? null : StandardCallHelper.getArgumentTypes(this.typeHelper, n)[i]));
@@ -401,7 +401,7 @@ export class TypeResolver {
         allNodes
             .filter(n => !kataw.isKeyword(n) && n.kind !== kataw.SyntaxKind.Block)
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", JSON.stringify(this.typeHelper.getCType(n))));
-        */
+        */        
 
     }
 
