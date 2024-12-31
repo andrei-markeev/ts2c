@@ -69,7 +69,7 @@ class CArrayIndexOf extends CTemplateBase {
         let propAccess = <kataw.IndexExpression>call.expression;
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");

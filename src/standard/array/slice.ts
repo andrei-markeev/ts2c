@@ -26,7 +26,7 @@ class ArraySliceResolver implements IResolver {
     }
     public needsDisposal(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let { dynamic } = getSliceParams(typeHelper, call);
-        return !kataw.isStatementNode(call.parent) && dynamic;
+        return call.parent.kind !== kataw.SyntaxKind.ExpressionStatement && dynamic;
     }
     public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "tmp_slice";
@@ -77,7 +77,7 @@ class CArraySlice extends CTemplateBase {
     public simpleSliceStart: number = 0;
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (this.topExpressionOfStatement)
             return;
 
@@ -148,21 +148,31 @@ function getSliceParams(typeHelper: TypeHelper, call: kataw.CallExpression) {
     let reuseVar = tryReuseExistingVariable(call);
     let reuseVarType = reuseVar && typeHelper.getCType(reuseVar);
     let reuseVarIsDynamicArray = reuseVar && reuseVarType instanceof ArrayType && reuseVarType.isDynamicArray;
-    let isSimpleSlice = !reuseVarIsDynamicArray && !objType.isDynamicArray && call.argumentList.elements.every(a => isNumericLiteral(a) || isUnaryExpression(a) && a.operandToken.kind == kataw.SyntaxKind.Subtract && isNumericLiteral(a.operand));
+    let argsAsNumbers = call.argumentList.elements.map(getNumber)
+    let isSimpleSlice = !reuseVarIsDynamicArray && !objType.isDynamicArray && argsAsNumbers.every(n => n !== null);
     if (isSimpleSlice) {
         let arraySize = objType.capacity;
-        let startIndexArg = (<kataw.NumericLiteral>call.argumentList.elements[0]).text;
+        let startIndexArg = argsAsNumbers[0];
         if (call.argumentList.elements.length == 1) {
             params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
             params.size = startIndexArg < 0 ? -startIndexArg : arraySize - startIndexArg;
         } else {
-            let endIndexArg = (<kataw.NumericLiteral>call.argumentList.elements[1]).text;
+            let endIndexArg = argsAsNumbers[1];
             params.start = startIndexArg < 0 ? arraySize + startIndexArg : startIndexArg;
             params.size = (endIndexArg < 0 ? arraySize + endIndexArg : endIndexArg) - params.start;
         }
         params.dynamic = params.size <= 0; // C standard doesn't allow creating static arrays with zero size, so we have to go with a dynamic array if size is 0
     }
     return params;
+}
+
+function getNumber(element: kataw.SyntaxNode) {
+    if (isNumericLiteral(element))
+        return +element.text;
+    else if (isUnaryExpression(element) && element.operandToken.kind === kataw.SyntaxKind.Subtract && isNumericLiteral(element.operand))
+        return -element.operand.text;
+    else
+        return null;
 }
 
 function tryReuseExistingVariable(node: kataw.SyntaxNode): kataw.Identifier {

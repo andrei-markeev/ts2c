@@ -1065,7 +1065,9 @@ export class CProgram implements IScope {
                     if (n.text === "NaN" && this.symbolsHelper.isGlobalSymbol(n))
                         n.kind = SyntaxKind_NaNIdentifier;
                     else if (n.text === "Number" && this.symbolsHelper.isGlobalSymbol(n) && isFieldAccess(n.parent) && n.parent.member === n && kataw.isIdentifier(n.parent.expression) && n.parent.expression.text === 'NaN')
-                        n.kind = SyntaxKind_NaNIdentifier;
+                        n.parent.kind = SyntaxKind_NaNIdentifier;
+                    else if (n.text === "undefined" && this.symbolsHelper.isGlobalSymbol(n))
+                        n.kind = kataw.SyntaxKind.UndefinedKeyword;
                 } else if (isFunction(n)) {
                     this.symbolsHelper.createSymbolScope(n.formalParameterList.start, n.end);
                 } else if (isWithStatement(n)) {

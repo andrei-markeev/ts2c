@@ -66,7 +66,7 @@ class CArrayUnshift extends CTemplateBase {
         this.varAccess = new CElementAccess(scope, propAccess.member);
         let args = call.argumentList.elements.map(a => CodeTemplateFactory.createForNode(scope, a));
         this.unshiftValues = args.map(a => new CUnshiftValue(scope, this.varAccess, a));
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));

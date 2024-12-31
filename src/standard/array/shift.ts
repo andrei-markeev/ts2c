@@ -57,7 +57,7 @@ class CArrayShift extends CTemplateBase {
         this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "value");
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
         scope.variables.push(new CVariable(scope, this.tempVarName, type.elementType));
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_remove = true;
     }

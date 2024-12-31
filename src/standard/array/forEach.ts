@@ -1,5 +1,5 @@
 import * as kataw from 'kataw';
-import { ArrayType, NumberVarType } from '../../types/ctypes';
+import { ArrayType, CType, FuncType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CVariable } from '../../nodes/variable';
@@ -16,6 +16,10 @@ class ArrayForEachResolver implements IResolver {
             return false;
         let objType = typeHelper.getCType(call.expression.member);
         return call.expression.expression.text === "forEach" && objType instanceof ArrayType;
+    }
+    public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression): CType[] {
+        let objType = typeHelper.getCType((<kataw.IndexExpression>call.expression).member);
+        return [new FuncType({ parameterTypes: [NumberVarType, NumberVarType, objType] })];
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return NumberVarType;
@@ -64,7 +68,7 @@ class CArrayForEach extends CTemplateBase implements IScope {
         let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
 
         this.varAccess = CodeTemplateFactory.templateToString(new CElementAccess(scope, propAccess.member));
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         this.iteratorVarName = scope.root.symbolsHelper.addIterator(call);
         this.arraySize = objType.isDynamicArray ? this.varAccess + "->size" : objType.capacity + "";
         const iteratorFunc = <kataw.FunctionExpression>call.argumentList.elements[0];

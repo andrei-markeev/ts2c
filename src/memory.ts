@@ -56,6 +56,7 @@ export class MemoryManager {
                     }
                     break;
                 case kataw.SyntaxKind.BinaryExpression:
+                case kataw.SyntaxKind.AssignmentExpression:
                     {
                         let binExpr = <kataw.BinaryExpression>node;
                         const leftType = this.typeHelper.getCType(binExpr.left);
@@ -456,13 +457,10 @@ export class MemoryManager {
                 return true;
             }
         }
-        else if (ref.parent && ref.parent.kind == kataw.SyntaxKind.BinaryExpression) {
-            let binaryExpr = <kataw.BinaryExpression>ref.parent;
-            if (isEqualsExpression(binaryExpr) && binaryExpr.right === ref) {
-                queue.push({ node: binaryExpr.left, nodeFunc });
-                console.log(getNodeText(varIdent) + " -> Found assignment to variable " + getNodeText(binaryExpr.left));
-                return true;
-            }
+        else if (isEqualsExpression(ref.parent) && ref.parent.right === ref) {
+            queue.push({ node: ref.parent.left, nodeFunc });
+            console.log(getNodeText(varIdent) + " -> Found assignment to variable " + getNodeText(ref.parent.left));
+            return true;
         }
 
         return false;

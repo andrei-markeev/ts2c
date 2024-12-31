@@ -28,7 +28,7 @@ class ArrayConcatResolver implements IResolver {
     public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         // if parent is expression statement, then this is the top expression
         // and thus return value is not used, so the temporary variable will not be created
-        return !kataw.isStatementNode(node.parent);
+        return node.parent.kind !== kataw.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "tmp_array";
@@ -61,7 +61,7 @@ class CArrayConcat extends CTemplateBase {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);

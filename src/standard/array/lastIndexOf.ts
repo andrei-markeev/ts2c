@@ -67,9 +67,9 @@ class CArrayLastIndexOf extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
-        let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.expression);
-        this.varAccess = new CElementAccess(scope, propAccess.expression);
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        let objType = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
+        this.varAccess = new CElementAccess(scope, propAccess.member);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_pos");

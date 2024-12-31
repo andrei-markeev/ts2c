@@ -3,14 +3,14 @@ import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { IScope } from '../program';
 import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../types/ctypes';
 import { CExpression } from './expressions';
-import { CNaN, CUndefined } from './literals';
+import { CUndefined } from './literals';
 import { CAsUniversalVar } from './typeconvert';
 import { isInBoolContext, findParentFunction, isFieldPropertyAccess, isFieldElementAccess, isStringLiteral } from '../types/utils';
 
 
 @CodeTemplate(`{simpleAccessor}`, [kataw.SyntaxKind.MemberAccessExpression, kataw.SyntaxKind.IndexExpression, kataw.SyntaxKind.Identifier])
 export class CElementAccess extends CTemplateBase {
-    public simpleAccessor: CSimpleElementAccess | CNaN;
+    public simpleAccessor: CSimpleElementAccess;
     constructor(scope: IScope, node: kataw.ExpressionNode) {
         super();
         let type: CType = null;
@@ -30,13 +30,6 @@ export class CElementAccess extends CTemplateBase {
                 elementAccess = scope.root.memoryManager.getReservedTemporaryVarName(decl) || elementAccess;
             }
         } else if (isFieldPropertyAccess(node)) {
-            if (kataw.isIdentifier(node.member) && node.member.text === 'Number'
-                && kataw.isIdentifier(node.expression) && node.expression.text === 'NaN'
-                && scope.root.symbolsHelper.findSymbolScope(node.member).parent === undefined
-            ) {
-                this.simpleAccessor = new CNaN(scope);
-                return;
-            }
             type = scope.root.typeHelper.getCType(node.member);
             if (kataw.isIdentifier(node.member)) {
                 elementAccess = node.member.text;
@@ -53,14 +46,6 @@ export class CElementAccess extends CTemplateBase {
                 argumentExpression = node.expression.text;
 
         } else if (isFieldElementAccess(node)) {
-            if (kataw.isIdentifier(node.member) && node.member.text === 'Number'
-                && isStringLiteral(node.expression) && node.expression.text === 'NaN'
-                && scope.root.symbolsHelper.findSymbolScope(node.member).parent === undefined
-            ) {
-                this.simpleAccessor = new CNaN(scope);
-                return;
-            }
-
             type = scope.root.typeHelper.getCType(node.member);
 
             if (kataw.isIdentifier(node.member)) {
