@@ -1,5 +1,5 @@
 import * as kataw from 'kataw';
-import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isVariableDeclaration, isObjectLiteral, isPropertyDefinition, isStringLiteralAsIdentifier } from './utils';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isVariableDeclaration, isObjectLiteral, isPropertyDefinition, isStringLiteralAsIdentifier, isFieldPropertyAccessNotMethodCall, isFieldElementAccessNotMethodCall } from './utils';
 import { SymbolsHelper } from '../symbols';
 
 export class CircularTypesFinder {
@@ -19,7 +19,7 @@ export class CircularTypesFinder {
                     continue;
                 let lvar = left;
                 const leftProps = [];
-                while (isFieldPropertyAccess(lvar) || isFieldElementAccess(lvar)) {
+                while (isFieldPropertyAccessNotMethodCall(lvar) || isFieldElementAccessNotMethodCall(lvar)) {
                     if (isFieldPropertyAccess(lvar) && kataw.isIdentifier(lvar.expression))
                         leftProps.unshift(lvar.expression.text);
                     else if (isFieldElementAccess(lvar) && isStringLiteralAsIdentifier(lvar.expression))

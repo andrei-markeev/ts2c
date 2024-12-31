@@ -6,7 +6,7 @@ import { CVariable, CVariableDeclaration, CVariableDestructors } from './variabl
 import { CExpression, CCondition } from './expressions';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from './elementaccess';
 import { AssignmentHelper } from './assignment';
-import { getAllNodesUnder, getNodeText, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForBinding, isForInStatement, isForOfStatement, isForStatement, isVariableDeclarationList, isWhileStatement } from '../types/utils';
+import { getAllNodesUnder, getNodeText, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForBinding, isForInStatement, isForOfStatement, isForStatement, isWhileStatement } from '../types/utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, kataw.SyntaxKind.LabelledStatement)
 export class CLabeledStatement extends CTemplateBase {

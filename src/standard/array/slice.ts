@@ -170,10 +170,7 @@ function tryReuseExistingVariable(node: kataw.SyntaxNode): kataw.Identifier {
         if (kataw.isIdentifier(node.parent.left))
             return node.parent.left;
     }
-    if (isVariableDeclaration(node.parent)) {
-        let assignment = <kataw.VariableDeclaration>node.parent;
-        if (kataw.isIdentifier(assignment.binding))
-            return assignment.binding;
-    }
+    if (isVariableDeclaration(node.parent) && kataw.isIdentifier(node.parent.binding))
+        return node.parent.binding;
     return null;
 }

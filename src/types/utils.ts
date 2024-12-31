@@ -88,8 +88,8 @@ export function isParameter(n: kataw.SyntaxNode): n is kataw.BindingElement {
 export function isReturnStatement(n: kataw.SyntaxNode): n is kataw.ReturnStatement {
     return n.kind === kataw.SyntaxKind.ReturnStatement;
 }
-export function isVariableDeclaration(n: kataw.SyntaxNode): n is kataw.VariableDeclaration {
-    return n.kind === kataw.SyntaxKind.VariableDeclaration;
+export function isVariableDeclaration(n: kataw.SyntaxNode): n is kataw.VariableDeclaration | kataw.LexicalBinding {
+    return n.kind === kataw.SyntaxKind.VariableDeclaration || n.kind === kataw.SyntaxKind.LexicalBinding;
 }
 export function isForBinding(n: kataw.SyntaxNode): n is kataw.ForBinding {
     return n.kind === kataw.SyntaxKind.ForBinding;
@@ -102,6 +102,12 @@ export function isPropertyDefinition(n: kataw.SyntaxNode): n is PropertyDefiniti
 }
 export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
     return isFunctionExpression(n) && isCall(n.parent) && n.parent.argumentList.elements[0] == n && isFieldPropertyAccess(n.parent.expression);
+}
+export function isFieldElementAccessNotMethodCall(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression {
+    return n.kind === kataw.SyntaxKind.MemberAccessExpression && (!isCall(n.parent) || n.parent.expression !== n);
+}
+export function isFieldPropertyAccessNotMethodCall(n: kataw.SyntaxNode): n is kataw.IndexExpression {
+    return n.kind === kataw.SyntaxKind.IndexExpression && (!isCall(n.parent) || n.parent.expression !== n);
 }
 export function isFieldElementAccess(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression {
     return n.kind === kataw.SyntaxKind.MemberAccessExpression;
