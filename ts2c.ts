@@ -2,7 +2,7 @@ import { parseScript } from 'kataw';
 import { CProgram } from './src/program';
 
 export function transpile(sourceCode: string): string {
-    var rootNode = parseScript(sourceCode, {  }, (source, kind, message, start, end) => {
+    var rootNode = parseScript(sourceCode, { impliedStrict: true }, (source, kind, message, start, end) => {
         if (kind === 16) {
             console.error('[' + start + '..' + end + ']:', message);
             return;
