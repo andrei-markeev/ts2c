@@ -8,9 +8,6 @@ export interface FieldAssignmentExpression extends kataw.BinaryExpression {
 export interface MethodCallExpression extends kataw.CallExpression {
     expression: kataw.IndexExpression;
 }
-export interface FunctionArgInMethodCall extends kataw.FunctionExpression {
-    parent: MethodCallExpression;
-}
 export interface PropertyDefinitionList extends kataw.PropertyDefinitionList {
     parent: kataw.ObjectLiteral;
 }
@@ -18,11 +15,12 @@ export interface PropertyDefinition extends kataw.PropertyDefinition {
     parent: PropertyDefinitionList;
 }
 
+type SimpleInitializer = kataw.LexicalDeclaration | kataw.ForBinding;
 export interface ForOfWithSimpleInitializer extends kataw.ForOfStatement {
-    initializer: kataw.ForBinding;
+    initializer: SimpleInitializer;
 }
 export interface ForInWithSimpleInitializer extends kataw.ForInStatement {
-    initializer: kataw.ForBinding;
+    initializer: SimpleInitializer;
 }
 export interface ForOfWithExpressionInitializer extends kataw.ForOfStatement {
     initializer: kataw.Identifier;
@@ -94,14 +92,14 @@ export function isVariableDeclaration(n: kataw.SyntaxNode): n is kataw.VariableD
 export function isForBinding(n: kataw.SyntaxNode): n is kataw.ForBinding {
     return n.kind === kataw.SyntaxKind.ForBinding;
 }
+export function isLexicalDeclaration(n: kataw.SyntaxNode): n is kataw.LexicalDeclaration {
+    return n.kind === kataw.SyntaxKind.LexicalDeclaration;
+}
 export function isVariableDeclarationList(n: kataw.SyntaxNode): n is kataw.VariableDeclarationList {
     return n.kind === kataw.SyntaxKind.VariableDeclarationList;
 }
 export function isPropertyDefinition(n: kataw.SyntaxNode): n is PropertyDefinition {
     return n.kind === kataw.SyntaxKind.PropertyDefinition;
-}
-export function isFunctionArgInMethodCall(n): n is FunctionArgInMethodCall {
-    return isFunctionExpression(n) && isCall(n.parent) && n.parent.argumentList.elements[0] == n && isFieldPropertyAccess(n.parent.expression);
 }
 export function isFieldElementAccessNotMethodCall(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression {
     return n.kind === kataw.SyntaxKind.MemberAccessExpression && (!isCall(n.parent) || n.parent.expression !== n);
@@ -122,13 +120,20 @@ export function isWithStatement(n: kataw.SyntaxNode): n is kataw.WithStatement {
     return n.kind === kataw.SyntaxKind.WithStatement;
 }
 export function isForOfWithSimpleInitializer(n): n is ForOfWithSimpleInitializer {
-    return isForOfStatement(n) && isForBinding(n.initializer) && n.initializer.declarationList.declarations.length == 1;
+    return isForOfStatement(n) && isSimpleInitializer(n.initializer);
 }
 export function isForOfWithIdentifierInitializer(n): n is ForOfWithExpressionInitializer {
     return isForOfStatement(n) && kataw.isIdentifier(n.initializer);
 }
 export function isForInWithSimpleInitializer(n): n is ForInWithSimpleInitializer {
-    return isForInStatement(n) && isForBinding(n.initializer) && n.initializer.declarationList.declarations.length == 1;
+    return isForInStatement(n) && isSimpleInitializer(n.initializer);
+}
+export function isSimpleInitializer(n: kataw.SyntaxNode): n is SimpleInitializer {
+    return isForBinding(n) && n.declarationList.declarations.length === 1
+        || isLexicalDeclaration(n) && n.binding.bindingList.length === 1;
+}
+export function getVarDeclFromSimpleInitializer(n: SimpleInitializer) {
+    return isForBinding(n) ? n.declarationList.declarations[0] : n.binding.bindingList[0];
 }
 export function isForInWithIdentifierInitializer(n): n is ForInWithExpressionInitializer {
     return isForInStatement(n) && kataw.isIdentifier(n.initializer);
@@ -164,7 +169,7 @@ export function isContinueStatement(n: kataw.SyntaxNode): n is kataw.ContinueSta
     return n.kind === kataw.SyntaxKind.ContinueStatement;
 }
 export function isUnaryExpression(n: kataw.SyntaxNode): n is kataw.UnaryExpression {
-    return n.kind === kataw.SyntaxKind.UnaryExpression;
+    return n.kind === kataw.SyntaxKind.UnaryExpression || n.kind === kataw.SyntaxKind.PrefixUpdateExpression || n.kind === kataw.SyntaxKind.PostfixUpdateExpression;
 }
 export function isParenthesizedExpression(n: kataw.SyntaxNode): n is kataw.ParenthesizedExpression {
     return n.kind === kataw.SyntaxKind.ParenthesizedExpression;

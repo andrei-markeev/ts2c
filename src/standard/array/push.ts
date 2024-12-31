@@ -68,7 +68,7 @@ class CArrayPush extends CTemplateBase {
         this.varAccess = new CElementAccess(scope, propAccess.member);
         const args = call.argumentList.elements.map(a => type.elementType === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
         this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, a));
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
             scope.variables.push(new CVariable(scope, this.tempVarName, NumberVarType));

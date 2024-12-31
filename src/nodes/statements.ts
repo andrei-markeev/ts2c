@@ -6,7 +6,7 @@ import { CVariable, CVariableDeclaration, CVariableDestructors } from './variabl
 import { CExpression, CCondition } from './expressions';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from './elementaccess';
 import { AssignmentHelper } from './assignment';
-import { getAllNodesUnder, getNodeText, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForBinding, isForInStatement, isForOfStatement, isForStatement, isWhileStatement } from '../types/utils';
+import { getAllNodesUnder, getNodeText, getVarDeclFromSimpleInitializer, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForBinding, isForInStatement, isForOfStatement, isForStatement, isLexicalDeclaration, isSimpleInitializer, isWhileStatement } from '../types/utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, kataw.SyntaxKind.LabelledStatement)
 export class CLabeledStatement extends CTemplateBase {
@@ -265,8 +265,8 @@ export class CForStatement extends CTemplateBase {
         this.block = new CBlock(scope, node.statement);
         this.variables = this.block.variables;
         this.statements = this.block.statements;
-        if (isForBinding(node.initializer)) {
-            this.varDecl = new CVariableDeclaration(scope, node.initializer.declarationList.declarations[0]);
+        if (isSimpleInitializer(node.initializer)) {
+            this.varDecl = new CVariableDeclaration(scope, getVarDeclFromSimpleInitializer(node.initializer));
             this.init = "";
         }
         else
@@ -381,8 +381,8 @@ export class CForInStatement extends CTemplateBase implements IScope {
 }
 
 function getForOfOrInInitializer(scope: IScope, initializer: kataw.ForBinding | kataw.LexicalDeclaration | kataw.ExpressionNode) {
-    if (isForBinding(initializer)) {
-        const declInit = initializer.declarationList.declarations.length === 1 ? initializer.declarationList.declarations[0] : null;
+    if (isSimpleInitializer(initializer)) {
+        const declInit = getVarDeclFromSimpleInitializer(initializer);
         if (declInit && kataw.isIdentifier(declInit.binding)) {
             scope.variables.push(new CVariable(scope, declInit.binding.text, declInit.binding));
             return declInit.binding.text;

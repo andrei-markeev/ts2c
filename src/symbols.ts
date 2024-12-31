@@ -75,7 +75,6 @@ export class SymbolsHelper {
     public addReference(node: kataw.Identifier) {
         const symbol = this.getSymbolAtLocation(node);
         if (!symbol) {
-            console.warn("Cannot add reference: symbol not found for node " + getNodeText(node));
             return;
         }
 
@@ -103,11 +102,10 @@ export class SymbolsHelper {
             return [null, null];
         } else if (isFieldAccess(node.parent) && node.parent.expression === node) {
             mustHaveParent = true;
-            parentSymbol = this.getSymbolAtLocation(node.parent.member);
+            parentSymbol = kataw.isIdentifier(node.parent.member) && this.getSymbolAtLocation(node.parent.member);
         }
 
         if (mustHaveParent && !parentSymbol) {
-            console.warn("Cannot infer parent symbol for node " + getNodeText(node));
             return [null, null];
         }
 

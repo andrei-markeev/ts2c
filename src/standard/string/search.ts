@@ -51,7 +51,7 @@ class CStringSearch extends CTemplateBase
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             if (call.argumentList.elements.length == 1) {
                 this.argAccess = new CElementAccess(scope, propAccess.member);

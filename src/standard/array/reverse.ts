@@ -63,7 +63,7 @@ class CArrayReverse extends CTemplateBase {
         let propAccess = <kataw.IndexExpression>call.expression;
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         this.iteratorVar1 = scope.root.symbolsHelper.addIterator(call);
         this.iteratorVar2 = scope.root.symbolsHelper.addIterator(call);
         this.tempVarName = scope.root.symbolsHelper.addTemp(call, "temp");

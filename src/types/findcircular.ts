@@ -50,8 +50,8 @@ export class CircularTypesFinder {
                 rightProps.unshift(right.expression.text);
             right = right.expression;
         }
-        const symbolRight = this.symbolsHelper.getSymbolAtLocation(right);
-        const symbolLeft = this.symbolsHelper.getSymbolAtLocation(left);
+        const symbolRight = kataw.isIdentifier(right) ? this.symbolsHelper.getSymbolAtLocation(right) : null;
+        const symbolLeft = kataw.isIdentifier(left) ? this.symbolsHelper.getSymbolAtLocation(left) : null;
         if (symbolRight && symbolLeft) {
             const key = symbolLeft.valueDeclaration.start + "->" + leftProps.map(p => p + "->").join("");
             const value = symbolRight.valueDeclaration.start + "->" + rightProps.map(p => p + "->").join("");

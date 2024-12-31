@@ -61,7 +61,7 @@ class CArraySort extends CTemplateBase {
         let propAccess = <kataw.IndexExpression>call.expression;
         let type = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         this.arrayOfInts = type.elementType == NumberVarType;
         this.arrayOfStrings = type.elementType == StringVarType;
 

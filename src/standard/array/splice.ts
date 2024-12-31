@@ -30,7 +30,7 @@ class ArraySpliceResolver implements IResolver {
     public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         // if parent is expression statement, then this is the top expression
         // and thus return value is not used, so the temporary variable will not be created
-        return !kataw.isStatementNode(node.parent);
+        return node.parent.kind !== kataw.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "tmp_removed_values";
@@ -70,15 +70,15 @@ class CArraySplice extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
-        this.varAccess = new CElementAccess(scope, propAccess.expression);
+        this.varAccess = new CElementAccess(scope, propAccess.member);
         let args = call.argumentList.elements.map(a => CodeTemplateFactory.createForNode(scope, a));
         this.startPosArg = args[0];
         this.deleteCountArg = args[1];
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.memoryManager.getReservedTemporaryVarName(call);
-            let type = scope.root.typeHelper.getCType(propAccess.expression);
+            let type = scope.root.typeHelper.getCType(propAccess.member);
             if (!scope.root.memoryManager.variableWasReused(call))
                 scope.variables.push(new CVariable(scope, this.tempVarName, type));
             this.iteratorVarName = scope.root.symbolsHelper.addIterator(propAccess);
@@ -89,7 +89,7 @@ class CArraySplice extends CTemplateBase {
             scope.root.headerFlags.array_insert = true;
         }
         if (isNumericLiteral(call.argumentList.elements[1])) {
-            this.needsRemove = call.argumentList.elements[1].text != 0;
+            this.needsRemove = call.argumentList.elements[1].text !== 0;
         }
         scope.root.headerFlags.array = true;
         scope.root.headerFlags.array_insert = true;

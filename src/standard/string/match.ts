@@ -32,7 +32,7 @@ export class StringMatchResolver implements IResolver {
         return new CStringMatch(scope, node);
     }
     public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        return !kataw.isStatementNode(node.parent);
+        return node.parent.kind !== kataw.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "match_array";
@@ -65,7 +65,7 @@ class CStringMatch extends CTemplateBase
         super();
         scope.root.headerFlags.str_substring = true;
         let propAccess = <kataw.IndexExpression>call.expression;
-        this.topExpressionOfStatement = kataw.isStatementNode(call.parent);
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
 
         if (!this.topExpressionOfStatement) {
             if (call.argumentList.elements.length == 1) {

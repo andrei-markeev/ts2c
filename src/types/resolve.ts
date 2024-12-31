@@ -1,7 +1,7 @@
 import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isFunctionArgInMethodCall, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall } from './utils';
+import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer } from './utils';
 import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, getTypeBodyText, ClosureParam } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
@@ -246,13 +246,6 @@ export class TypeResolver {
         for (let i = 0; i < 10; i++)
             addEquality(isCall, n => n.argumentList.elements[i], type(n => isLiteral(n.argumentList.elements[i]) ? null : StandardCallHelper.getArgumentTypes(this.typeHelper, n)[i]));
 
-        // crutch for callback argument type in foreach
-        addEquality(isFunctionArgInMethodCall, n => n.formalParameterList.formalParameters[0], type(n => {
-            const propName = n.parent.expression.expression;
-            const objType = this.typeHelper.getCType(propName);
-            return objType instanceof ArrayType && kataw.isIdentifier(propName) && propName.text == "forEach" ? objType.elementType : null;
-        }));
-
         addEquality(isFunction, n => n, n => n.name);
         addEquality(isFunction, n => n, type(n => new FuncType({ parameterTypes: n.formalParameterList.formalParameters.map(p => this.typeHelper.getCType(p)) })));
         for (let i = 0; i < 10; i++)
@@ -328,8 +321,8 @@ export class TypeResolver {
             else
                 return null;
         }))
-        addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.typeHelper.getCType(n.initializer.declarationList.declarations[0]) || PointerVarType, 0, false)));
-        addEquality(isForOfWithSimpleInitializer, n => n.initializer.declarationList.declarations[0], type(n => {
+        addEquality(isForOfWithSimpleInitializer, n => n.expression, type(n => new ArrayType(this.typeHelper.getCType(getVarDeclFromSimpleInitializer(n.initializer)) || PointerVarType, 0, false)));
+        addEquality(isForOfWithSimpleInitializer, n => getVarDeclFromSimpleInitializer(n.initializer), type(n => {
             const type = this.typeHelper.getCType(n.expression);
             return type instanceof ArrayType ? type.elementType : null
         }));
@@ -339,7 +332,7 @@ export class TypeResolver {
             return type instanceof ArrayType ? type.elementType : null
         }));
         addEquality(isForInWithIdentifierInitializer, n => n.initializer, type(StringVarType));
-        addEquality(isForInWithSimpleInitializer, n => n.initializer.declarationList.declarations[0], type(StringVarType));
+        addEquality(isForInWithSimpleInitializer, n => getVarDeclFromSimpleInitializer(n.initializer), type(StringVarType));
         addEquality(isForInStatement, n => n.expression, type(_ => new DictType(PointerVarType)));
         addEquality(isReturnStatement, n => n.expression, type(n => FuncType.getReturnType(this.typeHelper, findParentFunction(n))));
         addEquality(isReturnStatement, n => findParentFunction(n), type(n => this.typeHelper.getCType(n.expression) ? new FuncType({ returnType: this.typeHelper.getCType(n.expression) }) : null));
