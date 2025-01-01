@@ -27,7 +27,7 @@ export class CElementAccess extends CTemplateBase {
             }
             else if (type instanceof FuncType && type.needsClosureStruct) {
                 const decl = scope.root.typeHelper.getDeclaration(node);
-                elementAccess = scope.root.memoryManager.getReservedTemporaryVarName(decl) || elementAccess;
+                elementAccess = decl && scope.root.memoryManager.getReservedTemporaryVarName(decl.parent) || elementAccess;
             }
         } else if (isFieldPropertyAccess(node)) {
             type = scope.root.typeHelper.getCType(node.member);

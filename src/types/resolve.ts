@@ -282,7 +282,7 @@ export class TypeResolver {
                     const identDecl = this.typeHelper.getDeclaration(ident);
                     // if declaration of identifier is function (i.e. function param), and it is not under node
                     // (then it is defined in a parent func obviously), then add closure params of this parent function
-                    if (identDecl && isFunction(identDecl) && !isUnder(node, identDecl)) {
+                    if (identDecl && isFunction(identDecl.parent) && !isUnder(node, identDecl.parent)) {
                         const identDeclType = this.typeHelper.getCType(identDecl) as FuncType;
                         for (let param of identDeclType.closureParams) {
                             if (!closureParams.some(p => p.node.text === param.node.text))
