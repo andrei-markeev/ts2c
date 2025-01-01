@@ -234,7 +234,7 @@ export class MemoryManager {
         let visited = {};
         while (queue.length > 0) {
             const { node, nodeFunc } = queue.shift();
-                
+
             if (visited[node.start + "_" + node.end])
                 continue;
 
@@ -244,7 +244,7 @@ export class MemoryManager {
                 if (decl)
                     refs = this.references[decl.start] || refs;
             } else if (isFunctionDeclaration(node)) {
-                refs = this.references[node.start] || refs;
+                refs = this.references[node.name.start] || refs;
             }
             let returned = false;
             for (let ref of refs) {
@@ -437,6 +437,8 @@ export class MemoryManager {
     }
 
     private getStartNodesForTrekingFunctionScope(func: kataw.FunctionDeclaration | kataw.FunctionExpression) {
+        // TODO: optimize
+        // don't need to get all nodes before filtering them out
         const allNodesInFunc = getAllNodesInFunction(func);
         const startNodes = [];
         for (const node of allNodesInFunc) {
@@ -449,11 +451,10 @@ export class MemoryManager {
     }
 
     private addIfFoundInAssignment(varIdent: kataw.SyntaxNode, ref: kataw.SyntaxNode, queue: QueueItem[], nodeFunc: kataw.FunctionDeclaration | kataw.FunctionExpression): boolean {
-        if (ref.parent && ref.parent.kind == kataw.SyntaxKind.VariableDeclaration) {
-            let varDecl = <kataw.VariableDeclaration>ref.parent;
-            if (varDecl.initializer && varDecl.initializer === ref) {
-                queue.push({ node: varDecl.binding, nodeFunc });
-                console.log(getNodeText(varIdent) + " -> Found initializer-assignment to variable " + getNodeText(varDecl.binding));
+        if (ref.parent && isVariableDeclaration(ref.parent)) {
+            if (ref.parent.initializer && ref.parent.initializer === ref) {
+                queue.push({ node: ref.parent.binding, nodeFunc });
+                console.log(getNodeText(varIdent) + " -> Found initializer-assignment to variable " + getNodeText(ref.parent.binding));
                 return true;
             }
         }

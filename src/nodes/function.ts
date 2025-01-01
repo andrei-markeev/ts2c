@@ -174,7 +174,7 @@ export class CFunctionExpression extends CTemplateBase {
             const parentClosureVarName = parentFuncType && parentFuncType.needsClosureStruct && scope.root.symbolsHelper.getClosureVarName(parentFunc);
             const prefix = parentClosureVarName ? parentClosureVarName + "->scope->" : "";
             const closureParamsFromParent = parentFuncType.closureParams.map(p => ({ key: p.node.text, value: prefix + p.node.text }));
-            const paramsFromParent = type.closureParams.filter(p => scope.root.typeHelper.getDeclaration(p.node).parent === parentFunc).map(p => ({ key: p.node.text, value: p.node.text }));
+            const paramsFromParent = type.closureParams.filter(p => scope.root.typeHelper.getDeclaration(p.node).parent.parent === parentFunc).map(p => ({ key: p.node.text, value: p.node.text }));
             this.closureParams = closureParamsFromParent.concat(paramsFromParent);
         }
 
