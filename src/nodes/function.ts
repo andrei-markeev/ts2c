@@ -121,7 +121,7 @@ export class CFunction extends CTemplateBase implements IScope {
         if (node.name) {
             const nodesInFunction = getAllNodesUnder(node);
             const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
-            nodesInFunction.filter(n => isCall(n) && !StandardCallHelper.isStandardCall(root.typeHelper, n))
+            nodesInFunction.filter(n => isCall(n) && !this.root.standardCallHelper.isStandardCall(n))
                 .forEach((c: kataw.CallExpression) => {
                     if (kataw.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
                         const decl = root.typeHelper.getDeclaration(c.expression);

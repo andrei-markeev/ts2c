@@ -30,7 +30,7 @@ export class MemoryManager {
     private references: { [key: string]: kataw.SyntaxNode[] } = {};
     private needsGCMain: boolean = false;
 
-    constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper) { }
+    constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper, private standardCallHelper: StandardCallHelper) { }
 
     public scheduleNodeDisposals(nodes: kataw.SyntaxNode[]) {
         nodes.filter(n => kataw.isIdentifier(n)).forEach(n => {
@@ -87,7 +87,7 @@ export class MemoryManager {
                     break;
                 case kataw.SyntaxKind.CallExpression:
                     {
-                        if (StandardCallHelper.needsDisposal(this.typeHelper, <kataw.CallExpression>node))
+                        if (this.standardCallHelper.needsDisposal(<kataw.CallExpression>node))
                             this.scheduleNodeDisposal(node);
                     }
                     break;
@@ -335,10 +335,10 @@ export class MemoryManager {
                     } else {
                         const decl = kataw.isIdentifier(call.expression) && this.typeHelper.getDeclaration(call.expression);
                         if (!decl) {
-                            let isStandardCall = StandardCallHelper.isStandardCall(this.typeHelper, call);
+                            let isStandardCall = this.standardCallHelper.isStandardCall(call);
 
                             if (isStandardCall) {
-                                let standardCallEscapeNode = StandardCallHelper.getEscapeNode(this.typeHelper, call);
+                                let standardCallEscapeNode = this.standardCallHelper.getEscapeNode(call);
                                 if (standardCallEscapeNode) {
                                     console.log(heapNodeText + " escapes to '" + getNodeText(standardCallEscapeNode) + "' via standard call '" + getNodeText(call) + "'.");
                                     queue.push({ node: standardCallEscapeNode, nodeFunc });
@@ -397,7 +397,7 @@ export class MemoryManager {
         else if (isUnaryExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
         else if (isCall(heapNode))
-            varName = this.symbolsHelper.addTemp(heapNode, StandardCallHelper.getTempVarName(this.typeHelper, heapNode));
+            varName = this.symbolsHelper.addTemp(heapNode, this.standardCallHelper.getTempVarName(heapNode));
         else if (kataw.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
         else if (isFunction(heapNode)) {

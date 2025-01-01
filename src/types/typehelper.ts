@@ -14,8 +14,9 @@ export class TypeHelper {
     private typeMerger: TypeMerger = new TypeMerger();
     private typeResolver: TypeResolver;
 
-    constructor(private symbolsHelper: SymbolsHelper) {
-        this.typeResolver = new TypeResolver(this, symbolsHelper, this.typeMerger, this.typeOfNodeDict);
+    constructor(private symbolsHelper: SymbolsHelper, private standardCallHelper: StandardCallHelper) {
+        this.standardCallHelper.init(this);
+        this.typeResolver = new TypeResolver(this, symbolsHelper, this.standardCallHelper, this.typeMerger, this.typeOfNodeDict);
     }
 
     public inferTypes(nodes: kataw.SyntaxNode[]) {
@@ -50,7 +51,7 @@ export class TypeHelper {
             case kataw.SyntaxKind.CallExpression:
                 {
                     let call = <kataw.CallExpression>node;
-                    let retType = StandardCallHelper.getReturnType(this, call);
+                    let retType = this.standardCallHelper.getReturnType(call);
                     if (retType)
                         return retType;
                 }

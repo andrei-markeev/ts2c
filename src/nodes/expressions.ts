@@ -544,7 +544,7 @@ class CInExpression extends CTemplateBase {
             propAccess.parent = standardCall;
             argList.parent = standardCall;
             standardCall.parent = node.parent;
-            if (StandardCallHelper.isStandardCall(scope.root.typeHelper, standardCall))
+            if (scope.root.standardCallHelper.isStandardCall(standardCall))
                 this.result = "TRUE";
         }
         

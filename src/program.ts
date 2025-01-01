@@ -8,7 +8,7 @@ import { MemoryManager } from './memory';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from './template';
 import { CVariable, CVariableDestructors } from './nodes/variable';
 import { isFieldAccess, isFunction, isFunctionDeclaration, isPropertyDefinition, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
-import { StandardCallHelper } from './standard';
+import { addStandardCallSymbols, StandardCallHelper } from './standard';
 
 // these imports are here only because it is necessary to run decorators
 import './nodes/statements';
@@ -1032,6 +1032,7 @@ export class CProgram implements IScope {
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
     public typeHelper: TypeHelper;
+    public standardCallHelper: StandardCallHelper;
     public symbolsHelper: SymbolsHelper;
     public memoryManager: MemoryManager;
     constructor(rootNode: kataw.RootNode) {
@@ -1039,7 +1040,7 @@ export class CProgram implements IScope {
         this.symbolsHelper = new SymbolsHelper();
         this.symbolsHelper.createSymbolScope(rootNode.start, rootNode.end);
         this.symbolsHelper.addStandardSymbols();
-        StandardCallHelper.addSymbols(this.symbolsHelper);
+        addStandardCallSymbols(this.symbolsHelper);
 
         const nodes: kataw.SyntaxNode[] = [rootNode];
         const transform = kataw.createTransform();
@@ -1131,8 +1132,9 @@ export class CProgram implements IScope {
         }
         */
 
-        this.typeHelper = new TypeHelper(this.symbolsHelper);
-        this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper);
+        this.standardCallHelper = new StandardCallHelper();
+        this.typeHelper = new TypeHelper(this.symbolsHelper, this.standardCallHelper);
+        this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper, this.standardCallHelper);
 
         const startInferTypes = performance.now();
         this.typeHelper.inferTypes(nodes);

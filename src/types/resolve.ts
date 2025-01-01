@@ -18,6 +18,7 @@ export class TypeResolver {
     constructor(
         public typeHelper: TypeHelper,
         public symbolsHelper: SymbolsHelper,
+        private standardCallHelper: StandardCallHelper,
         private typeMerger: TypeMerger,
         private typeOfNodeDict: { [id: string]: { type: CType } }
     ) { }
@@ -241,10 +242,10 @@ export class TypeResolver {
         addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType({ instanceType: this.typeHelper.getCType(n) })));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
 
-        addEquality(isMethodCall, n => n.expression.member, type(n => StandardCallHelper.getObjectType(this.typeHelper, n)));
-        addEquality(isCall, n => n, type(n => StandardCallHelper.getReturnType(this.typeHelper, n)));
+        addEquality(isMethodCall, n => n.expression.member, type(n => this.standardCallHelper.getObjectType(n)));
+        addEquality(isCall, n => n, type(n => this.standardCallHelper.getReturnType(n)));
         for (let i = 0; i < 10; i++)
-            addEquality(isCall, n => n.argumentList.elements[i], type(n => isLiteral(n.argumentList.elements[i]) ? null : StandardCallHelper.getArgumentTypes(this.typeHelper, n)[i]));
+            addEquality(isCall, n => n.argumentList.elements[i], type(n => isLiteral(n.argumentList.elements[i]) ? null : this.standardCallHelper.getArgumentTypes(n)[i]));
 
         addEquality(isFunction, n => n, n => n.name);
         addEquality(isFunction, n => n, type(n => new FuncType({ parameterTypes: n.formalParameterList.formalParameters.map(p => this.typeHelper.getCType(p)) })));
@@ -343,12 +344,16 @@ export class TypeResolver {
     }
 
     public resolveTypes(allNodes: kataw.SyntaxNode[], typeEqualities: Equality<any>[]) {
-        allNodes.forEach(n => this.setNodeType(n, this.typeHelper.getCType(n)))
+        this.standardCallHelper.bindResolvers(allNodes);
 
         let equalities: [kataw.SyntaxNode, Equality<any>][] = [];
-        typeEqualities.forEach(teq =>
-            allNodes.forEach(node => { if (teq[0].bind(this)(node)) equalities.push([node, teq]); })
-        );
+        for (const node of allNodes) {
+            this.setNodeType(node, this.typeHelper.getCType(node));
+            for (const teq of typeEqualities) {
+                if (teq[0].bind(this)(node))
+                    equalities.push([node, teq]);
+            }
+        }
 
         let changed;
         do {
@@ -373,6 +378,7 @@ export class TypeResolver {
                     if (node2 && type != type2)
                         changed = true;
                     this.setNodeType(node1, type);
+                    this.standardCallHelper.bindResolvers(allNodes);
                     if (node2)
                         this.propagateNodeType(node1, node2);
                 }
