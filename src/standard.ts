@@ -28,65 +28,67 @@ export function StandardCallResolver(target: { new(): IResolver })
     standardCallResolvers.push(new target());
 }
 export class StandardCallHelper {
-    public static addSymbols(symbolHelper: SymbolsHelper) {
-        for (var resolver of standardCallResolvers)
-            resolver.addSymbols?.(symbolHelper);
+    private typeHelper: TypeHelper = null;
+    private resolverMap: Record<string, IResolver> = {};
+    private objTypeResolverMap: Record<string, IResolver> = {};
+
+    public init(typeHelper: TypeHelper) {
+        this.typeHelper = typeHelper;
     }
-    public static isStandardCall(typeHelper: TypeHelper, node: kataw.SyntaxNode) {
+
+    public bindResolvers(nodes: kataw.SyntaxNode[]) {
+        for (const node of nodes) {
+            if (!isCall(node))
+                continue;
+
+            for (var resolver of standardCallResolvers) {
+                const key = node.start + "_" + node.end;
+                if (resolver.matchesNode(this.typeHelper, node, { determineObjectType: true }))
+                    this.objTypeResolverMap[key] = resolver;
+                if (resolver.matchesNode(this.typeHelper, node))
+                    this.resolverMap[key] = resolver;
+            }
+        }
+    }
+    public isStandardCall(node: kataw.SyntaxNode) {
         if (!isCall(node))
             return false;
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node))
-                return true;
-        
-        return false;
+        return this.resolverMap[node.start + "_" + node.end] !== undefined;
     }
-    public static createTemplate(scope: IScope, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(scope.root.typeHelper, node))
-                return resolver.createTemplate(scope, node);
-        
-        return null;
+    public createTemplate(scope: IScope, node: kataw.CallExpression) {
+        const resolver = this.resolverMap[node.start + "_" + node.end];
+        return resolver ? resolver.createTemplate(scope, node) : null;
     }
-    public static getObjectType(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node, { determineObjectType: true }))
-                return resolver.objectType ? resolver.objectType(typeHelper, node) : null;
-        
-        return null;
+    public getObjectType(node: kataw.CallExpression) {
+        const resolver = this.objTypeResolverMap[node.start + "_" + node.end];
+        return resolver && resolver.objectType ? resolver.objectType(this.typeHelper, node) : null;
     }
-    public static getArgumentTypes(typeHelper: TypeHelper, node: kataw.CallExpression) {
+    public getArgumentTypes(node: kataw.CallExpression) {
         const notDefined = node.argumentList.elements.map(a => null);
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node, { determineObjectType: true }))
-                return resolver.argumentTypes ? resolver.argumentTypes(typeHelper, node) : notDefined;
-        
-        return notDefined;
+        const resolver = this.objTypeResolverMap[node.start + "_" + node.end];
+        return resolver && resolver.argumentTypes ? resolver.argumentTypes(this.typeHelper, node) : notDefined;
     }
-    public static getReturnType(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node))
-                return resolver.returnType(typeHelper, node);
-        return null;
+    public getReturnType(node: kataw.CallExpression) {
+        const resolver = this.resolverMap[node.start + "_" + node.end];
+        return resolver ? resolver.returnType(this.typeHelper, node) : null;
     }
-    public static needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node))
-                return resolver.needsDisposal(typeHelper, node);
-        return false;
+    public needsDisposal(node: kataw.CallExpression) {
+        const resolver = this.resolverMap[node.start + "_" + node.end];
+        return resolver ? resolver.needsDisposal(this.typeHelper, node) : false;
     }
-    public static getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node))
-                return resolver.getTempVarName(typeHelper, node);
-        console.log("Internal error: cannot find matching resolver for node '" + getNodeText(node) + "' in StandardCallHelper.getTempVarName");
-        return "tmp";
+    public getTempVarName(node: kataw.CallExpression) {
+        const resolver = this.resolverMap[node.start + "_" + node.end];
+        if (!resolver)
+            console.warn("Internal error: cannot find matching resolver for node '" + getNodeText(node) + "' in StandardCallHelper.getTempVarName");
+        return resolver ? resolver.getTempVarName(this.typeHelper, node) : 'tmp';
     }
-    public static getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        for (var resolver of standardCallResolvers)
-            if (resolver.matchesNode(typeHelper, node))
-                return resolver.getEscapeNode(typeHelper, node);
-        
-        return null;
+    public getEscapeNode(node: kataw.CallExpression) {
+        const resolver = this.resolverMap[node.start + "_" + node.end];
+        return resolver ? resolver.getEscapeNode(this.typeHelper, node) : null;
     }
+}
+
+export function addStandardCallSymbols(symbolHelper: SymbolsHelper) {
+    for (var resolver of standardCallResolvers)
+        resolver.addSymbols?.(symbolHelper);
 }

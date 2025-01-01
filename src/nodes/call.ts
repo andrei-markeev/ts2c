@@ -31,7 +31,7 @@ export class CCallExpression extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
 
-        this.standardCall = StandardCallHelper.createTemplate(scope, call);
+        this.standardCall = scope.root.standardCallHelper.createTemplate(scope, call);
         if (this.standardCall)
             return;
 
