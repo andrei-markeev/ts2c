@@ -1048,6 +1048,7 @@ export class CProgram implements IScope {
         const createVisitor = (parent: kataw.SyntaxNode) => {
             return (n: kataw.SyntaxNode) => {
                 n.parent = parent;
+                n.id = n.start + "_" + n.end + "_" + n.kind;
                 nodes.push(n);
                 // TODO: imports
                 if (kataw.isIdentifier(n)) {
@@ -1081,6 +1082,7 @@ export class CProgram implements IScope {
                 return n;
             }
         }
+        rootNode.id = rootNode.start + "_" + rootNode.end + "_" + rootNode.kind;
         kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
         console.log('visit all nodes', performance.now() - visitStart);
         nodes.sort((a, b) => a.start - b.start);
