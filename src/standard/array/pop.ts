@@ -8,7 +8,7 @@ import { TypeHelper } from '../../types/typehelper';
 import { isFieldPropertyAccess } from '../../types/utils';
 
 @StandardCallResolver
-class ArrayPopResolver implements IResolver {
+class ArrayLastIndexOfResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression, options: IResolverMatchOptions) {
         if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;

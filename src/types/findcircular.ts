@@ -52,7 +52,7 @@ export class CircularTypesFinder {
         }
         const symbolRight = kataw.isIdentifier(right) ? this.symbolsHelper.getSymbolAtLocation(right) : null;
         const symbolLeft = kataw.isIdentifier(left) ? this.symbolsHelper.getSymbolAtLocation(left) : null;
-        if (symbolRight && symbolLeft) {
+        if (symbolRight && symbolRight.valueDeclaration && symbolLeft && symbolLeft.valueDeclaration) {
             const key = symbolLeft.valueDeclaration.start + "->" + leftProps.map(p => p + "->").join("");
             const value = symbolRight.valueDeclaration.start + "->" + rightProps.map(p => p + "->").join("");
             if (key.indexOf(value) === 0 || Object.keys(this.assignments).filter(k => k.indexOf(value) === 0).some(k => this.assignments[k].some(a => key.indexOf(a) === 0)))

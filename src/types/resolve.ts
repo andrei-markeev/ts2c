@@ -1,7 +1,7 @@
 import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isNullOrUndefinedOrNaN, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isParameter, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer } from './utils';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement } from './utils';
 import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
@@ -65,18 +65,25 @@ export class TypeResolver {
             return this.typeMerger.ensureNoTypeDuplicates(new StructType(props))
         }));
 
-        for (let i = 0; i < 10; i++) {
-            addEquality(isArrayLiteral, n => n, type(n => {
-                const elemType = this.typeHelper.getCType(n.elementList.elements[i]);
-                return elemType ? new ArrayType(elemType, 0, false) : null
-            }));
-            addEquality(isArrayLiteral, n => n.elementList.elements[i], type(n => {
-                const arrType = this.typeHelper.getCType(n);
-                return arrType && arrType instanceof ArrayType ? arrType.elementType
-                    : arrType === UniversalVarType ? UniversalVarType
-                    : null
-            }));
-        }
+        addEquality(isArrayLiteral, n => n, type(n => {
+            let elemType = null;
+            for (const elem of n.elementList.elements) {
+                const type = this.typeHelper.getCType(elem);
+                if (type) {
+                    const result = this.typeMerger.mergeTypes(elemType, type);
+                    if (result.replaced)
+                        elemType = result.type;
+                }
+            }
+            return elemType ? new ArrayType(elemType, 0, false) : null;
+        }));
+        addEquality(isArrayLiteralElement, n => n, type(elem => {
+            const arrayLiteral = <kataw.ArrayLiteral>elem.parent.parent;
+            const arrType = this.typeHelper.getCType(arrayLiteral);
+            return arrType && arrType instanceof ArrayType ? arrType.elementType
+                : arrType === UniversalVarType ? UniversalVarType
+                : null
+        }));
 
         /* TODO
         addEquality(ts.isJSDoc, n => n, type(n => {
@@ -200,7 +207,6 @@ export class TypeResolver {
             else
                 return null;
         }));
-        addEquality(isNullOrUndefinedOrNaN, n => n, type(UniversalVarType));
         addEquality(isParenthesizedExpression, n => n, n => n.expression);
         addEquality(isVoidExpression, n => n.operand, type(PointerVarType));
         addEquality(isDeleteExpression, n => n.operand.member, type(n => new DictType(UniversalVarType)));
@@ -208,15 +214,16 @@ export class TypeResolver {
         // functions
         addEquality(isCall, n => n.expression, n => kataw.isIdentifier(n.expression) ? this.typeHelper.getDeclaration(n.expression) : null);
         addEquality(isCall, n => n.expression, type(n => this.typeHelper.getCType(n) ? new FuncType({ returnType: this.typeHelper.getCType(n), parameterTypes: n.argumentList.elements.map(arg => this.typeHelper.getCType(arg)) }) : null));
-        for (let i = 0; i < 10; i++)
-            addEquality(isCall, n => n.argumentList.elements[i], n => {
-                const decl = kataw.isIdentifier(n.expression) ? this.typeHelper.getDeclaration(n.expression) : null;
-                if (decl && isFunctionDeclaration(decl.parent)) {
-                    if (this.typeHelper.getCType(decl.parent.formalParameterList.formalParameters[i]) instanceof FuncType)
-                        return decl.parent.formalParameterList.formalParameters[i];
-                }
+        addEquality(isCallArgument, n => n, n => {
+            const call = <kataw.CallExpression>n.parent.parent;
+            const argIndex = call.argumentList.elements.indexOf(n);
+            const decl = kataw.isIdentifier(call.expression) ? this.typeHelper.getDeclaration(call.expression) : null;
+            if (decl && isFunctionDeclaration(decl.parent)) {
+                const param = decl.parent.formalParameterList.formalParameters[argIndex];
+                return this.typeHelper.getCType(param) instanceof FuncType ? param : null;
+            } else
                 return null;
-            });
+        });    
         addEquality(isCall, n => n.expression, type(n => {
             // nested call expression e.g. `func(1, 2)()`
             if (isCall(n) && isCall(n.expression)) {
@@ -227,33 +234,39 @@ export class TypeResolver {
             return null;
         }))
         addEquality(isCall, n => n, type(n => FuncType.getReturnType(this.typeHelper, n.expression)));
-        addEquality(isParameter, n => n, n => n.left);
-        addEquality(isParameter, n => n, n => n.right);
+        addEquality(isBindingElement, n => n, n => n.left);
+        addEquality(isBindingElement, n => n, n => n.right);
 
         addEquality(isNewExpression, n => n, type(n => 
             kataw.isIdentifier(n.expression) && n.expression.text === "Object" ? new StructType({})
             : FuncType.getInstanceType(this.typeHelper, n.expression)
         ));
-        for (let i = 0; i < 10; i++)
-            addEquality(isNewExpression, n => n.argumentList.elements[i], n => {
-                const func = kataw.isIdentifier(n.expression) ? this.typeHelper.getDeclaration(n.expression) : null;
-                return func && isFunctionDeclaration(func) ? func.formalParameterList.formalParameters[i] : null
-            });
+        addEquality(isNewExpressionArgument, n => n, n => {
+            const newExpr = <kataw.NewExpression>n.parent.parent;
+            const func = kataw.isIdentifier(newExpr.expression) ? this.typeHelper.getDeclaration(newExpr.expression) : null;
+            return func && isFunctionDeclaration(func) ? func.formalParameterList.formalParameters[linesCounter] : null
+        });
         addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType({ instanceType: this.typeHelper.getCType(n) })));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
 
         addEquality(isMethodCall, n => n.expression.member, type(n => this.standardCallHelper.getObjectType(n)));
         addEquality(isCall, n => n, type(n => this.standardCallHelper.getReturnType(n)));
-        for (let i = 0; i < 10; i++)
-            addEquality(isCall, n => n.argumentList.elements[i], type(n => isLiteral(n.argumentList.elements[i]) ? null : this.standardCallHelper.getArgumentTypes(n)[i]));
+        addEquality(isCallArgument, n => n, type(n => {
+            if (isLiteral(n))
+                return null;
+            const call = <kataw.CallExpression>n.parent.parent;
+            const argIndex = call.argumentList.elements.indexOf(n);
+            return this.standardCallHelper.getArgumentTypes(call)[argIndex]
+        }));
 
         addEquality(isFunction, n => n, n => n.name);
         addEquality(isFunction, n => n, type(n => new FuncType({ parameterTypes: n.formalParameterList.formalParameters.map(p => this.typeHelper.getCType(p)) })));
-        for (let i = 0; i < 10; i++)
-            addEquality(isFunction, n => n.formalParameterList.formalParameters[i], type(n => {
-                const type = this.typeHelper.getCType(n);
-                return type instanceof FuncType ? type.parameterTypes[i] : null
-            }));
+        addEquality(isParameter, n => n, type(param => {
+            const func = <kataw.FunctionDeclaration | kataw.FunctionExpression>param.parent.parent;
+            const paramIndex = func.formalParameterList.formalParameters.indexOf(param);
+            const type = this.typeHelper.getCType(func);
+            return type instanceof FuncType ? type.parameterTypes[paramIndex] : null
+        }));
 
         // closures
         addEquality(isFunction, n => n, type(node => {

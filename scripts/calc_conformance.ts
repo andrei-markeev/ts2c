@@ -3,7 +3,7 @@ const fs = require('fs');
 
 const lines = fs.readFileSync("COVERAGE.md", "utf8").split('\n').filter(l => /^\s*\- \[|^### /.test(l));
 
-let i = 0;
+let linesCounter = 0;
 let stats = processLines(0);
 printStats("Total", stats);
 
@@ -21,27 +21,27 @@ function processLines(indent: number): { [key: string]: any } {
     let implemented = 0;
     let total = 0;
     let stats = {};
-    while (i < lines.length) {
-        const spaces = lines[i].match(/^\s*/)[0];
+    while (linesCounter < lines.length) {
+        const spaces = lines[linesCounter].match(/^\s*/)[0];
         if (spaces.length < indent)
             break;
 
         total += 1;
-        if (lines[i + 1] && lines[i + 1].startsWith(spaces + " ")) {
-            const title = lines[i];
-            i++;
+        if (lines[linesCounter + 1] && lines[linesCounter + 1].startsWith(spaces + " ")) {
+            const title = lines[linesCounter];
+            linesCounter++;
             const lineStats = processLines(spaces.length + 1);
             implemented += lineStats.total;
             stats[title] = lineStats;
             stats["hasNested"] = true;
-        } else if (lines[i].startsWith(spaces + "- [x]")) {
-            const progress = lines[i].endsWith(")_") ? 0.5 : 1;
-            stats[lines[i]] = { total: progress };
+        } else if (lines[linesCounter].startsWith(spaces + "- [x]")) {
+            const progress = lines[linesCounter].endsWith(")_") ? 0.5 : 1;
+            stats[lines[linesCounter]] = { total: progress };
             implemented += progress;
-            i++;
+            linesCounter++;
         } else {
-            stats[lines[i]] = { total: 0 };
-            i++;
+            stats[lines[linesCounter]] = { total: 0 };
+            linesCounter++;
         }
     }
     stats["total"] = implemented / total;
