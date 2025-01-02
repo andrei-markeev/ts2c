@@ -78,7 +78,8 @@ export class SymbolsHelper {
             return;
         }
 
-        symbol.references.push(node);
+        if (symbol.valueDeclaration && symbol.references.indexOf(node) === -1)
+            symbol.references.push(node);
     }
 
     public getSymbolAtLocation(node: kataw.SyntaxNode) {
@@ -114,10 +115,8 @@ export class SymbolsHelper {
             symbolPath = node.text;
         else if (isStringLiteral(node))
             symbolPath = node.text;
-        else {
-            console.warn("Cannot determine symbol path from node " + getNodeText(node))
+        else
             return [null, null];
-        }
 
         if (parentSymbol)
             symbolPath = parentSymbol.id + ":" + symbolPath;

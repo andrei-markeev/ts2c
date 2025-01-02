@@ -24,12 +24,11 @@ export class CodeTemplateFactory {
 export function CodeTemplate(tempString: string, nodeKind?: number | number[]): ClassDecorator {
     return function (target: CTemplateBaseConstructor) {
         const newConstructor = function (scope: IScope, node: INode) {
-            let self = this;
-            let retValue = target.apply(self, arguments);
-            let [code, statements] = processTemplate(tempString, self);
+            let retValue = Reflect.construct(target, arguments);
+            let [code, statements] = processTemplate(tempString, retValue);
             if (statements)
                 scope.statements.push(statements);
-            self.resolve = function () {
+            retValue.resolve = function () {
                 return code;
             };
             return retValue;

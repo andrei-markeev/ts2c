@@ -1042,6 +1042,7 @@ export class CProgram implements IScope {
         this.symbolsHelper.addStandardSymbols();
         addStandardCallSymbols(this.symbolsHelper);
 
+        const visitStart = performance.now();
         const nodes: kataw.SyntaxNode[] = [rootNode];
         const transform = kataw.createTransform();
         const createVisitor = (parent: kataw.SyntaxNode) => {
@@ -1050,11 +1051,11 @@ export class CProgram implements IScope {
                 nodes.push(n);
                 // TODO: imports
                 if (kataw.isIdentifier(n)) {
-                    if (isFunctionDeclaration(n.parent))
+                    if (isFunctionDeclaration(n.parent) && n.parent.name === n)
                         this.symbolsHelper.registerSymbol(n);
                     else if (n.parent.kind === kataw.SyntaxKind.FormalParameterList)
                         this.symbolsHelper.registerSymbol(n);
-                    else if (isVariableDeclaration(n.parent))
+                    else if (isVariableDeclaration(n.parent) && n.parent.binding === n)
                         this.symbolsHelper.registerSymbol(n);
                     else if (isPropertyDefinition(n.parent) && n.parent.left === n)
                         this.symbolsHelper.registerSymbol(n);
@@ -1081,6 +1082,7 @@ export class CProgram implements IScope {
             }
         }
         kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
+        console.log('visit all nodes', performance.now() - visitStart);
         nodes.sort((a, b) => a.start - b.start);
 
 

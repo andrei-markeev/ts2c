@@ -6,6 +6,7 @@
 		"**/*.js": {"when": "$(basename).ts"},
 		"**/*.elf": {"when": "$(basename).c"},
 		"**/*.res": {"when": "$(basename).c"},
+		"**/*.elf.dSYM": true,
 		"**/*.js.map": true
     },
     "files.associations": {

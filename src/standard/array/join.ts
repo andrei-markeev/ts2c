@@ -11,7 +11,7 @@ import { TypeHelper } from '../../types/typehelper';
 import { isFieldPropertyAccess } from '../../types/utils';
 
 @StandardCallResolver
-class ArrayConcatResolver implements IResolver {
+class ArrayJoinResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
         if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;

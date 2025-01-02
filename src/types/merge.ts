@@ -65,7 +65,9 @@ export class TypeMerger {
                 let recursive1 = type1.propertyDefs[p] ? type1.propertyDefs[p].recursive : false;
                 let recursive2 = type2.propertyDefs[p] ? type2.propertyDefs[p].recursive : false;
                 let result = recursive1 || recursive2 ? { type: PointerVarType, replaced: recursive1 != recursive2 } : this.mergeTypes(type1.properties[p], type2.properties[p]);
-                let order = Math.max(type1.propertyDefs[p] ? type1.propertyDefs[p].order : 0, type2.propertyDefs[p] ? type2.propertyDefs[p].order : 0);
+                let order = type1.propertyDefs[p] ? type1.propertyDefs[p].order : -1;
+                if (type2.propertyDefs[p] && (order === -1 || type2.propertyDefs[p].order < order))
+                    order = type2.propertyDefs[p].order;
                 newProps[p] = { type: result.type, order: order, recursive: recursive1 || recursive2 };
                 if (result.replaced)
                     changed = true;

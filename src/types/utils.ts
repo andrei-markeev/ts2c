@@ -55,6 +55,10 @@ export function isLiteral(n: kataw.SyntaxNode): n is kataw.NumericLiteral | kata
     return isNumericLiteral(n) || isStringLiteral(n) || n.kind === kataw.SyntaxKind.RegularExpressionLiteral || n.kind == kataw.SyntaxKind.TrueKeyword || n.kind == kataw.SyntaxKind.FalseKeyword;
 }
 
+export function isArrayLiteralElement(n: kataw.SyntaxNode): n is kataw.ListElements {
+    return n.parent && n.parent.kind === kataw.SyntaxKind.ElementList;
+}
+
 export function isBinaryExpression(n: kataw.SyntaxNode): n is kataw.BinaryExpression | kataw.AssignmentExpression {
     return n && n.kind == kataw.SyntaxKind.BinaryExpression || n.kind === kataw.SyntaxKind.AssignmentExpression;
 }
@@ -62,11 +66,14 @@ export function isEqualsExpression(n: kataw.SyntaxNode): n is kataw.BinaryExpres
     return n && isBinaryExpression(n) && n.operatorToken.kind == kataw.SyntaxKind.Assign;
 }
 export function isFieldAssignment(n: kataw.SyntaxNode): n is FieldAssignmentExpression {
-    return n && isBinaryExpression(n) && n.operatorToken.kind == kataw.SyntaxKind.Assign && (isFieldElementAccess(n.left) || isFieldPropertyAccess(n.left));
+    return n && isEqualsExpression(n) && (isFieldElementAccess(n.left) || isFieldPropertyAccess(n.left));
 }
 
 export function isCall(n: kataw.SyntaxNode): n is kataw.CallExpression {
     return n && n.kind === kataw.SyntaxKind.CallExpression;
+}
+export function isCallArgument(n: kataw.SyntaxNode): n is kataw.ArgumentListElement {
+    return n && n.parent && n.parent.kind === kataw.SyntaxKind.ArgumentList && n.parent.parent.kind === kataw.SyntaxKind.CallExpression;
 }
 export function isMethodCall(n): n is MethodCallExpression {
     return isCall(n) && isFieldPropertyAccess(n.expression);
@@ -80,7 +87,10 @@ export function isFunctionDeclaration(n: kataw.SyntaxNode): n is kataw.FunctionD
 export function isFunctionExpression(n: kataw.SyntaxNode): n is kataw.FunctionExpression {
     return n.kind === kataw.SyntaxKind.FunctionExpression;
 }
-export function isParameter(n: kataw.SyntaxNode): n is kataw.BindingElement {
+export function isParameter(n: kataw.SyntaxNode): n is kataw.FormalParameter {
+    return n.parent && n.parent.kind === kataw.SyntaxKind.FormalParameterList;
+}
+export function isBindingElement(n: kataw.SyntaxNode): n is kataw.BindingElement {
     return n.kind === kataw.SyntaxKind.BindingElement;
 }
 export function isReturnStatement(n: kataw.SyntaxNode): n is kataw.ReturnStatement {
@@ -88,6 +98,9 @@ export function isReturnStatement(n: kataw.SyntaxNode): n is kataw.ReturnStateme
 }
 export function isVariableDeclaration(n: kataw.SyntaxNode): n is kataw.VariableDeclaration | kataw.LexicalBinding {
     return n.kind === kataw.SyntaxKind.VariableDeclaration || n.kind === kataw.SyntaxKind.LexicalBinding;
+}
+export function isLexicalBinding(n: kataw.SyntaxNode): n is kataw.LexicalBinding {
+    return n.kind === kataw.SyntaxKind.LexicalBinding;
 }
 export function isForBinding(n: kataw.SyntaxNode): n is kataw.ForBinding {
     return n.kind === kataw.SyntaxKind.ForBinding;
@@ -259,6 +272,9 @@ export function isSideEffectExpression(n: kataw.SyntaxNode) {
 export function isNewExpression(n: kataw.SyntaxNode): n is kataw.NewExpression {
     return n.kind === kataw.SyntaxKind.NewExpression;
 }
+export function isNewExpressionArgument(n: kataw.SyntaxNode): n is kataw.ArgumentListElement {
+    return n.parent && n.parent.kind === kataw.SyntaxKind.ArgumentList && n.parent.parent.kind === kataw.SyntaxKind.NewExpression;
+}
 export function operandsToNumber(leftType: CType, op: kataw.SyntaxKind, rightType: CType) {
     return isNumberOp(op) || isIntegerOp(op)
         || op == kataw.SyntaxKind.Add && !toNumberCanBeNaN(leftType) && !toNumberCanBeNaN(rightType)
@@ -383,6 +399,19 @@ export function getNodeText(node: kataw.SyntaxNode) {
     while (root.parent)
         root = root.parent;
     return (root as kataw.RootNode).source.substring(node.start, node.end);
+}
+
+export function getNodeTextInContext(node: kataw.SyntaxNode) {
+    if (node.start === -1)
+        return "(synthesized node " + kataw.SyntaxKind[node.kind] + ")";
+    let root = node;
+    while (root.parent)
+        root = root.parent;
+    const source = (root as kataw.RootNode).source;
+    return source.substring(Math.max(0, node.start - 10), node.start)
+        + ' >> ' + source.substring(node.start, node.end) + ' << '
+        + source.substring(node.end, Math.min(source.length, node.end + 10))
+        + " | " + kataw.SyntaxKind[node.kind];
 }
 
 export function hasType(refType, type) {

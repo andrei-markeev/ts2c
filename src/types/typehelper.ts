@@ -1,10 +1,11 @@
 import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
-import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, VoidType, PointerVarType } from './ctypes';
+import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType } from './ctypes';
 import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
 import { SymbolsHelper } from '../symbols';
+import { SyntaxKind_NaNIdentifier } from './utils';
 
 
 export class TypeHelper {
@@ -42,6 +43,10 @@ export class TypeHelper {
                 return StringVarType;
             case kataw.SyntaxKind.RegularExpressionLiteral:
                 return RegexVarType;
+            case kataw.SyntaxKind.UndefinedKeyword:
+            case kataw.SyntaxKind.NullKeyword:
+            case SyntaxKind_NaNIdentifier:
+                return UniversalVarType;
             case kataw.SyntaxKind.ArrayLiteral:
                 {
                     if (!this.arrayLiteralsTypes[node.start])
