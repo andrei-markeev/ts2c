@@ -252,10 +252,13 @@ export class TypeResolver {
         ));
         addEquality(isNewExpressionArgument, n => n, n => {
             const newExpr = <kataw.NewExpression>n.parent.parent;
-            const func = kataw.isIdentifier(newExpr.expression) ? this.typeHelper.getDeclaration(newExpr.expression) : null;
-            return func && isFunctionDeclaration(func) ? func.formalParameterList.formalParameters[linesCounter] : null
+            const argIndex = newExpr.argumentList.elements.indexOf(n);
+            const funcName = kataw.isIdentifier(newExpr.expression) ? this.typeHelper.getDeclaration(newExpr.expression) : null;
+            return funcName && isFunctionDeclaration(funcName.parent) ? funcName.parent.formalParameterList.formalParameters[argIndex] : null
         });
-        addEquality(isThisKeyword, n => findParentFunction(n), type(n => new FuncType({ instanceType: this.typeHelper.getCType(n) })));
+        addEquality(isThisKeyword, n => findParentFunction(n), type(n => {
+            return new FuncType({ instanceType: this.typeHelper.getCType(n) })
+        }));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
 
         addEquality(isMethodCall, n => n.expression.member, type(n => this.standardCallHelper.getObjectType(n)));
@@ -307,6 +310,8 @@ export class TypeResolver {
                     // (then it is defined in a parent func obviously), then add closure params of this parent function
                     if (identDecl && isFunction(identDecl.parent) && !isUnder(node, identDecl.parent)) {
                         const identDeclType = this.typeHelper.getCType(identDecl) as FuncType;
+                        if (!identDeclType)
+                            return;
                         for (let param of identDeclType.closureParams) {
                             if (!closureParams.some(p => p.node.text === param.node.text))
                                 closureParams.push(param);
@@ -421,7 +426,7 @@ export class TypeResolver {
             .filter(n => isFunction(n))
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
         */allNodes
-            .filter(n => !kataw.isKeyword(n) 
+            .filter(n => (!kataw.isKeyword(n) || n.kind === kataw.SyntaxKind.ThisKeyword)
                 && n.kind !== kataw.SyntaxKind.Block
                 && n.kind !== kataw.SyntaxKind.BlockStatement
                 && n.kind !== kataw.SyntaxKind.ExpressionStatement

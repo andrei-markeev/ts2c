@@ -204,8 +204,3 @@ export class CNaN extends CTemplateBase {
         scope.root.headerFlags.js_var_from = true;
     }
 }
-
-@CodeTemplate(`this`, kataw.SyntaxKind.ThisKeyword)
-export class CThis extends CTemplateBase {
-    constructor(scope: IScope, node: kataw.SyntaxToken<kataw.SyntaxKind.ThisKeyword>) { super(); }
-}
