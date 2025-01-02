@@ -30,7 +30,7 @@ export class SymbolsHelper {
     private nextId = 1;
 
     public createSymbolScope(start: number, end: number) {
-        const currentScope = this.scopes.find(s => start >= s.start && end <= s.end);
+        const currentScope = this.findSymbolScope({ start, end });
         const newScope = {
             symbols: {},
             parent: currentScope,
@@ -124,8 +124,13 @@ export class SymbolsHelper {
         return [symbolPath, parentSymbol];
     }
 
-    public findSymbolScope(node: kataw.SyntaxNode) {
-        return this.scopes.find(s => node.start >= s.start && node.end <= s.end);
+    public findSymbolScope(span: { start: number, end: number }) {
+        for (let i = this.scopes.length - 1; i >= 0; i--) {
+            const scope = this.scopes[i];
+            if (span.start >= scope.start && span.end <= scope.end)
+                return scope;
+        }
+        return undefined;
     }
 
     public isGlobalSymbol(node: kataw.Identifier) {

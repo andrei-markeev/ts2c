@@ -39,7 +39,6 @@ int16_t gc_i;
 
 static struct closure_t * (*a)();
 static int16_t ax;
-static struct closure_t * tmp_closure;
 
 int16_t func(struct closure_t * closure)
 {
@@ -67,7 +66,7 @@ int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
 
     a = a_func;
-    ax = (tmp_closure = a(), tmp_closure->func(tmp_closure));
+    ax = a()->func(a());
     printf("%d\n", ax);
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);

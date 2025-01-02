@@ -38,8 +38,6 @@ struct nestedfunc_closure_t {
 
 int16_t gc_i;
 
-static struct nestedfunc_closure_t * tmp_closure;
-
 int16_t nestedfunc(struct nestedfunc_closure_t * closure)
 {
     return closure->scope->arg1 + closure->scope->arg2;
@@ -66,7 +64,7 @@ struct nestedfunc_closure_t * func1(int16_t arg1, int16_t arg2)
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
 
-    printf("%d\n", (tmp_closure = func1(1, 2), tmp_closure->func(tmp_closure)));
+    printf("%d\n", func1(1, 2)->func(func1(1, 2)));
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

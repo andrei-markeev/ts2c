@@ -1071,6 +1071,9 @@ export class CProgram implements IScope {
                         n.parent.kind = SyntaxKind_NaNIdentifier;
                     else if (n.text === "undefined" && this.symbolsHelper.isGlobalSymbol(n))
                         n.kind = kataw.SyntaxKind.UndefinedKeyword;
+
+                    if (!n.text && n.kind === kataw.SyntaxKind.ThisKeyword)
+                        (n as any).text = 'this';
                 } else if (isFunction(n)) {
                     this.symbolsHelper.createSymbolScope(n.formalParameterList.start, n.end);
                 } else if (isWithStatement(n)) {
