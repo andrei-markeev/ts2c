@@ -118,8 +118,17 @@ export class TypeResolver {
                 return null;
         }))
         addEquality(isFieldPropertyAccess, n => n, n => n.expression);
-        addEquality(isFieldPropertyAccessNotMethodCall, n => n.member, type(n => struct(getNodeText(n.expression), n.start, this.typeHelper.getCType(n) || PointerVarType)));
-        addEquality(isFieldPropertyAccessNotMethodCall, n => n, type(n => {
+        addEquality(isFieldPropertyAccess, n => n.member, type(n => {
+            const type = this.typeHelper.getCType(n);
+            if (isCall(n.parent) && n.parent.expression === n) {
+                if (!type)
+                    return null;
+                if (this.standardCallHelper.isStandardCall(n.parent))
+                    return null;
+            }
+            return struct(getNodeText(n.expression), n.start, type || PointerVarType)
+        }));
+        addEquality(isFieldPropertyAccess, n => n, type(n => {
             const type = this.typeHelper.getCType(n.member);
             return type instanceof StructType ? type.properties[getNodeText(n.expression)]
                 : type instanceof ArrayType && getNodeText(n.expression) == "length" ? NumberVarType
@@ -411,7 +420,7 @@ export class TypeResolver {
         allNodes
             .filter(n => isFunction(n))
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
-        allNodes
+        */allNodes
             .filter(n => !kataw.isKeyword(n) 
                 && n.kind !== kataw.SyntaxKind.Block
                 && n.kind !== kataw.SyntaxKind.BlockStatement

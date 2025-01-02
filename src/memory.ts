@@ -256,25 +256,25 @@ export class MemoryManager {
                     let elemAccess = ref;
                     while (isFieldAccess(elemAccess.member))
                         elemAccess = elemAccess.member;
-                    if (kataw.isIdentifier(elemAccess.expression)) {
-                        console.log(heapNodeText + " -> Tracking parent variable: " + getNodeText(elemAccess.expression) + ".");
-                        queue.push({ node: elemAccess.expression, nodeFunc });
+                    if (kataw.isIdentifier(elemAccess.member)) {
+                        console.log(heapNodeText + " -> Tracking parent variable: " + getNodeText(elemAccess.member) + ".");
+                        queue.push({ node: elemAccess.member, nodeFunc });
                     }
                 }
 
                 if (ref.parent && isFieldPropertyAccess(ref.parent) && ref.parent.expression === ref) {
-                    const type = this.typeHelper.getCType(ref.parent.expression);
+                    const type = this.typeHelper.getCType(ref.parent.member);
                     if (type instanceof StructType) {
-                        console.log(heapNodeText + " -> Property of object " + getNodeText(ref.parent.expression) + ".");
+                        console.log(heapNodeText + " -> Property of object " + getNodeText(ref.parent.member) + ".");
                         queue.push({ node: ref.parent, nodeFunc });
                     }
                 }
 
                 if (ref.parent && isFieldElementAccess(ref.parent) && ref.parent.expression === ref) {
-                    const type = this.typeHelper.getCType(ref.parent.expression);
+                    const type = this.typeHelper.getCType(ref.parent.member);
                     if (type instanceof DictType) {
-                        console.log(heapNodeText + " -> Property of dictionary " + getNodeText(ref.parent.expression) + ".");
-                        queue.push({ node: ref.parent.expression, nodeFunc });
+                        console.log(heapNodeText + " -> Property of dictionary " + getNodeText(ref.parent.member) + ".");
+                        queue.push({ node: ref.parent.member, nodeFunc });
                     }
                 }
 
