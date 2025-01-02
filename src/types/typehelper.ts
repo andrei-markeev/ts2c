@@ -29,7 +29,7 @@ export class TypeHelper {
         if (!node || !node.kind)
             return null;
 
-        let found = this.typeOfNodeDict[node.start + "_" + node.end];
+        let found = this.typeOfNodeDict[node.id];
         if (found)
             return found.type;
 
@@ -85,6 +85,7 @@ export class TypeHelper {
         if (!n/* || !(n.flags & ts.NodeFlags.Synthesized)*/)
             return false;
         
+        n.id = "_" + TypeHelper.syntheticNodesCounter;
         n.end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
     }

@@ -1,7 +1,7 @@
 import * as kataw from 'kataw'
 import { CType, StructType, ArrayType, NumberVarType, FuncType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
-import { findParentFunction, getNodeText, isFieldAccess, isPropertyDefinition, isStringLiteral } from './types/utils';
+import { findParentFunction, isFieldPropertyAccess, isPropertyDefinition, isStringLiteral } from './types/utils';
 import { reservedCSymbolNames } from './program';
 
 export interface SymbolInfo {
@@ -101,7 +101,7 @@ export class SymbolsHelper {
         if (isPropertyDefinition(node.parent) && node.parent.left === node) {
             // don't track symbols inside of object literals
             return [null, null];
-        } else if (isFieldAccess(node.parent) && node.parent.expression === node) {
+        } else if (isFieldPropertyAccess(node.parent) && node.parent.expression === node) {
             mustHaveParent = true;
             parentSymbol = kataw.isIdentifier(node.parent.member) && this.getSymbolAtLocation(node.parent.member);
         }

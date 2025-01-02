@@ -3,7 +3,7 @@ import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, Fu
 import { StandardCallHelper } from './standard';
 import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText, isCallArgument } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
@@ -136,7 +136,7 @@ export class MemoryManager {
     }
 
     public getGCVariableForNode(node: kataw.SyntaxNode) {
-        let key = node.start + "_" + node.end;
+        let key = node.id;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];
 
@@ -176,13 +176,12 @@ export class MemoryManager {
     }
 
     public variableWasReused(node: kataw.SyntaxNode) {
-        let key = node.start + "_" + node.end;
-        return !!this.reusedVariables[key];
+        return !!this.reusedVariables[node.id];
     }
 
     /** Variables that need to be disposed are tracked by memory manager */
     public getReservedTemporaryVarName(node: kataw.SyntaxNode) {
-        let key = node.start + "_" + node.end;
+        let key = node.id;
         if (this.reusedVariables[key])
             key = this.reusedVariables[key];
         let scopeOfVar = this.scopesOfVariables[key];
@@ -211,8 +210,8 @@ export class MemoryManager {
             let existingVariable = this.tryReuseExistingVariable(heapNode);
             isTemp = existingVariable == null;
             if (!isTemp) {
-                this.reusedVariables[heapNode.start + "_" + heapNode.end] = existingVariable.start + "_" + existingVariable.end;
-                this.originalNodes[existingVariable.start + "_" + existingVariable.end] = heapNode;
+                this.reusedVariables[heapNode.id] = existingVariable.id;
+                this.originalNodes[existingVariable.id] = heapNode;
                 heapNode = existingVariable;
             }
         }
@@ -235,7 +234,7 @@ export class MemoryManager {
         while (queue.length > 0) {
             const { node, nodeFunc } = queue.shift();
 
-            if (visited[node.start + "_" + node.end])
+            if (visited[node.id])
                 continue;
 
             let refs = [node];
@@ -248,7 +247,7 @@ export class MemoryManager {
             }
             let returned = false;
             for (let ref of refs) {
-                visited[ref.start + "_" + ref.end] = true;
+                visited[ref.id] = true;
                 let parentNode = findParentFunction(isFunction(ref) ? ref.parent : ref);
                 if (!parentNode)
                     topScope = "main";
@@ -332,40 +331,44 @@ export class MemoryManager {
                         console.log(heapNodeText + " -> Found function expression call!");
                         isSimple = false;
                         queue.push({ node: call, nodeFunc });
-                    } else {
-                        const decl = kataw.isIdentifier(call.expression) && this.typeHelper.getDeclaration(call.expression);
-                        if (!decl) {
-                            let isStandardCall = this.standardCallHelper.isStandardCall(call);
+                    }
+                }
+                
+                if (isCallArgument(ref)) {
+                    const call = <kataw.CallExpression>ref.parent.parent;
+                    const decl = kataw.isIdentifier(call.expression) && this.typeHelper.getDeclaration(call.expression);
+                    if (!decl) {
+                        let isStandardCall = this.standardCallHelper.isStandardCall(call);
 
-                            if (isStandardCall) {
-                                let standardCallEscapeNode = this.standardCallHelper.getEscapeNode(call);
-                                if (standardCallEscapeNode) {
-                                    console.log(heapNodeText + " escapes to '" + getNodeText(standardCallEscapeNode) + "' via standard call '" + getNodeText(call) + "'.");
-                                    queue.push({ node: standardCallEscapeNode, nodeFunc });
-                                }
-                            } else {
-                                console.log(heapNodeText + " -> Detected passing to external function " + getNodeText(call.expression) + "." + (topScope != "main" ? "Scope changed to main." : ""));
-                                topScope = "main";
+                        if (isStandardCall) {
+                            let standardCallEscapeNode = this.standardCallHelper.getEscapeNode(call);
+                            if (standardCallEscapeNode) {
+                                console.log(heapNodeText + " escapes to '" + getNodeText(standardCallEscapeNode) + "' via standard call '" + getNodeText(call) + "'.");
+                                queue.push({ node: standardCallEscapeNode, nodeFunc });
                             }
+                        } else {
+                            console.log(heapNodeText + " -> Detected passing to external function " + getNodeText(call.expression) + "." + (topScope != "main" ? "Scope changed to main." : ""));
+                            topScope = "main";
                         }
-                        else {
-                            const funcDecl = decl.parent as kataw.FunctionDeclaration;
-                            for (let i = 0; i < call.argumentList.elements.length; i++) {
-                                if (call.argumentList.elements[i].start <= ref.start && call.argumentList.elements[i].end >= ref.end) {
-                                    if (decl.start + 1 == topScope) {
-                                        console.log(heapNodeText + " -> Found recursive call with parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
-                                        queue.push({ node: decl, nodeFunc });
-                                    } else {
-                                        console.log(heapNodeText + " -> Found passing to function " + getNodeText(call.expression) + " as parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
-                                        queue.push({ node: funcDecl.formalParameterList.formalParameters[i], nodeFunc });
-                                    }
-                                    isSimple = false;
+                    }
+                    else {
+                        const funcDecl = decl.parent as kataw.FunctionDeclaration;
+                        for (let i = 0; i < call.argumentList.elements.length; i++) {
+                            if (call.argumentList.elements[i].start <= ref.start && call.argumentList.elements[i].end >= ref.end) {
+                                if (decl.start + 1 == topScope) {
+                                    console.log(heapNodeText + " -> Found recursive call with parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
+                                    queue.push({ node: decl, nodeFunc });
+                                } else {
+                                    console.log(heapNodeText + " -> Found passing to function " + getNodeText(call.expression) + " as parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
+                                    queue.push({ node: funcDecl.formalParameterList.formalParameters[i], nodeFunc });
                                 }
+                                isSimple = false;
                             }
                         }
                     }
                 }
-                else if (isReturnStatement(ref.parent) && !returned) {
+
+                if (isReturnStatement(ref.parent) && !returned) {
                     let funcNode: kataw.SyntaxNode = parentNode;
                     if (isFunctionDeclaration(parentNode))
                         funcNode = parentNode.name;
@@ -374,8 +377,8 @@ export class MemoryManager {
                     returned = true;
                     isSimple = false;
                 }
-                else
-                    this.addIfFoundInAssignment(heapNode, ref, queue, nodeFunc);
+
+                this.addIfFoundInAssignment(heapNode, ref, queue, nodeFunc);
             }
 
         }
@@ -409,7 +412,7 @@ export class MemoryManager {
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 
         let vnode = heapNode;
-        let key = vnode.start + "_" + vnode.end;
+        let key = vnode.id;
         let arrayWithContents = false;
         if (this.originalNodes[key])
             vnode = this.originalNodes[key];
@@ -427,7 +430,7 @@ export class MemoryManager {
             scopeId: foundScopes.join("_"),
             used: !isTemp
         };
-        this.scopesOfVariables[heapNode.start + "_" + heapNode.end] = scopeInfo;
+        this.scopesOfVariables[heapNode.id] = scopeInfo;
 
         for (let sc of foundScopes) {
             this.scopes[sc] = this.scopes[sc] || [];

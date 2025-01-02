@@ -1,7 +1,7 @@
 import * as kataw from 'kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement } from './utils';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMethodCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding } from './utils';
 import { CType, NumberVarType, BooleanVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
@@ -327,6 +327,7 @@ export class TypeResolver {
         }));
 
         // statements
+        addEquality(isVariableDeclaration, n => n.binding, n => n);
         addEquality(isVariableDeclaration, n => n.binding, n => n.initializer);
         addEquality(isVariableDeclaration, n => n.binding, type(n => {
             const type = this.typeHelper.getCType(n.initializer);
@@ -411,15 +412,24 @@ export class TypeResolver {
             .filter(n => isFunction(n))
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
         allNodes
-            .filter(n => !kataw.isKeyword(n) && n.kind !== kataw.SyntaxKind.Block)
-            .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", JSON.stringify(this.typeHelper.getCType(n))));
-        */
+            .filter(n => !kataw.isKeyword(n) 
+                && n.kind !== kataw.SyntaxKind.Block
+                && n.kind !== kataw.SyntaxKind.BlockStatement
+                && n.kind !== kataw.SyntaxKind.ExpressionStatement
+                && n.kind !== kataw.SyntaxKind.FunctionBody
+                && n.kind !== kataw.SyntaxKind.FunctionStatementList
+            )
+            .forEach(n => {
+                const type = this.typeHelper.getCType(n);
+                console.log(getNodeTextInContext(n), "|", kataw.SyntaxKind[n.kind], "|", type == null || typeof type === "string" ? type : type.getBodyText());
+            })
+        //*/
 
     }
 
     public setNodeType(n: kataw.SyntaxNode, t: CType) {
         if (n && t) {
-            const key = n.start + "_" + n.end;
+            const key = n.id;
             if (!this.typeOfNodeDict[key])
                 this.typeOfNodeDict[key] = { type: t };
             else
@@ -427,9 +437,9 @@ export class TypeResolver {
         }
     }
     private propagateNodeType(from: kataw.SyntaxNode, to: kataw.SyntaxNode) {
-        const typeToKeep = this.typeOfNodeDict[from.start + "_" + from.end];
-        const typeToRemove = this.typeOfNodeDict[to.start + "_" + to.end];
-        this.typeOfNodeDict[to.start + "_" + to.end] = typeToRemove;
+        const typeToKeep = this.typeOfNodeDict[from.id];
+        const typeToRemove = this.typeOfNodeDict[to.id];
+        this.typeOfNodeDict[to.id] = typeToRemove;
         for (let key in this.typeOfNodeDict)
             if (this.typeOfNodeDict[key] === typeToRemove)
                 this.typeOfNodeDict[key] = typeToKeep;
