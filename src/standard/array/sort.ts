@@ -1,19 +1,15 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
-import { ArrayType, StringVarType, NumberVarType, PointerVarType } from '../../types/ctypes';
+import { StandardCallResolver, IResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, StringVarType, NumberVarType, PointerVarType, CType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
-import { isFieldPropertyAccess } from '../../types/utils';
 
-@StandardCallResolver
-class ArraySortResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression, options: IResolverMatchOptions) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text === "sort" && (objType instanceof ArrayType && objType.isDynamicArray || options && options.determineObjectType);
+@StandardCallResolver('sort')
+class ArraySortResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType, options: IResolverMatchOptions) {
+        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return new ArrayType(PointerVarType, 0, true);

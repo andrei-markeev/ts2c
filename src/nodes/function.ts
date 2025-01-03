@@ -3,8 +3,7 @@ import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';
 import { FuncType, getTypeText } from '../types/ctypes';
-import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction, getNodeText, isPropertyDefinition, isVariableDeclaration, isCall, isFunctionDeclaration, isFunctionExpression } from '../types/utils';
+import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction, getNodeText, isPropertyDefinition, isVariableDeclaration, isCall, isFunctionDeclaration, isFunctionExpression, isMaybeStandardCall } from '../types/utils';
 import { CExpression } from './expressions';
 
 @CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
@@ -121,7 +120,17 @@ export class CFunction extends CTemplateBase implements IScope {
         if (node.name) {
             const nodesInFunction = getAllNodesUnder(node);
             const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
-            nodesInFunction.filter(n => isCall(n) && !this.root.standardCallHelper.isStandardCall(n))
+            nodesInFunction
+                .filter(n => {
+                    if (!isCall(n))
+                        return false;
+                    if (isMaybeStandardCall(n) && this.root.standardCallHelper.isStandardCall(n))
+                        return false;
+                    const symbol = this.root.symbolsHelper.getSymbolAtLocation(n.expression);
+                    if (symbol && symbol.resolver)
+                        return false;
+                    return true;
+                })
                 .forEach((c: kataw.CallExpression) => {
                     if (kataw.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
                         const decl = root.typeHelper.getDeclaration(c.expression);

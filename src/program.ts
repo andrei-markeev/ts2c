@@ -1041,8 +1041,8 @@ export class CProgram implements IScope {
         const [statements, nodes] = collectSymbolsAndTransformAst(rootNode, this.symbolsHelper);
         nodes.sort((a, b) => a.start - b.start);
 
-        this.standardCallHelper = new StandardCallHelper();
-        this.typeHelper = new TypeHelper(this.symbolsHelper, this.standardCallHelper);
+        this.typeHelper = new TypeHelper(this.symbolsHelper);
+        this.standardCallHelper = this.typeHelper.standardCallHelper;
         this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper, this.standardCallHelper);
 
         const startInferTypes = performance.now();

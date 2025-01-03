@@ -1,21 +1,17 @@
 import * as kataw from 'kataw';
-import { ArrayType, CType, FuncType, NumberVarType, PointerVarType } from '../../types/ctypes';
+import { ArrayType, CType, FuncType, NumberVarType } from '../../types/ctypes';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CVariable } from '../../nodes/variable';
 import { IScope, CProgram } from '../../program';
-import { StandardCallResolver, IResolver } from '../../standard';
+import { StandardCallResolver, ITypeExtensionResolver } from '../../standard';
 import { TypeHelper } from '../../types/typehelper';
 import { CExpression } from '../../nodes/expressions';
-import { isFieldPropertyAccess } from '../../types/utils';
 
-@StandardCallResolver
-class ArrayForEachResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text === "forEach" && objType instanceof ArrayType;
+@StandardCallResolver('forEach')
+class ArrayForEachResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType) {
+        return memberType instanceof ArrayType;
     }
     public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression): CType[] {
         let objType = typeHelper.getCType((<kataw.IndexExpression>call.expression).member);

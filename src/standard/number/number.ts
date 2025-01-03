@@ -1,22 +1,19 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
+import { GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
 import { NumberVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CExpression } from '../../nodes/expressions';
 import { TypeHelper } from '../../types/typehelper';
 import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
-@StandardCallResolver
-class NumberCallResolver implements IResolver {
+@GlobalSymbolResolver
+class NumberCallResolver implements IGlobalSymbolResolver {
     numberSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
     public addSymbols(symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.numberSymbol = symbolHelper.registerSyntheticSymbol(null, 'Number');
-    }
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        return kataw.isIdentifier(call.expression) && call.expression.text == "Number" && this.symbolHelper.getSymbolAtLocation(call.expression) === this.numberSymbol;
+        this.numberSymbol = symbolHelper.registerSyntheticSymbol(null, 'Number', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         const type = typeHelper.getCType(call.argumentList.elements[0]);

@@ -3,6 +3,7 @@ import { CType, StructType, ArrayType, NumberVarType, FuncType } from './types/c
 import { TypeHelper } from './types/typehelper';
 import { findParentFunction, isFieldPropertyAccess, isPropertyDefinition, isStringLiteral } from './types/utils';
 import { reservedCSymbolNames } from './program';
+import { IGlobalSymbolResolver } from './standard';
 
 export interface SymbolInfo {
     id: number;
@@ -11,6 +12,7 @@ export interface SymbolInfo {
     references: kataw.Identifier[];
     members: SymbolInfo[];
     conflict: boolean;
+    resolver?: IGlobalSymbolResolver;
 }
 
 export interface SymbolScope {
@@ -21,7 +23,6 @@ export interface SymbolScope {
 }
 
 export class SymbolsHelper {
-
     constructor() { }
 
     private userStructs: { [name: string]: StructType } = {};
@@ -29,6 +30,7 @@ export class SymbolsHelper {
 
     private scopes: SymbolScope[] = [];
     private nextId = 1;
+    public globalSymbolsWithResolvers: SymbolInfo[] = [];
 
     public createSymbolScope(start: number, end: number) {
         const currentScope = this.findSymbolScope({ start, end });
@@ -56,7 +58,7 @@ export class SymbolsHelper {
         };
     }
 
-    public registerSyntheticSymbol(parentSymbol: SymbolInfo | null, name: string) {
+    public registerSyntheticSymbol(parentSymbol: SymbolInfo | null, name: string, resolver?: IGlobalSymbolResolver) {
         let symbolPath = name;
         if (parentSymbol)
             symbolPath = parentSymbol.id + ":" + symbolPath;
@@ -67,10 +69,13 @@ export class SymbolsHelper {
             valueDeclaration: undefined,
             references: [],
             members: [],
-            conflict: false
+            conflict: false,
+            resolver
         };
 
         this.scopes[0].symbols[symbolPath] = symbol;
+        if (resolver)
+            this.globalSymbolsWithResolvers.push(symbol);
 
         return symbol;
     }
@@ -81,7 +86,7 @@ export class SymbolsHelper {
             return;
         }
 
-        if (symbol.valueDeclaration && symbol.references.indexOf(node) === -1)
+        if (symbol.references.indexOf(node) === -1)
             symbol.references.push(node);
     }
 
@@ -111,6 +116,10 @@ export class SymbolsHelper {
         } else if (isFieldPropertyAccess(node.parent) && node.parent.expression === node) {
             mustHaveParent = true;
             parentSymbol = kataw.isIdentifier(node.parent.member) && this.getSymbolAtLocation(node.parent.member);
+        } else if (isFieldPropertyAccess(node)) {
+            mustHaveParent = true;
+            parentSymbol = this.getSymbolAtLocation(node.member);
+            node = node.expression;
         }
 
         if (mustHaveParent && !parentSymbol) {

@@ -1,46 +1,42 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
-import { ArrayType, NumberVarType, PointerVarType, UniversalVarType } from '../../types/ctypes';
+import { StandardCallResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, CType, NumberVarType, PointerVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { CAsUniversalVar } from '../../nodes/typeconvert';
 import { TypeHelper } from '../../types/typehelper';
-import { isFieldPropertyAccess } from '../../types/utils';
+import { MaybeStandardCall } from '../../types/utils';
 
-@StandardCallResolver
-class ArrayPushResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression, options?: IResolverMatchOptions) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text === "push" && (objType instanceof ArrayType && objType.isDynamicArray || options && options.determineObjectType);
+@StandardCallResolver('push')
+class ArrayPushResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType, options: IResolverMatchOptions) {
+        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
-    public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
+    public objectType(typeHelper: TypeHelper, call: MaybeStandardCall) {
         let elementType = call.argumentList.elements[0] && typeHelper.getCType(call.argumentList.elements[0]);
         return new ArrayType(elementType || PointerVarType, 0, true);
     }
-    public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        let propAccess = <kataw.IndexExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.member);
+    public argumentTypes(typeHelper: TypeHelper, call: MaybeStandardCall) {
+        let objType = typeHelper.getCType(call.expression.member);
         return call.argumentList.elements.map(a => objType instanceof ArrayType ? objType.elementType : null);
     }
-    public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
+    public returnType(typeHelper: TypeHelper, call: MaybeStandardCall) {
         return NumberVarType;
     }
-    public createTemplate(scope: IScope, node: kataw.CallExpression) {
+    public createTemplate(scope: IScope, node: MaybeStandardCall) {
         return new CArrayPush(scope, node);
     }
-    public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
+    public needsDisposal(typeHelper: TypeHelper, node: MaybeStandardCall) {
         return false;
     }
-    public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
+    public getTempVarName(typeHelper: TypeHelper, node: MaybeStandardCall) {
         return null;
     }
-    public getEscapeNode(typeHelper: TypeHelper, node: kataw.CallExpression) {
-        return (<kataw.IndexExpression>node.expression).member;
+    public getEscapeNode(typeHelper: TypeHelper, node: MaybeStandardCall) {
+        return node.expression.member;
     }
 }
 

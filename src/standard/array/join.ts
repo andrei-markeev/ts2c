@@ -1,23 +1,18 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
-import { ArrayType, StringVarType, NumberVarType } from '../../types/ctypes';
+import { StandardCallResolver, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, StringVarType, NumberVarType, CType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CString } from '../../nodes/literals';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
-import { isFieldPropertyAccess } from '../../types/utils';
 
-@StandardCallResolver
-class ArrayJoinResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return objType instanceof ArrayType
-            && (call.expression.expression.text === "join" || call.expression.expression.text === "toString");
+@StandardCallResolver('join', 'toString')
+class ArrayJoinResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType) {
+        return memberType instanceof ArrayType;
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;

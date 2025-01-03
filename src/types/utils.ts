@@ -1,11 +1,12 @@
 import * as kataw from 'kataw';
 import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType, VoidType } from './ctypes';
 import { TypeMerger } from './merge';
+import { StandardResolversByPropName } from '../standard';
 
 export interface FieldAssignmentExpression extends kataw.BinaryExpression {
     left: kataw.MemberAccessExpression | kataw.IndexExpression;
 }
-export interface MethodCallExpression extends kataw.CallExpression {
+export interface MaybeStandardCall extends kataw.CallExpression {
     expression: kataw.IndexExpression;
 }
 export interface PropertyDefinitionList extends kataw.PropertyDefinitionList {
@@ -75,8 +76,9 @@ export function isCall(n: kataw.SyntaxNode): n is kataw.CallExpression {
 export function isCallArgument(n: kataw.SyntaxNode): n is kataw.ArgumentListElement {
     return n && n.parent && n.parent.kind === kataw.SyntaxKind.ArgumentList && n.parent.parent.kind === kataw.SyntaxKind.CallExpression;
 }
-export function isMethodCall(n): n is MethodCallExpression {
-    return isCall(n) && isFieldPropertyAccess(n.expression);
+export function isMaybeStandardCall(n): n is MaybeStandardCall {
+    return isCall(n) && isFieldPropertyAccess(n.expression) && kataw.isIdentifier(n.expression.expression)
+        && StandardResolversByPropName[n.expression.expression.text] !== undefined;
 }
 export function isFunction(n: kataw.SyntaxNode): n is kataw.FunctionDeclaration | kataw.FunctionExpression {
     return n.kind === kataw.SyntaxKind.FunctionDeclaration || n.kind === kataw.SyntaxKind.FunctionExpression;

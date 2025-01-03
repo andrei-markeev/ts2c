@@ -1,12 +1,11 @@
 import * as kataw from 'kataw';
 import { IScope } from '../program';
-import { StandardCallHelper } from '../standard';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
-import { isNullOrUndefined, findParentFunction, getNodeText } from '../types/utils';
+import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
 
 @CodeTemplate(`
@@ -31,7 +30,13 @@ export class CCallExpression extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
 
-        this.standardCall = scope.root.standardCallHelper.createTemplate(scope, call);
+        this.standardCall = isMaybeStandardCall(call) && scope.root.standardCallHelper.createTemplate(scope, call);
+        if (this.standardCall)
+            return;
+
+        const symbol = scope.root.symbolsHelper.getSymbolAtLocation(call.expression);
+        if (symbol && symbol.resolver)
+            this.standardCall = symbol.resolver.createTemplate(scope, call);
         if (this.standardCall)
             return;
 

@@ -3,112 +3,136 @@ import { IScope } from './program';
 import { CType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
 import { CTemplateBase } from './template';
-import { getNodeText, isCall } from './types/utils';
+import { getNodeText, MaybeStandardCall } from './types/utils';
 import { SymbolsHelper } from './symbols';
 
-export interface IResolver {
-    addSymbols?(s: SymbolsHelper): void;
-    matchesNode(s: TypeHelper, n: kataw.CallExpression, options?: IResolverMatchOptions): boolean;
-    objectType?(s: TypeHelper, n: kataw.CallExpression): CType;
-    argumentTypes?(s: TypeHelper, n: kataw.CallExpression): CType[];
-    returnType(s: TypeHelper, n: kataw.CallExpression): CType;
-    needsDisposal(s: TypeHelper, n: kataw.CallExpression): boolean;
-    getTempVarName(s: TypeHelper, n: kataw.CallExpression): string;
-    createTemplate(s: IScope, n: kataw.CallExpression): CTemplateBase;
-    getEscapeNode(s: TypeHelper, n: kataw.CallExpression): kataw.SyntaxNode;
+export interface IResolver<C extends kataw.CallExpression> {
+    objectType?(s: TypeHelper, n: C): CType;
+    argumentTypes?(s: TypeHelper, n: C): CType[];
+    returnType(s: TypeHelper, n: C): CType;
+    needsDisposal(s: TypeHelper, n: C): boolean;
+    getTempVarName(s: TypeHelper, n: C): string;
+    createTemplate(s: IScope, n: C): CTemplateBase;
+    getEscapeNode(s: TypeHelper, n: C): kataw.SyntaxNode;
+}
+
+export interface ITypeExtensionResolver extends IResolver<MaybeStandardCall> {
+    matchesNode(memberType: CType, options?: IResolverMatchOptions): boolean;
+}
+
+export interface IGlobalSymbolResolver extends IResolver<kataw.CallExpression> {
+    addSymbols(s: SymbolsHelper): void;
 }
 
 export interface IResolverMatchOptions {
     determineObjectType: boolean;
 }
 
-var standardCallResolvers: IResolver[] = [];
-export function StandardCallResolver(target: { new(): IResolver })
-{
-    standardCallResolvers.push(new target());
-}
-export class StandardCallHelper {
-    private typeHelper: TypeHelper = null;
-    private resolverMap: Record<string, IResolver> = {};
-    private objTypeResolverMap: Record<string, IResolver> = {};
+export var StandardResolversByPropName: Record<string, ITypeExtensionResolver[]> = {};
 
-    public init(typeHelper: TypeHelper) {
-        this.typeHelper = typeHelper;
-    }
-
-    public bindResolvers(nodes: kataw.SyntaxNode[]) {
-        for (const node of nodes) {
-            if (!isCall(node))
-                continue;
-
-            for (var resolver of standardCallResolvers) {
-                const key = node.id;
-                if (resolver.matchesNode(this.typeHelper, node, { determineObjectType: true }))
-                    this.objTypeResolverMap[key] = resolver;
-                if (resolver.matchesNode(this.typeHelper, node))
-                    this.resolverMap[key] = resolver;
-            }
+var standardCallResolvers: ITypeExtensionResolver[] = [];
+export function StandardCallResolver(...propNames: string[]) {
+    return function (target: { new(): ITypeExtensionResolver })
+    {
+        const resolver = new target();
+        standardCallResolvers.push(resolver);
+        for (const propName of propNames) {
+            if (!Array.isArray(StandardResolversByPropName[propName]))
+                StandardResolversByPropName[propName] = [];
+            StandardResolversByPropName[propName].push(resolver);
         }
     }
-    public isStandardCall(node: kataw.SyntaxNode) {
-        if (!isCall(node))
-            return false;
-        return this.resolverMap[node.id] !== undefined;
-    }
+}
 
-    public matchStringPropName(member: kataw.ExpressionNode, stringPropName: string) {
-        const ident = kataw.createIdentifier(stringPropName, '', kataw.NodeFlags.NoChildren, -1, -1);
-        const propAccess = kataw.createIndexExpression(member, ident, kataw.NodeFlags.ExpressionNode, -1, -1);
-        const argList = kataw.createArgumentList([], false, kataw.NodeFlags.None, -1, -1);
-        const call = kataw.createCallExpression(propAccess, argList, kataw.NodeFlags.None, -1, -1);
+var globalSymbolResolvers: IGlobalSymbolResolver[] = [];
+export function GlobalSymbolResolver(target: { new(): IGlobalSymbolResolver }) {
+    globalSymbolResolvers.push(new target());
+}
 
-        ident.parent = propAccess;
-        propAccess.parent = call;
-        argList.parent = call;
-        call.parent = member.parent;
+export class StandardCallHelper {
+    constructor(private typeHelper: TypeHelper) { };
 
-        for (var resolver of standardCallResolvers) {
-            if (resolver.matchesNode(this.typeHelper, call))
+    public isStandardCall(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
                 return true;
         }
-
         return false;
     }
 
-    public createTemplate(scope: IScope, node: kataw.CallExpression) {
-        const resolver = this.resolverMap[node.id];
-        return resolver ? resolver.createTemplate(scope, node) : null;
+    public matchStringPropName(member: kataw.ExpressionNode, stringPropName: string) {
+        if (!StandardResolversByPropName[stringPropName])
+            return false;
+        const memberType = this.typeHelper.getCType(member);
+        for (const resolver of StandardResolversByPropName[stringPropName]) {
+            if (resolver.matchesNode(memberType))
+                return true;
+        }
+        return false;
     }
-    public getObjectType(node: kataw.CallExpression) {
-        const resolver = this.objTypeResolverMap[node.id];
-        return resolver && resolver.objectType ? resolver.objectType(this.typeHelper, node) : null;
+
+    public createTemplate(scope: IScope, call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
+                return resolver.createTemplate(scope, call);
+        }
+        return null;
     }
-    public getArgumentTypes(node: kataw.CallExpression) {
-        const notDefined = node.argumentList.elements.map(a => null);
-        const resolver = this.objTypeResolverMap[node.id];
-        return resolver && resolver.argumentTypes ? resolver.argumentTypes(this.typeHelper, node) : notDefined;
+    public getObjectType(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.objectType && resolver.matchesNode(memberType, { determineObjectType: true }))
+                return resolver.objectType(this.typeHelper, call);
+        }
+        return null;
     }
-    public getReturnType(node: kataw.CallExpression) {
-        const resolver = this.resolverMap[node.id];
-        return resolver ? resolver.returnType(this.typeHelper, node) : null;
+    public getArgumentTypes(call: MaybeStandardCall) {
+        const notDefined = call.argumentList.elements.map(a => null);
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.argumentTypes && resolver.matchesNode(memberType, { determineObjectType: true }))
+                return resolver.argumentTypes(this.typeHelper, call);
+        }
+        return notDefined;
     }
-    public needsDisposal(node: kataw.CallExpression) {
-        const resolver = this.resolverMap[node.id];
-        return resolver ? resolver.needsDisposal(this.typeHelper, node) : false;
+    public getReturnType(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
+                return resolver.returnType(this.typeHelper, call);
+        }
+        return null;
     }
-    public getTempVarName(node: kataw.CallExpression) {
-        const resolver = this.resolverMap[node.id];
-        if (!resolver)
-            console.warn("Internal error: cannot find matching resolver for node '" + getNodeText(node) + "' in StandardCallHelper.getTempVarName");
-        return resolver ? resolver.getTempVarName(this.typeHelper, node) : 'tmp';
+    public needsDisposal(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
+                return resolver.needsDisposal(this.typeHelper, call);
+        }
+        return false;
     }
-    public getEscapeNode(node: kataw.CallExpression) {
-        const resolver = this.resolverMap[node.id];
-        return resolver ? resolver.getEscapeNode(this.typeHelper, node) : null;
+    public getTempVarName(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
+                return resolver.getTempVarName(this.typeHelper, call);
+        }
+        console.warn("Internal error: cannot find matching resolver for node '" + getNodeText(call) + "' in StandardCallHelper.getTempVarName");
+        return 'tmp';
+    }
+    public getEscapeNode(call: MaybeStandardCall) {
+        const memberType = this.typeHelper.getCType(call.expression.member);
+        for (const resolver of StandardResolversByPropName[call.expression.expression.text]) {
+            if (resolver.matchesNode(memberType))
+                return resolver.getEscapeNode(this.typeHelper, call);
+        }
+        return null;
     }
 }
 
 export function addStandardCallSymbols(symbolHelper: SymbolsHelper) {
-    for (var resolver of standardCallResolvers)
-        resolver.addSymbols?.(symbolHelper);
+    for (var resolver of globalSymbolResolvers)
+        resolver.addSymbols(symbolHelper);
 }

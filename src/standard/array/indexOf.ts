@@ -1,21 +1,17 @@
 import * as kataw from 'kataw';
-import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
-import { ArrayType, NumberVarType, BooleanVarType } from '../../types/ctypes';
+import { CodeTemplate, CTemplateBase } from '../../template';
+import { StandardCallResolver, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, NumberVarType, BooleanVarType, CType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { CBinaryExpression } from '../../nodes/expressions';
 import { TypeHelper } from '../../types/typehelper';
-import { isFieldPropertyAccess } from '../../types/utils';
 
-@StandardCallResolver
-class ArrayIndexOfResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text === "indexOf" && objType instanceof ArrayType;
+@StandardCallResolver('indexOf')
+class ArrayIndexOfResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType) {
+        return memberType instanceof ArrayType;
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return NumberVarType;

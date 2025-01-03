@@ -1,21 +1,17 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver, IResolverMatchOptions } from '../../standard';
-import { ArrayType, NumberVarType, PointerVarType } from '../../types/ctypes';
+import { StandardCallResolver, IResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, CType, NumberVarType, PointerVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
-import { isFieldPropertyAccess } from '../../types/utils';
 
-@StandardCallResolver
-class ArrayUnshiftResolver implements IResolver {
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression, options: IResolverMatchOptions) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
-            return false;
-        let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text === "unshift" && (objType instanceof ArrayType && objType.isDynamicArray || options && options.determineObjectType);
+@StandardCallResolver('unshift')
+class ArrayUnshiftResolver implements ITypeExtensionResolver {
+    public matchesNode(memberType: CType, options: IResolverMatchOptions) {
+        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let elementType = call.argumentList.elements[0] && typeHelper.getCType(call.argumentList.elements[0]);

@@ -3,29 +3,21 @@ import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template
 import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
-import { StandardCallResolver, IResolver } from '../../standard';
-import { isSideEffectExpression, getAllNodesUnder, isFieldPropertyAccess, isStringLiteral, isBinaryExpression } from '../../types/utils';
+import { GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
+import { isSideEffectExpression, getAllNodesUnder, isStringLiteral, isBinaryExpression } from '../../types/utils';
 import { CAssignment } from '../../nodes/assignment';
 import { CString } from '../../nodes/literals';
 import { TypeHelper } from '../../types/typehelper';
 import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
-@StandardCallResolver
-export class ConsoleLogResolver implements IResolver {
+@GlobalSymbolResolver
+export class ConsoleLogResolver implements IGlobalSymbolResolver {
     consoleSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
     public addSymbols(symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
         this.consoleSymbol = symbolHelper.registerSyntheticSymbol(null, 'console');
-        symbolHelper.registerSyntheticSymbol(this.consoleSymbol, 'log');
-    }
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression))
-            return false;
-        const propAccess = call.expression;
-        if (this.symbolHelper.getSymbolAtLocation(propAccess.member) !== this.consoleSymbol)
-            return false;
-        return kataw.isIdentifier(propAccess.expression) && propAccess.expression.text === 'log';
+        symbolHelper.registerSyntheticSymbol(this.consoleSymbol, 'log', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return VoidType;
