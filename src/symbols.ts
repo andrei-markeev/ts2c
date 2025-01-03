@@ -10,6 +10,7 @@ export interface SymbolInfo {
     valueDeclaration: kataw.Identifier | undefined;
     references: kataw.Identifier[];
     members: SymbolInfo[];
+    conflict: boolean;
 }
 
 export interface SymbolScope {
@@ -42,7 +43,7 @@ export class SymbolsHelper {
     }
 
     public registerSymbol(node: kataw.Identifier) {
-        const [path, parent] = this.getSymbolPath(node);
+        let [path, parent] = this.getSymbolPath(node);
         if (!path)
             return;
         this.findSymbolScope(node).symbols[path] = {
@@ -50,7 +51,8 @@ export class SymbolsHelper {
             parent: parent,
             valueDeclaration: node,
             references: [node],
-            members: []
+            members: [],
+            conflict: node.text === path && reservedCSymbolNames.indexOf(path) > -1
         };
     }
 
@@ -64,7 +66,8 @@ export class SymbolsHelper {
             parent: parentSymbol,
             valueDeclaration: undefined,
             references: [],
-            members: []
+            members: [],
+            conflict: false
         };
 
         this.scopes[0].symbols[symbolPath] = symbol;
@@ -148,6 +151,23 @@ export class SymbolsHelper {
     public addStandardSymbols() {
         this.registerSyntheticSymbol(null, 'NaN');
         this.registerSyntheticSymbol(null, 'undefined');
+    }
+
+    // TODO: improve
+    // current system doesn't account for conflicting renames
+    public renameConflictingSymbols() {
+        for (const scope of this.scopes)
+            for (const path in scope.symbols) {
+                const symb = scope.symbols[path];
+                if (symb.conflict) {
+                    const newName = path + "_";
+                    scope.symbols[path] = undefined;
+                    scope.symbols[newName] = symb;
+                    symb.conflict = false;
+                    for (const ref of symb.references)
+                        (ref as any).text = newName;
+                }
+            }
     }
 
     public getStructsAndFunctionPrototypes(typeHelper: TypeHelper) {

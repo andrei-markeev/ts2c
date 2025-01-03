@@ -1,4 +1,4 @@
-var state: { prop: string } = { prop: 'hi'};
+var state = { prop: 'hi'};
 function print() {
     console.log(state);
 }

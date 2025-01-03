@@ -55,6 +55,26 @@ export class StandardCallHelper {
             return false;
         return this.resolverMap[node.id] !== undefined;
     }
+
+    public matchStringPropName(member: kataw.ExpressionNode, stringPropName: string) {
+        const ident = kataw.createIdentifier(stringPropName, '', kataw.NodeFlags.NoChildren, -1, -1);
+        const propAccess = kataw.createIndexExpression(member, ident, kataw.NodeFlags.ExpressionNode, -1, -1);
+        const argList = kataw.createArgumentList([], false, kataw.NodeFlags.None, -1, -1);
+        const call = kataw.createCallExpression(propAccess, argList, kataw.NodeFlags.None, -1, -1);
+
+        ident.parent = propAccess;
+        propAccess.parent = call;
+        argList.parent = call;
+        call.parent = member.parent;
+
+        for (var resolver of standardCallResolvers) {
+            if (resolver.matchesNode(this.typeHelper, call))
+                return true;
+        }
+
+        return false;
+    }
+
     public createTemplate(scope: IScope, node: kataw.CallExpression) {
         const resolver = this.resolverMap[node.id];
         return resolver ? resolver.createTemplate(scope, node) : null;

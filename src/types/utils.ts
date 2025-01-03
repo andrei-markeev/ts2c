@@ -395,6 +395,8 @@ export function isUnder(container: kataw.SyntaxNode, item: kataw.SyntaxNode) {
 export function getNodeText(node: kataw.SyntaxNode) {
     if (node.start === -1)
         return "(synthesized node " + kataw.SyntaxKind[node.kind] + ")";
+    if (kataw.isIdentifier(node))
+        return node.text;
     let root = node;
     while (root.parent)
         root = root.parent;

@@ -125,8 +125,8 @@ export class CFunction extends CTemplateBase implements IScope {
                 .forEach((c: kataw.CallExpression) => {
                     if (kataw.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
                         const decl = root.typeHelper.getDeclaration(c.expression);
-                        if (decl && decl !== node.name && isFunctionDeclaration(decl)) {
-                            root.functionPrototypes.push(new CFunctionPrototype(root, decl))
+                        if (decl && decl !== node.name && isFunctionDeclaration(decl.parent)) {
+                            root.functionPrototypes.push(new CFunctionPrototype(root, decl.parent))
                             declaredFunctionNames.push(decl.text);
                         }
                     }

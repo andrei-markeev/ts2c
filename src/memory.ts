@@ -194,7 +194,7 @@ export class MemoryManager {
 
     /** Sometimes we can reuse existing variable instead of creating a temporary one. */
     public tryReuseExistingVariable(node: kataw.SyntaxNode) {
-        if (isBinaryExpression(node.parent) && kataw.isIdentifier(node.parent.left) && node.parent.operatorToken.kind == kataw.SyntaxKind.Assign)
+        if (isEqualsExpression(node.parent) && kataw.isIdentifier(node.parent.left))
             return node.parent.left;
         if (isVariableDeclaration(node.parent) && kataw.isIdentifier(node.parent.binding))
             return node.parent.binding;
@@ -278,7 +278,9 @@ export class MemoryManager {
                     }
                 }
 
-                if (isEqualsExpression(ref.parent) && getNodeText(ref.parent.left) == heapNodeText) {
+                if (isEqualsExpression(ref.parent) && ref.parent.left === ref 
+                    && kataw.isIdentifier(heapNode) && kataw.isIdentifier(ref) && heapNode.text === ref.text
+                ) {
                     console.log(heapNodeText + " -> Detected assignment: " + getNodeText(ref.parent) + ".");
                     isSimple = false;
                 }
@@ -355,11 +357,11 @@ export class MemoryManager {
                         const funcDecl = decl.parent as kataw.FunctionDeclaration;
                         for (let i = 0; i < call.argumentList.elements.length; i++) {
                             if (call.argumentList.elements[i].start <= ref.start && call.argumentList.elements[i].end >= ref.end) {
-                                if (decl.start + 1 == topScope) {
+                                if (funcDecl.start + 1 === topScope) {
                                     console.log(heapNodeText + " -> Found recursive call with parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
                                     queue.push({ node: decl, nodeFunc });
                                 } else {
-                                    console.log(heapNodeText + " -> Found passing to function " + getNodeText(call.expression) + " as parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
+                                    console.log(heapNodeText + " -> Found passing to function " + getNodeText(call.expression).trim() + " as parameter " + getNodeText(funcDecl.formalParameterList.formalParameters[i]));
                                     queue.push({ node: funcDecl.formalParameterList.formalParameters[i], nodeFunc });
                                 }
                                 isSimple = false;
@@ -385,8 +387,8 @@ export class MemoryManager {
 
         let type = this.typeHelper.getCType(heapNode);
         let varName: string;
-        if (!isTemp)
-            varName = heapNodeText.replace(/\./g,'->');
+        if (!isTemp && kataw.isIdentifier(heapNode))
+            varName = heapNode.text;
         else if (isStringLiteral(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_string");
         else if (isNumericLiteral(heapNode))
@@ -457,13 +459,13 @@ export class MemoryManager {
         if (ref.parent && isVariableDeclaration(ref.parent)) {
             if (ref.parent.initializer && ref.parent.initializer === ref) {
                 queue.push({ node: ref.parent.binding, nodeFunc });
-                console.log(getNodeText(varIdent) + " -> Found initializer-assignment to variable " + getNodeText(ref.parent.binding));
+                console.log(getNodeText(varIdent) + " -> Found initializer-assignment to variable " + getNodeText(ref.parent.binding).trim());
                 return true;
             }
         }
         else if (isEqualsExpression(ref.parent) && ref.parent.right === ref) {
             queue.push({ node: ref.parent.left, nodeFunc });
-            console.log(getNodeText(varIdent) + " -> Found assignment to variable " + getNodeText(ref.parent.left));
+            console.log(getNodeText(varIdent) + " -> Found assignment to variable " + getNodeText(ref.parent.left).trim());
             return true;
         }
 

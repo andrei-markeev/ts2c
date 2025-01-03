@@ -1,5 +1,5 @@
-var x: any = 0;
-var y: string | number[] = [5];
+var x = 0;
+var y = [5];
 
 console.log(x);
 console.log(+y);
