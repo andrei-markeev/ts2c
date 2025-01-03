@@ -16,7 +16,7 @@ export class StringMatchResolver implements IResolver {
         if (call.expression.kind != kataw.SyntaxKind.IndexExpression)
             return false;
         let propAccess = <kataw.IndexExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.expression);
+        let objType = typeHelper.getCType(propAccess.member);
         return objType == StringVarType && getNodeText(propAccess.expression) == "match";
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {

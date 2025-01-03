@@ -15,7 +15,7 @@ class StringCharAtResolver implements IResolver {
         if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;
         let objType = typeHelper.getCType(call.expression.member);
-        return call.expression.expression.text == "charCodeAt" && objType == StringVarType;
+        return call.expression.expression.text == "charAt" && objType == StringVarType;
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;

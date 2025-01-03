@@ -12,7 +12,7 @@ import { getNodeText, isFieldPropertyAccess } from '../../types/utils';
 @StandardCallResolver
 class StringSliceResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.member))
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;
         let objType = typeHelper.getCType(call.expression.member);
         return call.expression.expression.text == "slice" && objType == StringVarType;
@@ -26,7 +26,7 @@ class StringSliceResolver implements IResolver {
     public needsDisposal(typeHelper: TypeHelper, node: kataw.CallExpression) {
         // if parent is expression statement, then this is the top expression
         // and thus return value is not used, so the temporary variable will not be created
-        return node.parent.kind === kataw.SyntaxKind.ExpressionStatement;
+        return node.parent.kind !== kataw.SyntaxKind.ExpressionStatement;
     }
     public getTempVarName(typeHelper: TypeHelper, node: kataw.CallExpression) {
         return "substr";
