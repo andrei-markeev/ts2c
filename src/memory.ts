@@ -70,8 +70,12 @@ export class MemoryManager {
                                 while (isBinaryExpression(n.parent) && isPlusOp(n.parent.operatorToken.kind))
                                     n = n.parent;
                                 let isInConsoleLog = false;
-                                if (isCall(n) && isFieldPropertyAccess(n.expression) && kataw.isIdentifier(n.expression.member) && n.expression.member.text === 'console') {
-                                    isInConsoleLog = this.symbolsHelper.isGlobalSymbol(n.expression.member) && kataw.isIdentifier(n.expression.expression) && n.expression.expression.text === 'log';
+                                let call = n.parent.kind === kataw.SyntaxKind.ArgumentList ? n.parent.parent : null;
+                                if (call && isCall(call) && isFieldPropertyAccess(call.expression)
+                                    && kataw.isIdentifier(call.expression.member) && call.expression.member.text === 'console'
+                                ) {
+                                    isInConsoleLog = this.symbolsHelper.isGlobalSymbol(call.expression.member) 
+                                        && kataw.isIdentifier(call.expression.expression) && call.expression.expression.text === 'log';
                                 }
                                 if (!isInConsoleLog && (toPrimitive(leftType) == StringVarType || toPrimitive(rightType) == StringVarType))
                                     this.scheduleNodeDisposal(binExpr, { canReuse: false });
@@ -119,7 +123,7 @@ export class MemoryManager {
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && !v.array && !v.dict && !v.arrayWithContents).length) {
             gcVars.push("gc_" + realScopeId);
         }
-        if (scopeId == "main" && this.needsGCMain && gcVars[0] != "gc_main") {
+        if (scopeId === "main" && this.needsGCMain && gcVars[0] !== "gc_main") {
             gcVars.push("gc_main");
         }
         if (this.scopes[scopeId] && this.scopes[scopeId].filter(v => !v.simple && v.array).length) {

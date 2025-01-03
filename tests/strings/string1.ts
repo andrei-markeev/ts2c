@@ -1,4 +1,4 @@
-var s: any = "10";
+var s = "10";
 var n = 10;
 console.log(s == "10");
 console.log(s.toString() == "10");

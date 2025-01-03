@@ -11,7 +11,7 @@ import { getNodeText, isFieldPropertyAccess } from '../../types/utils';
 @StandardCallResolver
 class StringSearchResolver implements IResolver {
     public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.member))
+        if (!isFieldPropertyAccess(call.expression) || !kataw.isIdentifier(call.expression.expression))
             return false;
         let objType = typeHelper.getCType(call.expression.member);
         return call.expression.expression.text == "search" && objType == StringVarType;

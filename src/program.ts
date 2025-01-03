@@ -7,7 +7,7 @@ import { SymbolsHelper } from './symbols';
 import { MemoryManager } from './memory';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from './template';
 import { CVariable, CVariableDestructors } from './nodes/variable';
-import { isFieldAccess, isFunction, isFunctionDeclaration, isPropertyDefinition, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
+import { isCatchClause, isFieldAccess, isFunction, isFunctionDeclaration, isPropertyDefinition, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
 import { addStandardCallSymbols, StandardCallHelper } from './standard';
 
 // these imports are here only because it is necessary to run decorators
@@ -1059,6 +1059,8 @@ export class CProgram implements IScope {
                     else if (isVariableDeclaration(n.parent) && n.parent.binding === n)
                         this.symbolsHelper.registerSymbol(n);
                     else if (isPropertyDefinition(n.parent) && n.parent.left === n)
+                        this.symbolsHelper.registerSymbol(n);
+                    else if (isCatchClause(n.parent) && n.parent.catchParameter === n)
                         this.symbolsHelper.registerSymbol(n);
                     else if (isFieldAccess(n.parent))
                         this.symbolsHelper.addReference(n);
