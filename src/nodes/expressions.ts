@@ -536,15 +536,7 @@ class CInExpression extends CTemplateBase {
         this.isUniversalVar = type === UniversalVarType;
 
         if (isStringLiteral(node.left)) {
-            const ident = kataw.createIdentifier(node.left.text, node.left.text, kataw.NodeFlags.NoChildren, -1, -1);
-            const propAccess = kataw.createIndexExpression(node.right, ident, kataw.NodeFlags.ExpressionNode, -1, -1);
-            const argList = kataw.createArgumentList([], false, kataw.NodeFlags.None, -1, -1);
-            const standardCall = kataw.createCallExpression(propAccess, argList, kataw.NodeFlags.None, -1, -1);
-            ident.parent = propAccess;
-            propAccess.parent = standardCall;
-            argList.parent = standardCall;
-            standardCall.parent = node.parent;
-            if (scope.root.standardCallHelper.isStandardCall(standardCall))
+            if (scope.root.standardCallHelper.matchStringPropName(node.right, node.left.text))
                 this.result = "TRUE";
         }
         

@@ -1087,6 +1087,7 @@ export class CProgram implements IScope {
         }
         rootNode.id = rootNode.start + "_" + rootNode.end + "_" + rootNode.kind;
         kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
+        this.symbolsHelper.renameConflictingSymbols();
         console.log('visit all nodes', performance.now() - visitStart);
         nodes.sort((a, b) => a.start - b.start);
 
@@ -1095,20 +1096,6 @@ export class CProgram implements IScope {
         // Post processing TypeScript AST
         let nodesToRename = new Set<ts.Identifier>(), symbolsToRename = new Set<ts.Symbol>();
         for (let n of nodes) {
-            if (ts.isIdentifier(n)) {
-                const symbol = tsTypeChecker.getSymbolAtLocation(n);
-                if (symbol) {
-                    if (tsTypeChecker.isUndefinedSymbol(symbol))
-                        (<any>n.kind) = ts.SyntaxKind.UndefinedKeyword;
-
-                    if (symbol.flags & (ts.SymbolFlags.Variable | ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Enum)) {
-                        if (reservedCSymbolNames.indexOf(symbol.name) > -1) {
-                            nodesToRename.add(n);
-                            symbolsToRename.add(symbol);
-                        }
-                    }
-                }
-            }
             const iifeVariant1 = ts.isFunctionExpression(n)
                 && ts.isCallExpression(n.parent)
                 && ts.isParenthesizedExpression(n.parent.parent)
@@ -1146,22 +1133,6 @@ export class CProgram implements IScope {
         const startInferTypes = performance.now();
         this.typeHelper.inferTypes(nodes);
         console.log('infer types:', performance.now() - startInferTypes);
-
-        /*
-        // TODO: this is too hacky and fragile
-        // a proper solution would be to track down all `text` and `getText()` usages
-        // and map them to the renamed symbols
-        for (let n of nodesToRename) {
-            const newText = n.escapedText + '_';
-            (<any>n).escapedText = newText;
-            (<any>n).getText = () => newText;
-        }
-        for (let symbol of symbolsToRename) {
-            (<any>symbol).escapedName = symbol.escapedName + '_';
-        }
-        // --
-
-        */
 
         this.memoryManager.scheduleNodeDisposals(nodes);
 
