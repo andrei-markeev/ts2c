@@ -33,18 +33,19 @@ struct array_number_t {
 };
 
 static struct array_string_t * array1;
-static int16_t i;
-static struct array_number_t * array2;
 static int16_t j;
+static struct array_number_t * array2;
+static int16_t i;
+static int16_t k;
 
 int main(void) {
     ARRAY_CREATE(array1, 2, 0);
     ARRAY_PUSH(array1, "Hello");
     printf("[ ");
-    for (i = 0; i < array1->size; i++) {
-        if (i != 0)
+    for (j = 0; j < array1->size; j++) {
+        if (j != 0)
             printf(", ");
-        printf("\"%s\"", array1->data[i]);
+        printf("\"%s\"", array1->data[j]);
     }
     printf(" ]\n");
     ARRAY_CREATE(array2, 2, 0);
@@ -52,10 +53,10 @@ int main(void) {
     for (;i < 5;i++)
         ARRAY_PUSH(array2, 10 * i);
     printf("[ ");
-    for (j = 0; j < array2->size; j++) {
-        if (j != 0)
+    for (k = 0; k < array2->size; k++) {
+        if (k != 0)
             printf(", ");
-        printf("%d", array2->data[j]);
+        printf("%d", array2->data[k]);
     }
     printf(" ]\n");
     free(array1->data);

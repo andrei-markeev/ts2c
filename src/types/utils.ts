@@ -129,6 +129,9 @@ export function isFieldPropertyAccess(n: kataw.SyntaxNode): n is kataw.IndexExpr
 export function isFieldAccess(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression | kataw.IndexExpression {
     return n.kind === kataw.SyntaxKind.MemberAccessExpression || n.kind === kataw.SyntaxKind.IndexExpression;
 }
+export function isExpressionStatement(n: kataw.SyntaxNode): n is kataw.ExpressionStatement {
+    return n.kind === kataw.SyntaxKind.ExpressionStatement;
+}
 export function isWithStatement(n: kataw.SyntaxNode): n is kataw.WithStatement {
     return n.kind === kataw.SyntaxKind.WithStatement;
 }

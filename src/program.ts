@@ -7,8 +7,7 @@ import { SymbolsHelper } from './symbols';
 import { MemoryManager } from './memory';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from './template';
 import { CVariable, CVariableDestructors } from './nodes/variable';
-import { isCatchClause, isFieldAccess, isFunction, isFunctionDeclaration, isPropertyDefinition, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
-import { addStandardCallSymbols, StandardCallHelper } from './standard';
+import { StandardCallHelper } from './standard';
 
 // these imports are here only because it is necessary to run decorators
 import './nodes/statements';
@@ -48,6 +47,7 @@ import './standard/string/match';
 import './standard/number/number';
 
 import './standard/console/log';
+import { collectSymbolsAndTransformAst } from './ast';
 
 export interface IScope {
     parent: IScope;
@@ -1038,95 +1038,8 @@ export class CProgram implements IScope {
     constructor(rootNode: kataw.RootNode) {
 
         this.symbolsHelper = new SymbolsHelper();
-        this.symbolsHelper.createSymbolScope(rootNode.start, rootNode.end);
-        this.symbolsHelper.addStandardSymbols();
-        addStandardCallSymbols(this.symbolsHelper);
-
-        const visitStart = performance.now();
-        const nodes: kataw.SyntaxNode[] = [rootNode];
-        const transform = kataw.createTransform();
-        const createVisitor = (parent: kataw.SyntaxNode) => {
-            return (n: kataw.SyntaxNode) => {
-                n.parent = parent;
-                n.id = n.start + "_" + n.end + "_" + n.kind;
-                nodes.push(n);
-                // TODO: imports
-                if (kataw.isIdentifier(n)) {
-                    if (isFunctionDeclaration(n.parent) && n.parent.name === n)
-                        this.symbolsHelper.registerSymbol(n);
-                    else if (n.parent.kind === kataw.SyntaxKind.FormalParameterList)
-                        this.symbolsHelper.registerSymbol(n);
-                    else if (isVariableDeclaration(n.parent) && n.parent.binding === n)
-                        this.symbolsHelper.registerSymbol(n);
-                    else if (isPropertyDefinition(n.parent) && n.parent.left === n)
-                        this.symbolsHelper.registerSymbol(n);
-                    else if (isCatchClause(n.parent) && n.parent.catchParameter === n)
-                        this.symbolsHelper.registerSymbol(n);
-                    else if (isFieldAccess(n.parent))
-                        this.symbolsHelper.addReference(n);
-                    else
-                        this.symbolsHelper.addReference(n);
-
-                    if (n.text === "NaN" && this.symbolsHelper.isGlobalSymbol(n))
-                        n.kind = SyntaxKind_NaNIdentifier;
-                    else if (n.text === "Number" && this.symbolsHelper.isGlobalSymbol(n) && isFieldAccess(n.parent) && n.parent.member === n && kataw.isIdentifier(n.parent.expression) && n.parent.expression.text === 'NaN')
-                        n.parent.kind = SyntaxKind_NaNIdentifier;
-                    else if (n.text === "undefined" && this.symbolsHelper.isGlobalSymbol(n))
-                        n.kind = kataw.SyntaxKind.UndefinedKeyword;
-
-                    if (!n.text && n.kind === kataw.SyntaxKind.ThisKeyword)
-                        (n as any).text = 'this';
-                } else if (isFunction(n)) {
-                    this.symbolsHelper.createSymbolScope(n.formalParameterList.start, n.end);
-                } else if (isWithStatement(n)) {
-                    this.symbolsHelper.createSymbolScope(n.statement.start, n.end);
-                    // TODO: add symbols from n.expression into scope
-                }
-
-                kataw.visitEachChild(transform, n, createVisitor(n));
-                return n;
-            }
-        }
-        rootNode.id = rootNode.start + "_" + rootNode.end + "_" + rootNode.kind;
-        kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
-        this.symbolsHelper.renameConflictingSymbols();
-        console.log('visit all nodes', performance.now() - visitStart);
+        const [statements, nodes] = collectSymbolsAndTransformAst(rootNode, this.symbolsHelper);
         nodes.sort((a, b) => a.start - b.start);
-
-
-        /*
-        // Post processing TypeScript AST
-        let nodesToRename = new Set<ts.Identifier>(), symbolsToRename = new Set<ts.Symbol>();
-        for (let n of nodes) {
-            const iifeVariant1 = ts.isFunctionExpression(n)
-                && ts.isCallExpression(n.parent)
-                && ts.isParenthesizedExpression(n.parent.parent)
-                && ts.isExpressionStatement(n.parent.parent.parent)
-                && n.parent.expression === n;
-            const iifeVariant2 = ts.isFunctionExpression(n)
-                && ts.isParenthesizedExpression(n.parent)
-                && ts.isCallExpression(n.parent.parent)
-                && ts.isExpressionStatement(n.parent.parent.parent)
-                && n.parent.parent.expression === n.parent;
-            if (iifeVariant1 || iifeVariant2) {
-                const iife = <ts.FunctionExpression>n;
-                const returns = getAllNodesInFunction(iife).filter(ts.isReturnStatement);
-                if (returns.length === 0) {
-                    const replacee = iife.parent.parent;
-                    const statements = iife.body.statements;
-                    const replacement = ts.factory.createBlock(statements);
-                    (replacement as any).parent = replacee.parent;
-                    (replacement as any).pos = replacee.pos;
-                    (replacement as any).end = replacee.end;
-                    (replacement as any).flags = replacee.flags;
-                    for (const prop of Object.getOwnPropertyNames(replacee))
-                        delete replacee[prop];
-                    for (const prop of Object.getOwnPropertyNames(replacement))
-                        replacee[prop] = replacement[prop];
-                }
-            }
-        }
-        */
 
         this.standardCallHelper = new StandardCallHelper();
         this.typeHelper = new TypeHelper(this.symbolsHelper, this.standardCallHelper);
@@ -1152,7 +1065,7 @@ export class CProgram implements IScope {
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
-        for (let s of rootNode.statements)
+        for (let s of statements)
             this.statements.push(CodeTemplateFactory.createForNode(this, s));
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes(this.typeHelper);

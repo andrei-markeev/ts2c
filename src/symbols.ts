@@ -89,10 +89,14 @@ export class SymbolsHelper {
         const [symbolPath] = this.getSymbolPath(node);
         if (!symbolPath)
             return;
-        let scope = this.findSymbolScope(node)
+        return this.getSymbolByPath(node, symbolPath);
+    }
+
+    private getSymbolByPath(span: { start: number, end: number }, path: string) {
+        let scope = this.findSymbolScope(span)
         let found: SymbolInfo | undefined = undefined;
         while (scope && !found) {
-            found = scope.symbols[symbolPath];
+            found = scope.symbols[path];
             scope = scope.parent;
         }
         return found;
@@ -252,6 +256,12 @@ export class SymbolsHelper {
         return userStructCode;
     }
 
+    private symbolOrTempVarExists(scopeId: string | number, scopeNode: kataw.SyntaxNode, varName: string) {
+        return this.temporaryVariables[scopeId].indexOf(varName) > -1
+            || scopeNode && this.getSymbolByPath(scopeNode, varName) !== undefined
+            || this.scopes[0].symbols[varName] !== undefined;
+    }
+
     private temporaryVariables: { [scopeId: string]: string[] } = {
         "main": reservedCSymbolNames
     };
@@ -262,17 +272,15 @@ export class SymbolsHelper {
     public addIterator(scopeNode: kataw.SyntaxNode): string {
         let parentFunc = findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.start + 1 || 'main';
-        let existingSymbolNames = Object.keys(this.findSymbolScope(scopeNode).symbols);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
-        existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
         let i = 0;
-        while (i < this.iteratorVarNames.length && existingSymbolNames.indexOf(this.iteratorVarNames[i]) > -1)
+        while (i < this.iteratorVarNames.length && this.symbolOrTempVarExists(scopeId, scopeNode, this.iteratorVarNames[i]))
             i++;
         let iteratorVarName;
         if (i == this.iteratorVarNames.length) {
             i = 2;
-            while (existingSymbolNames.indexOf("i_" + i) > -1)
+            while (this.symbolOrTempVarExists(scopeId, scopeNode, 'i_' + i))
                 i++;
             iteratorVarName = "i_" + i;
         }
@@ -289,13 +297,11 @@ export class SymbolsHelper {
     public addTemp(scopeNode: kataw.SyntaxNode, proposedName: string, reserve: boolean = true): string {
         let parentFunc = findParentFunction(scopeNode);
         let scopeId = parentFunc && parentFunc.start + 1 || 'main';
-        let existingSymbolNames = scopeNode == null ? [] : Object.keys(this.findSymbolScope(scopeNode).symbols);
         if (!this.temporaryVariables[scopeId])
             this.temporaryVariables[scopeId] = [];
-        existingSymbolNames = existingSymbolNames.concat(this.temporaryVariables[scopeId]);
-        if (existingSymbolNames.indexOf(proposedName) > -1) {
+        if (this.symbolOrTempVarExists(scopeId, scopeNode, proposedName)) {
             let i = 2;
-            while (existingSymbolNames.indexOf(proposedName + "_" + i) > -1)
+            while (this.symbolOrTempVarExists(scopeId, scopeNode, proposedName + "_" + i))
                 i++;
             proposedName = proposedName + "_" + i;
         }
