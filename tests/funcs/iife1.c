@@ -8,7 +8,7 @@ int main(void) {
         const char * x;
         x = "inside ffe";
         printf("%s\n", x);
-    };
+    }
     printf("%s\n", x);
 
     return 0;
