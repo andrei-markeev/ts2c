@@ -14,9 +14,10 @@ export class TypeHelper {
     private typeOfNodeDict: { [id: string]: { type: CType } } = {};
     private typeMerger: TypeMerger = new TypeMerger();
     private typeResolver: TypeResolver;
+    public standardCallHelper: StandardCallHelper;
 
-    constructor(private symbolsHelper: SymbolsHelper, private standardCallHelper: StandardCallHelper) {
-        this.standardCallHelper.init(this);
+    constructor(private symbolsHelper: SymbolsHelper) {
+        this.standardCallHelper = new StandardCallHelper(this);
         this.typeResolver = new TypeResolver(this, symbolsHelper, this.standardCallHelper, this.typeMerger, this.typeOfNodeDict);
     }
 
@@ -52,13 +53,6 @@ export class TypeHelper {
                     if (!this.arrayLiteralsTypes[node.start])
                         this.determineArrayType(<kataw.ArrayLiteral>node);
                     return this.arrayLiteralsTypes[node.start];
-                }
-            case kataw.SyntaxKind.CallExpression:
-                {
-                    let call = <kataw.CallExpression>node;
-                    let retType = this.standardCallHelper.getReturnType(call);
-                    if (retType)
-                        return retType;
                 }
         }
 

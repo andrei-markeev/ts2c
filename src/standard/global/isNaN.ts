@@ -1,22 +1,19 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
+import { IResolver, GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
 import { BooleanVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CAsUniversalVar } from '../../nodes/typeconvert';
 import { TypeHelper } from '../../types/typehelper';
 import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
-@StandardCallResolver
-class IsNaNResolver implements IResolver {
+@GlobalSymbolResolver
+class IsNaNResolver implements IGlobalSymbolResolver {
     isNaNSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
     public addSymbols(symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.isNaNSymbol = symbolHelper.registerSyntheticSymbol(null, 'isNaN');
-    }
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        return kataw.isIdentifier(call.expression) && call.expression.text == "isNaN" && this.symbolHelper.getSymbolAtLocation(call.expression) === this.isNaNSymbol;
+        this.isNaNSymbol = symbolHelper.registerSyntheticSymbol(null, 'isNaN', this);
     }
     public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return [ UniversalVarType ];

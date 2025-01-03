@@ -1,22 +1,19 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
+import { GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
 import { NumberVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CExpression } from '../../nodes/expressions';
 import { TypeHelper } from '../../types/typehelper';
 import { SymbolInfo, SymbolsHelper } from '../../symbols';
 
-@StandardCallResolver
-class ParseIntResolver implements IResolver {
+@GlobalSymbolResolver
+class ParseIntResolver implements IGlobalSymbolResolver {
     parseIntSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
     public addSymbols(symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.parseIntSymbol = symbolHelper.registerSyntheticSymbol(null, 'parseInt');
-    }
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        return kataw.isIdentifier(call.expression) && call.expression.text == "parseInt" && this.symbolHelper.getSymbolAtLocation(call.expression) === this.parseIntSymbol;
+        this.parseIntSymbol = symbolHelper.registerSyntheticSymbol(null, 'parseInt', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return NumberVarType;

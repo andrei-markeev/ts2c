@@ -9,7 +9,6 @@ import { CString } from './literals';
 import { CAsNumber, CAsString_Length, CAsString_Concat, CAsUniversalVar, CAsString } from './typeconvert';
 import { isCompoundAssignment, isNumberOp, isIntegerOp, isRelationalOp, isEqualityOp, isLogicOp, isInBoolContext, isSimpleNode, toNumberCanBeNaN, getNodeText, isStringLiteral, isFieldPropertyAccess, isFieldAccess, isFieldElementAccess, isNumericLiteral } from '../types/utils';
 import { CArraySize } from './elementaccess';
-import { StandardCallHelper } from '../standard';
 
 export type CExpression = string | CTemplateBase;
 

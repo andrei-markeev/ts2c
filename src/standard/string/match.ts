@@ -1,7 +1,7 @@
 import * as kataw from 'kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver } from '../../standard';
-import { ArrayType, RegexVarType, StringVarType } from '../../types/ctypes';
+import { StandardCallResolver, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, CType, RegexVarType, StringVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
@@ -9,15 +9,11 @@ import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
 import { getNodeText } from '../../types/utils';
 
-@StandardCallResolver
-export class StringMatchResolver implements IResolver {
+@StandardCallResolver('match')
+export class StringMatchResolver implements ITypeExtensionResolver {
     name: 'StringMatchResolver';
-    public matchesNode(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        if (call.expression.kind != kataw.SyntaxKind.IndexExpression)
-            return false;
-        let propAccess = <kataw.IndexExpression>call.expression;
-        let objType = typeHelper.getCType(propAccess.member);
-        return objType == StringVarType && getNodeText(propAccess.expression) == "match";
+    public matchesNode(memberType: CType) {
+        return memberType === StringVarType;
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;

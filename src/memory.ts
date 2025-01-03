@@ -1,9 +1,8 @@
 import * as kataw from 'kataw';
 import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType, StructType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
-import { StringMatchResolver } from './standard/string/match';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText, isCallArgument } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText, isCallArgument, isMaybeStandardCall, MaybeStandardCall } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
@@ -91,8 +90,14 @@ export class MemoryManager {
                     break;
                 case kataw.SyntaxKind.CallExpression:
                     {
-                        if (this.standardCallHelper.needsDisposal(<kataw.CallExpression>node))
+                        if (isMaybeStandardCall(node) && this.standardCallHelper.needsDisposal(node))
                             this.scheduleNodeDisposal(node);
+                        else {
+                            const call = <kataw.CallExpression>node;
+                            const symbol = this.symbolsHelper.getSymbolAtLocation(call.expression);
+                            if (symbol && symbol.resolver && symbol.resolver.needsDisposal(this.typeHelper, call))
+                                this.scheduleNodeDisposal(node);
+                        }
                     }
                     break;
                 case kataw.SyntaxKind.NewExpression:
@@ -344,10 +349,18 @@ export class MemoryManager {
                     const call = <kataw.CallExpression>ref.parent.parent;
                     const decl = kataw.isIdentifier(call.expression) && this.typeHelper.getDeclaration(call.expression);
                     if (!decl) {
-                        let isStandardCall = this.standardCallHelper.isStandardCall(call);
+                        let isStandardCall = isMaybeStandardCall(call) && this.standardCallHelper.isStandardCall(call);
+                        let standardCallEscapeNode;
+
+                        if (!isStandardCall) {
+                            const symbol = this.symbolsHelper.getSymbolAtLocation(call.expression);
+                            isStandardCall = symbol && symbol.resolver ? true : false;
+                            if (isStandardCall)
+                                standardCallEscapeNode = symbol.resolver.getEscapeNode(this.typeHelper, call);
+                        } else
+                            standardCallEscapeNode = this.standardCallHelper.getEscapeNode(<MaybeStandardCall>call)
 
                         if (isStandardCall) {
-                            let standardCallEscapeNode = this.standardCallHelper.getEscapeNode(call);
                             if (standardCallEscapeNode) {
                                 console.log(heapNodeText + " escapes to '" + getNodeText(standardCallEscapeNode) + "' via standard call '" + getNodeText(call) + "'.");
                                 queue.push({ node: standardCallEscapeNode, nodeFunc });
@@ -405,7 +418,7 @@ export class MemoryManager {
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_result");
         else if (isUnaryExpression(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, "tmp_number");
-        else if (isCall(heapNode))
+        else if (isMaybeStandardCall(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, this.standardCallHelper.getTempVarName(heapNode));
         else if (kataw.isIdentifier(heapNode))
             varName = this.symbolsHelper.addTemp(heapNode, heapNode.text);
@@ -422,7 +435,7 @@ export class MemoryManager {
         let arrayWithContents = false;
         if (this.originalNodes[key])
             vnode = this.originalNodes[key];
-        if (vnode.kind == kataw.SyntaxKind.CallExpression && new StringMatchResolver().matchesNode(this.typeHelper, <kataw.CallExpression>vnode))
+        if (isMaybeStandardCall(vnode) && vnode.expression.expression.text === 'match' && this.typeHelper.getCType(vnode.expression.member) === StringVarType)
             arrayWithContents = true;
 
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
