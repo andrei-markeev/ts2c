@@ -1,4 +1,3 @@
-var performance = require("node:perf_hooks").performance;
 import * as kataw from '@andrei-markeev/kataw';
 import { CFunctionPrototype, CFunction } from './nodes/function';
 import { CRegexSearchFunction } from './nodes/regexfunc';
@@ -1031,26 +1030,7 @@ export class CProgram implements IScope {
     public destructors: CVariableDestructors;
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
-    public typeHelper: TypeHelper;
-    public standardCallHelper: StandardCallHelper;
-    public symbolsHelper: SymbolsHelper;
-    public memoryManager: MemoryManager;
-    constructor(rootNode: kataw.RootNode) {
-
-        this.symbolsHelper = new SymbolsHelper();
-        const nodes = collectSymbolsAndTransformAst(rootNode, this.symbolsHelper);
-        nodes.sort((a, b) => a.start - b.start);
-
-        this.typeHelper = new TypeHelper(this.symbolsHelper);
-        this.standardCallHelper = this.typeHelper.standardCallHelper;
-        this.memoryManager = new MemoryManager(this.typeHelper, this.symbolsHelper, this.standardCallHelper);
-
-        const startInferTypes = performance.now();
-        this.typeHelper.inferTypes(nodes);
-        console.log('infer types:', performance.now() - startInferTypes);
-
-        this.memoryManager.scheduleNodeDisposals(nodes);
-
+    constructor(rootNode: kataw.RootNode, public symbolsHelper: SymbolsHelper, public typeHelper: TypeHelper, public standardCallHelper: StandardCallHelper, public memoryManager: MemoryManager) {
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
             this.headerFlags.array = true;

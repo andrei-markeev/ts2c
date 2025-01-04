@@ -6,7 +6,7 @@ import { CVariable, CVariableDeclaration, CVariableDestructors } from './variabl
 import { CExpression, CCondition } from './expressions';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from './elementaccess';
 import { AssignmentHelper } from './assignment';
-import { getAllNodesUnder, getNodeText, getVarDeclFromSimpleInitializer, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForBinding, isForInStatement, isForOfStatement, isForStatement, isLexicalDeclaration, isSimpleInitializer, isWhileStatement } from '../types/utils';
+import { getAllNodesUnder, getNodeText, getVarDeclFromSimpleInitializer, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForInStatement, isForOfStatement, isForStatement, isSimpleInitializer, isStringLiteral, isWhileStatement } from '../types/utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, kataw.SyntaxKind.LabelledStatement)
 export class CLabeledStatement extends CTemplateBase {
@@ -451,15 +451,18 @@ export class CBlock extends CTemplateBase implements IScope {
 {/if}
 `, kataw.SyntaxKind.ImportDeclaration)
 export class CImport extends CTemplateBase {
-    public nodeText: string;
+    public nodeText: string = null;
     constructor(scope: IScope, node: kataw.ImportDeclaration) {
         super();
-        if (!kataw.isIdentifier(node.moduleSpecifier)) {
+        let moduleNameNode = node.moduleSpecifier;
+        if (moduleNameNode === null)
+            moduleNameNode = node.fromClause.from;
+        if (!isStringLiteral(moduleNameNode)) {
             this.nodeText = getNodeText(node);
             return;
         }
 
-        let moduleName = node.moduleSpecifier.text;
+        let moduleName = moduleNameNode.text;
         const isCInclude = moduleName.indexOf('ts2c-target') == 0;
         if (isCInclude) {
             moduleName = moduleName.split('/').slice(1).join('/');

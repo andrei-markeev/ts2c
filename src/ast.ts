@@ -1,7 +1,6 @@
-var performance = require("node:perf_hooks").performance;
 import * as kataw from '@andrei-markeev/kataw';
 import { addStandardCallSymbols } from "./standard";
-import { getAllNodesInFunction, isCall, isCatchClause, isExpressionStatement, isFieldAccess, isFunction, isFunctionDeclaration, isFunctionExpression, isParenthesizedExpression, isPropertyDefinition, isReturnStatement, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
+import { getAllNodesInFunction, isCall, isCatchClause, isExpressionStatement, isFieldAccess, isFunction, isFunctionDeclaration, isFunctionExpression, isParenthesizedExpression, isPropertyDefinition, isReturnStatement, isStringLiteral, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
 import { SymbolsHelper } from './symbols';
 
 export let astInfo = {
@@ -13,7 +12,6 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, symbolsH
     symbolsHelper.addStandardSymbols();
     addStandardCallSymbols(symbolsHelper);
 
-    const visitStart = performance.now();
     const nodes: kataw.SyntaxNode[] = [rootNode];
     const transform = kataw.createTransform();
     const createVisitor = (parent: kataw.SyntaxNode) => {
@@ -86,7 +84,6 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, symbolsH
     rootNode.id = astInfo.nextNodeId++;
     kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
     symbolsHelper.renameConflictingSymbols();
-    console.log('visit all nodes', performance.now() - visitStart);
 
     return nodes;
 }

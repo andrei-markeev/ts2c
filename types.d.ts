@@ -6,6 +6,7 @@ declare global {
         warn: (...args: any) => void;
         log: (...args: any) => void;
     }
+    var process: undefined | { exit(exitCode: number): void; }
 }
 
 declare module "@andrei-markeev/kataw" {
