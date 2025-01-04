@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType, StructType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
 import { SymbolsHelper } from './symbols';
@@ -24,7 +24,7 @@ type QueueItem = {
 export class MemoryManager {
     private scopes: { [scopeId: string]: VariableScopeInfo[] } = {};
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
-    private reusedVariables: { [key: string]: string } = {};
+    private reusedVariables: { [key: number]: number } = {};
     private originalNodes: { [key: string]: kataw.SyntaxNode } = {};
     private references: { [key: string]: kataw.SyntaxNode[] } = {};
     private needsGCMain: boolean = false;

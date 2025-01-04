@@ -3,7 +3,7 @@
 var performance = require("node:perf_hooks").performance;
 var path = require('path');
 var fs = require('fs');
-var kataw = require('kataw');
+var kataw = require('@andrei-markeev/kataw');
 var ts2cprogram = require(path.join(__dirname, "../src/", "program.js"));
 
 if (process.argv.length < 2)

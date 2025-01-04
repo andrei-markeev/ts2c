@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
 import { NumberVarType } from '../../types/ctypes';

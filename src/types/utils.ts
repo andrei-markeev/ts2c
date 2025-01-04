@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CType, StringVarType, BooleanVarType, UniversalVarType, NumberVarType, PointerVarType, ArrayType, StructType, DictType, FuncType, VoidType } from './ctypes';
 import { TypeMerger } from './merge';
 import { StandardResolversByPropName } from '../standard';
@@ -374,11 +374,7 @@ export function getAllNodesInFunction(node: kataw.FunctionExpression | kataw.Fun
 const transform = kataw.createTransform();
 export function getChildNodes(node: kataw.SyntaxNode) {
     const children = [];
-    function visit(node) {
-        children.push(node);
-        return node;
-    }
-    kataw.visitEachChild(transform, node, visit);
+    kataw.visitEachChild(transform, node, (node) => children.push(node));
     return children;
 }
 

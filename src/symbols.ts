@@ -1,4 +1,4 @@
-import * as kataw from 'kataw'
+import * as kataw from '@andrei-markeev/kataw'
 import { CType, StructType, ArrayType, NumberVarType, FuncType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
 import { findParentFunction, isFieldPropertyAccess, isPropertyDefinition, isStringLiteral } from './types/utils';

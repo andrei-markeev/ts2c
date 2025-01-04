@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CTemplateBase } from '../../template';
 import { IResolver, GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
 import { BooleanVarType, UniversalVarType } from '../../types/ctypes';

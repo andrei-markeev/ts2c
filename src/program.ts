@@ -1,5 +1,5 @@
 var performance = require("node:perf_hooks").performance;
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CFunctionPrototype, CFunction } from './nodes/function';
 import { CRegexSearchFunction } from './nodes/regexfunc';
 import { TypeHelper } from './types/typehelper';
@@ -1038,7 +1038,7 @@ export class CProgram implements IScope {
     constructor(rootNode: kataw.RootNode) {
 
         this.symbolsHelper = new SymbolsHelper();
-        const [statements, nodes] = collectSymbolsAndTransformAst(rootNode, this.symbolsHelper);
+        const nodes = collectSymbolsAndTransformAst(rootNode, this.symbolsHelper);
         nodes.sort((a, b) => a.start - b.start);
 
         this.typeHelper = new TypeHelper(this.symbolsHelper);
@@ -1065,7 +1065,7 @@ export class CProgram implements IScope {
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
-        for (let s of statements)
+        for (let s of rootNode.statements)
             this.statements.push(CodeTemplateFactory.createForNode(this, s));
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes(this.typeHelper);

@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../types/ctypes';
 import { IScope } from '../../program';

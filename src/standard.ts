@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { IScope } from './program';
 import { CType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';

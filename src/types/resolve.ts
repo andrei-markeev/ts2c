@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 
 import { StandardCallHelper } from '../standard';
 import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMaybeStandardCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, isFieldPropertyAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding } from './utils';
@@ -6,7 +6,7 @@ import { CType, NumberVarType, StringVarType, ArrayType, StructType, DictType, F
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
 import { TypeHelper } from './typehelper';
-import { SyntaxNode } from 'kataw';
+import { SyntaxNode } from '@andrei-markeev/kataw';
 import { SymbolsHelper } from '../symbols';
 
 type NodeFunc<T extends kataw.SyntaxNode> = { (n: T): kataw.SyntaxNode };

@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 
 import { StandardCallHelper } from '../standard';
 import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType } from './ctypes';
@@ -6,6 +6,7 @@ import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
 import { SymbolsHelper } from '../symbols';
 import { SyntaxKind_NaNIdentifier } from './utils';
+import { astInfo } from '../ast';
 
 
 export class TypeHelper {
@@ -79,7 +80,7 @@ export class TypeHelper {
         if (!n/* || !(n.flags & ts.NodeFlags.Synthesized)*/)
             return false;
         
-        n.id = "_" + TypeHelper.syntheticNodesCounter;
+        n.id = astInfo.nextNodeId++;
         n.end = TypeHelper.syntheticNodesCounter++;
         this.typeResolver.setNodeType(n, t);
     }

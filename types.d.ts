@@ -1,4 +1,4 @@
-import { SyntaxNode } from "kataw";
+import { SyntaxNode } from "@andrei-markeev/kataw";
 
 declare global {
     var console: {
@@ -8,9 +8,9 @@ declare global {
     }
 }
 
-declare module "kataw" {
+declare module "@andrei-markeev/kataw" {
     interface SyntaxNode {
-        id: string;
+        id: number;
         parent?: SyntaxNode;
     }
 }

@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isVariableDeclaration, isObjectLiteral, isPropertyDefinition, isStringLiteralAsIdentifier, isFieldPropertyAccessNotMethodCall, isFieldElementAccessNotMethodCall } from './utils';
 import { SymbolsHelper } from '../symbols';
 

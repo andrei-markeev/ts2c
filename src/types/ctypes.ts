@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { TypeHelper } from './typehelper';
 
 export type CType = string | StructType | ArrayType | DictType | FuncType;

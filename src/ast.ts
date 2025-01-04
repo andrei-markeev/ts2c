@@ -1,8 +1,12 @@
 var performance = require("node:perf_hooks").performance;
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { addStandardCallSymbols } from "./standard";
 import { getAllNodesInFunction, isCall, isCatchClause, isExpressionStatement, isFieldAccess, isFunction, isFunctionDeclaration, isFunctionExpression, isParenthesizedExpression, isPropertyDefinition, isReturnStatement, isVariableDeclaration, isWithStatement, SyntaxKind_NaNIdentifier } from './types/utils';
 import { SymbolsHelper } from './symbols';
+
+export let astInfo = {
+    nextNodeId: 1
+}
 
 export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, symbolsHelper: SymbolsHelper) {
     symbolsHelper.createSymbolScope(rootNode.start, rootNode.end);
@@ -15,7 +19,7 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, symbolsH
     const createVisitor = (parent: kataw.SyntaxNode) => {
         return (n: kataw.SyntaxNode) => {
             n.parent = parent;
-            n.id = n.start + "_" + n.end + "_" + n.kind;
+            n.id = astInfo.nextNodeId++;
             nodes.push(n);
             // TODO: imports
             if (kataw.isIdentifier(n)) {
@@ -67,19 +71,22 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, symbolsH
                     const statements = fexpr.contents.functionStatementList.statements;
                     const block = kataw.createBlock(statements, kataw.NodeFlags.None, n.start, n.end);
                     const blockStatement = kataw.createBlockStatement(block, kataw.NodeFlags.IsStatement, n.start, n.end);
+                    const parentStatementsList = <kataw.FunctionStatementList>n.parent;
+                    const index = parentStatementsList.statements.indexOf(n);
+                    parentStatementsList.statements.splice(index, 1, blockStatement);
                     blockStatement.id = n.id;
-                    blockStatement.parent = n.parent;
+                    blockStatement.parent = parentStatementsList;
                     n = blockStatement;
                 }
             }
 
-            return kataw.visitEachChild(transform, n, createVisitor(n));
+            kataw.visitEachChild(transform, n, createVisitor(n));
         }
     }
-    rootNode.id = rootNode.start + "_" + rootNode.end + "_" + rootNode.kind;
-    rootNode = <kataw.RootNode>kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
+    rootNode.id = astInfo.nextNodeId++;
+    kataw.visitEachChild(transform, rootNode, createVisitor(rootNode));
     symbolsHelper.renameConflictingSymbols();
     console.log('visit all nodes', performance.now() - visitStart);
 
-    return [rootNode.statements, nodes];
+    return nodes;
 }

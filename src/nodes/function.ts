@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';

@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
 import { ArrayType, CType, NumberVarType, PointerVarType } from '../../types/ctypes';

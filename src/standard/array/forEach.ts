@@ -1,4 +1,4 @@
-import * as kataw from 'kataw';
+import * as kataw from '@andrei-markeev/kataw';
 import { ArrayType, CType, FuncType, NumberVarType } from '../../types/ctypes';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';

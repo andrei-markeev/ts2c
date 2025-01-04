@@ -1,4 +1,4 @@
-import { parseScript } from 'kataw';
+import { parseScript } from '@andrei-markeev/kataw';
 import { CProgram } from './src/program';
 
 export function transpile(sourceCode: string): string {
