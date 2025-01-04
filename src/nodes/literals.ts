@@ -163,7 +163,10 @@ export class CNumber {
     public value: CExpression;
     public universalWrapper: boolean = false;
     constructor(scope: IScope, node: kataw.NumericLiteral) {
-        this.value = ""+node.text;
+        if (kataw.hexIntegerLiteral(node) || kataw.isOctalIntegerLiteral(node))
+            this.value = node.rawText;
+        else
+            this.value = ""+node.text;
         if (scope.root.typeHelper.getCType(node) == UniversalVarType)
             this.value = new CAsUniversalVar(scope, this.value, NumberVarType);
     }

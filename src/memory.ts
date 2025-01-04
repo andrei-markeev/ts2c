@@ -62,7 +62,7 @@ export class MemoryManager {
                         const rightType = this.typeHelper.getCType(binExpr.right);
 
                         if (isPlusOp(binExpr.operatorToken.kind)) {
-                            if (leftType == UniversalVarType || rightType == UniversalVarType)
+                            if (leftType === UniversalVarType || rightType === UniversalVarType)
                                 this.needsGCMain = true;
                             else {
                                 let n: kataw.SyntaxNode = binExpr;

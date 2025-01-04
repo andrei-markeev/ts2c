@@ -28,9 +28,9 @@ typedef short int16_t;
 static ARRAY(void *) gc_main;
 
 struct gray_t {
+    struct array_number_t * data;
     int16_t height;
     int16_t width;
-    struct array_number_t * data;
 };
 struct imageSrc_t {
     int16_t height;
