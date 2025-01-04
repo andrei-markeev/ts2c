@@ -365,6 +365,10 @@ static struct dict_js_var_t * dict;
 static char * tmp_result = NULL;
 static const char * tmp_str;
 static uint8_t tmp_need_dispose;
+static struct js_var tmp_result_2;
+static struct js_var tmp_result_3;
+static struct js_var tmp_result_4;
+static struct js_var tmp_result_5;
 
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
@@ -384,25 +388,29 @@ int main(void) {
     printf("%s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s", tmp_str = js_var_to_str(js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, FALSE)), &tmp_need_dispose));
+    tmp_result_2 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, FALSE));
+    printf("%s", tmp_str = js_var_to_str(tmp_result_2, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s", tmp_str = js_var_to_str(js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, TRUE)), &tmp_need_dispose));
+    tmp_result_3 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, TRUE));
+    printf("%s", tmp_str = js_var_to_str(tmp_result_3, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s", tmp_str = js_var_to_str(js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, FALSE)), &tmp_need_dispose));
+    tmp_result_4 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, FALSE));
+    printf("%s", tmp_str = js_var_to_str(tmp_result_4, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s", tmp_str = js_var_to_str(js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, TRUE)), &tmp_need_dispose));
+    tmp_result_5 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, TRUE));
+    printf("%s", tmp_str = js_var_to_str(tmp_result_5, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
