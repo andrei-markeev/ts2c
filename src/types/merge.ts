@@ -52,10 +52,10 @@ export class TypeMerger {
             return noChanges;
         }
         else if (type1 instanceof DictType && type2 instanceof ArrayType) {
-            return type1_result;
+            return this.mergeDictAndArray(type1, type2);
         }
         else if (type1 instanceof ArrayType && type2 instanceof DictType) {
-            return type2_result;
+            return this.mergeDictAndArray(type2, type1);
         }
         else if (type1 instanceof StructType && type2 instanceof StructType) {
             let props = Object.keys(type1.properties).concat(Object.keys(type2.properties));
@@ -154,6 +154,13 @@ export class TypeMerger {
         return { type: this.ensureNoTypeDuplicates(new DictType(elementType)), replaced: true };
     }
 
+    private mergeDictAndArray(dictType: DictType, arrayType: ArrayType) {
+        const mergeResult = this.mergeTypes(dictType.elementType, arrayType.elementType);
+        if (mergeResult.replaced)
+            return { type: this.ensureNoTypeDuplicates(new DictType(mergeResult.type)), replaced: true };
+        else
+            return { type: dictType, replaced: true };
+    }
     
     private typesDict = {};
     public ensureNoTypeDuplicates(t) {

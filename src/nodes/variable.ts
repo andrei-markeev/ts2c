@@ -34,7 +34,6 @@ export class CVariableDeclarationList extends CTemplateBase {
 
 @CodeTemplate(`{initializer}`, [kataw.SyntaxKind.VariableDeclaration, kataw.SyntaxKind.LexicalBinding])
 export class CVariableDeclaration extends CTemplateBase {
-    public allocator: CVariableAllocation | string = '';
     public initializer: CAssignment | string = '';
 
     constructor(scope: IScope, varDecl: kataw.VariableDeclaration | kataw.LexicalBinding) {

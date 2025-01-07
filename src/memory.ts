@@ -44,7 +44,7 @@ export class MemoryManager {
                 case kataw.SyntaxKind.ArrayLiteral:
                     {
                         let type = this.typeHelper.getCType(node);
-                        if (type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType)
+                        if (type && type instanceof ArrayType && type.isDynamicArray || type instanceof DictType || type === UniversalVarType)
                             this.scheduleNodeDisposal(node, { canReuse: type !== UniversalVarType });
                     }
                     break;

@@ -141,13 +141,13 @@ export const reservedCSymbolNames = [
     || headerFlags.js_var_lessthan || headerFlags.dict_find_pos}
     #include <string.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
+{#if headerFlags.malloc || headerFlags.array || headerFlags.dict || headerFlags.str_substring || headerFlags.str_slice
     || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus
     || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch
     || headerFlags.js_var_dict_inc}
     #include <stdlib.h>
 {/if}
-{#if headerFlags.malloc || headerFlags.array || headerFlags.str_substring || headerFlags.str_slice
+{#if headerFlags.malloc || headerFlags.array || headerFlags.dict || headerFlags.str_substring || headerFlags.str_slice
     || headerFlags.str_to_int16_t || headerFlags.js_var_to_number || headerFlags.js_var_plus 
     || headerFlags.js_var_from_str || headerFlags.js_var_get || headerFlags.try_catch
     || headerFlags.js_var_dict_inc}

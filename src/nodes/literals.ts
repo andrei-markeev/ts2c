@@ -68,8 +68,24 @@ class CArrayLiteralExpression extends CTemplateBase {
                 }
             }
             this.expression = varName;
-        }
-        else
+        } else if (type instanceof DictType) {
+            const varName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (!scope.root.memoryManager.variableWasReused(node))
+                scope.func.variables.push(new CVariable(scope, varName, type, { initializer: "NULL" }));
+            scope.root.headerFlags.dict = true;
+            scope.statements.push("DICT_CREATE(" + varName + ", " + Math.max(arrSize, 2) + ");\n");
+            let gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+            if (gcVarName) {
+                scope.statements.push("ARRAY_PUSH(" + gcVarName + ", (void *)" + varName + ");\n");
+                scope.root.headerFlags.gc_iterator = true;
+                scope.root.headerFlags.array = true;
+            }
+            for (let i = 0; i < arrSize; i++) {
+                let assignment = new CAssignment(scope, varName, '"' + i + '"', type, node.elementList.elements[i])
+                scope.statements.push(assignment);
+            }
+            this.expression = varName;
+        } else
             this.expression = "/* Unsupported use of array literal expression */";
     }
 }
