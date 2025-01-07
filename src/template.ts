@@ -205,7 +205,7 @@ function replaceArray(data, k, array, statements) {
         statements += elementStatements;
 
         if (k == 'statements') {
-            resolvedElement = resolvedElement.replace(/[;\n]+;/g, ';');
+            resolvedElement = resolvedElement.replace(/[;\n]+;([\s\r\n])/g, ';$1');
             if (resolvedElement.search(/\n/) > -1) {
                 for (let line of resolvedElement.split('\n')) {
                     if (line != '') {

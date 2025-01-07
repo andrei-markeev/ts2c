@@ -265,13 +265,15 @@ export class CForStatement extends CTemplateBase {
         this.block = new CBlock(scope, node.statement);
         this.variables = this.block.variables;
         this.statements = this.block.statements;
-        if (isSimpleInitializer(node.initializer)) {
+        if (!node.initializer)
+            this.init = "";
+        else if (isSimpleInitializer(node.initializer)) {
             this.varDecl = new CVariableDeclaration(scope, getVarDeclFromSimpleInitializer(node.initializer));
             this.init = "";
         }
         else
             this.init = CodeTemplateFactory.createForNode(scope, node.initializer);
-        this.condition = new CCondition(scope, node.condition);
+        this.condition = node.condition ? new CCondition(scope, node.condition) : "";
         this.increment = node.incrementor ? CodeTemplateFactory.createForNode(scope, node.incrementor) : "";
     }
 }
