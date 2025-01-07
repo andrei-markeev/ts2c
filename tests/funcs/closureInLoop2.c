@@ -91,8 +91,6 @@ void str_int16_t_cat(char *str, int16_t num) {
     strcat(str, numstr);
 }
 
-static ARRAY(void *) gc_main;
-
 struct scope_t {
     int16_t x;
 };
@@ -101,7 +99,8 @@ struct closure_t {
     struct scope_t * scope;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static ARRAY(DICT(void *)) gc_main_dicts;
 static DICT(struct closure_t *) callInnerFunctions;

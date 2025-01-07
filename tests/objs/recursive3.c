@@ -168,14 +168,13 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
-static ARRAY(void *) gc_main;
-
 struct create_t {
     uint8_t test;
     struct js_var parent;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct create_t * obj;
 static struct create_t * child;

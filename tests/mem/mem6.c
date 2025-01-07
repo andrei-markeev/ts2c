@@ -32,7 +32,7 @@ struct array_number_t {
     int16_t* data;
 };
 
-int16_t gc_i;
+static int16_t gc_i;
 
 static ARRAY(ARRAY(void *)) gc_main_arrays;
 static struct array_number_t * init_arr;

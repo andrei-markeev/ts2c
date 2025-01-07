@@ -130,8 +130,6 @@ struct js_var str_to_int16_t(const char * str) {
     return v;
 }
 
-static ARRAY(void *) gc_main;
-
 struct obj1_t {
     const char * some;
 };
@@ -139,7 +137,8 @@ struct tmp_obj_t {
     const char * x;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct obj1_t * obj1;
 static DICT(const char *) obj2;

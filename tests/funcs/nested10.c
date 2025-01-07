@@ -25,8 +25,6 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
-static ARRAY(void *) gc_main;
-
 struct scope_t {
     int16_t arg1;
     int16_t arg2;
@@ -36,7 +34,8 @@ struct nestedfunc_closure_t {
     struct scope_t * scope;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 int16_t nestedfunc(struct nestedfunc_closure_t * closure)
 {

@@ -25,8 +25,6 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
-static ARRAY(void *) gc_main;
-
 struct makeCounter_func_t {
     struct increment_closure_t * increment;
     struct increment_closure_t * decrement;
@@ -44,7 +42,8 @@ struct value_closure_t {
     struct scope_t * scope;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct makeCounter_func_t * (*makeCounter)();
 static struct makeCounter_func_t * counter1;

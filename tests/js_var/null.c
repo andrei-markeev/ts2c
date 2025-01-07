@@ -172,9 +172,7 @@ struct js_var js_var_to_number(struct js_var v)
     return result;
 }
 
-static ARRAY(void *) gc_main;
-
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -265,7 +263,8 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     return result;
 }
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct js_var x;
 static struct js_var y;
@@ -281,22 +280,22 @@ int main(void) {
     y = js_var_from(JS_VAR_UNDEFINED);
     z = 5;
     nan = js_var_from(JS_VAR_NAN);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_from(JS_VAR_NULL), js_var_from_str("test")), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_from(JS_VAR_NULL), js_var_from_str("test"), gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(x, js_var_from_int16_t(10)), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(x, js_var_from_int16_t(10), gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_from(JS_VAR_UNDEFINED), js_var_from_str("test")), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_from(JS_VAR_UNDEFINED), js_var_from_str("test"), gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_compute(js_var_from_int16_t(z), JS_VAR_MINUS, x), js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(5))), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(js_var_compute(js_var_from_int16_t(z), JS_VAR_MINUS, x), js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(5)), gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_int16_t(z), JS_VAR_MINUS, js_var_compute(x, JS_VAR_ASTERISK, js_var_from_int16_t(5))), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(y, js_var_from_int16_t(20)), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(y, js_var_from_int16_t(20), gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf("%s\n", tmp_str = js_var_to_str(js_var_compute(nan, JS_VAR_PERCENT, y), &tmp_need_dispose));

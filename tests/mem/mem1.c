@@ -25,13 +25,12 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
-static ARRAY(void *) gc_main;
-
 struct state_t {
     const char * prop;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct state_t * state;
 

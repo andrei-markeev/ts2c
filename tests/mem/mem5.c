@@ -30,7 +30,7 @@ struct alloc_t {
     const char * key2;
 };
 
-int16_t gc_i;
+static int16_t gc_i;
 
 static ARRAY(void *) gc_146_214;
 

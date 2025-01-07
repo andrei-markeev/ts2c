@@ -52,7 +52,7 @@ void str_int16_t_cat(char *str, int16_t num) {
     strcat(str, numstr);
 }
 
-int16_t gc_i;
+static int16_t gc_i;
 
 static const char * variants[4] = { "banana", "kiwi", "pear", "plum" };
 static ARRAY(void *) gc_212;

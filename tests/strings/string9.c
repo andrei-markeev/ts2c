@@ -136,8 +136,8 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
     return match_array;
 }
 
-int16_t gc_i;
-int16_t gc_j;
+static int16_t gc_i;
+static int16_t gc_j;
 
 static ARRAY(ARRAY(ARRAY(void *))) gc_main_arrays_c;
 static struct array_string_t * match;

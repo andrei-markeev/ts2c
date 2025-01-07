@@ -401,7 +401,7 @@ class CEqualityExpression extends CTemplateBase {
 {#elseif replacedWithVar}
     {replacementVarName}
 {#elseif isUniversalVar}
-    js_var_plus({left}, {right})
+    js_var_plus({left}, {right}, gc_main)
 {/if}`)
 class CPlusExpression extends CTemplateBase {
     public addNumbers: boolean = false;
@@ -638,7 +638,7 @@ class CUnaryExpression extends CTemplateBase {
                     this.isCompound = true;
                     this.before = "js_var_plus(js_var_to_number(";
                     this.operand = CodeTemplateFactory.createForNode(scope, node.operand);
-                    this.after = "), js_var_from_int16_t(1))";
+                    this.after = "), js_var_from_int16_t(1), gc_main)";
                     scope.root.headerFlags.js_var_plus = true;
                     scope.root.headerFlags.js_var_from_int16_t = true;
                 } else if (!isDict && !plus) {

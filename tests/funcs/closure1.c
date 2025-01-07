@@ -25,8 +25,6 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
-static ARRAY(void *) gc_main;
-
 struct scope_t {
     int16_t a;
     int16_t b;
@@ -36,7 +34,8 @@ struct sum_closure_t {
     struct scope_t * scope;
 };
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct sum_closure_t * func;
 

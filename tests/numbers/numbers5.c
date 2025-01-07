@@ -193,9 +193,7 @@ uint8_t js_var_eq(struct js_var left, struct js_var right, uint8_t strict)
         return FALSE;
 }
 
-static ARRAY(void *) gc_main;
-
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -286,7 +284,8 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     return result;
 }
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct js_var x;
 static int16_t y;
@@ -303,7 +302,7 @@ int main(void) {
     if (js_var_eq(js_var_from(JS_VAR_NAN), js_var_from(JS_VAR_NAN), FALSE) == FALSE)
         printf("Number.NaN != NaN, that's fine.\n");
     z = js_var_from(JS_VAR_NAN);
-    printf("%s\n", js_var_eq(z, js_var_plus(x, js_var_from_int16_t(y)), FALSE) == TRUE ? "true" : "false");
+    printf("%s\n", js_var_eq(z, js_var_plus(x, js_var_from_int16_t(y), gc_main), FALSE) == TRUE ? "true" : "false");
     printf("%s\n", tmp_str = js_var_to_str(js_var_compute(z, JS_VAR_ASTERISK, js_var_from_int16_t(10)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);

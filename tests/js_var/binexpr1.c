@@ -165,9 +165,7 @@ struct js_var js_var_to_number(struct js_var v)
     return result;
 }
 
-static ARRAY(void *) gc_main;
-
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -258,7 +256,8 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     return result;
 }
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static int16_t a;
 static struct js_var r1;
@@ -271,7 +270,7 @@ struct js_var add_and_substract(struct js_var x, struct js_var y, struct js_var 
 {
     struct js_var res;
 
-    res = js_var_compute(js_var_plus(x, y), JS_VAR_MINUS, z);
+    res = js_var_compute(js_var_plus(x, y, gc_main), JS_VAR_MINUS, z);
     return res;
 }
 
@@ -287,7 +286,7 @@ int main(void) {
     printf("%s\n", tmp_str = js_var_to_str(r2, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(r1, r2), &tmp_need_dispose));
+    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(r1, r2, gc_main), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     tmp_result = add_and_substract(js_var_from_int16_t(a), js_var_from_int16_t(20), js_var_from_int16_t(5));

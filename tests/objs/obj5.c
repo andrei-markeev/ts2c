@@ -92,8 +92,7 @@ void str_int16_t_cat(char *str, int16_t num) {
 }
 
 static ARRAY(void *) gc_main;
-
-int16_t gc_i;
+static int16_t gc_i;
 
 static DICT(int16_t) dict;
 char * tmp_result = NULL;

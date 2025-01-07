@@ -29,7 +29,7 @@ struct nested_t {
     const char * key;
 };
 
-int16_t gc_i;
+static int16_t gc_i;
 
 static ARRAY(void *) gc_74;
 

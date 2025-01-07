@@ -847,13 +847,9 @@ export const reservedCSymbolNames = [
     }
 {/if}
 
-{#if headerFlags.gc_main || headerFlags.js_var_plus}
-    static ARRAY(void *) gc_main;
-{/if}
-
 {#if headerFlags.js_var_plus}
 
-    struct js_var js_var_plus(struct js_var left, struct js_var right)
+    struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
     {
         struct js_var result, left_to_number, right_to_number;
         const char *left_as_string, *right_as_string;
@@ -992,11 +988,14 @@ export const reservedCSymbolNames = [
     }
 {/if}
 
+{#if headerFlags.gc_main || headerFlags.js_var_plus}
+    static ARRAY(void *) gc_main;
+{/if}
 {#if headerFlags.gc_iterator || headerFlags.js_var_plus}
-    int16_t gc_i;
+    static int16_t gc_i;
 {/if}
 {#if headerFlags.gc_iterator2}
-    int16_t gc_j;
+    static int16_t gc_j;
 {/if}
 
 {variables => {this};\n}

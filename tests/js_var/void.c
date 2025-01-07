@@ -106,8 +106,7 @@ struct js_var js_var_to_undefined(void *value) {
 }
 
 static ARRAY(void *) gc_main;
-
-int16_t gc_i;
+static int16_t gc_i;
 
 static int16_t a;
 static struct js_var tmp_result_2;

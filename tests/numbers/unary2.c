@@ -265,9 +265,7 @@ struct js_var js_var_dict_inc(struct dict_js_var_t * dict, const char * key, int
     }
 }
 
-static ARRAY(void *) gc_main;
-
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -358,7 +356,8 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     return result;
 }
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static int16_t num;
 static struct dict_js_var_t * dict;
@@ -383,33 +382,33 @@ int main(void) {
     DICT_SET(dict, tmp_result, js_var_from_int16_t(4));
     DICT_SET(dict, "value1", js_var_compute(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), JS_VAR_MINUS, js_var_from_int16_t(1)));
     js_var_dict_inc(dict, "value1", -1, TRUE);
-    DICT_SET(dict, "value1", js_var_plus(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), js_var_from_int16_t(1)));
+    DICT_SET(dict, "value1", js_var_plus(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), js_var_from_int16_t(1), gc_main));
     js_var_dict_inc(dict, "value1", 1, TRUE);
     printf("%s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    tmp_result_2 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, FALSE));
+    tmp_result_2 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, FALSE), gc_main);
     printf("%s", tmp_str = js_var_to_str(tmp_result_2, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    tmp_result_3 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, TRUE));
+    tmp_result_3 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", -1, TRUE), gc_main);
     printf("%s", tmp_str = js_var_to_str(tmp_result_3, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    tmp_result_4 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, FALSE));
+    tmp_result_4 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, FALSE), gc_main);
     printf("%s", tmp_str = js_var_to_str(tmp_result_4, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
     printf(" %s\n", tmp_str = js_var_to_str(DICT_GET(dict, "value1", js_var_from(JS_VAR_UNDEFINED)), &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
-    tmp_result_5 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, TRUE));
+    tmp_result_5 = js_var_plus(js_var_from_int16_t(10), js_var_dict_inc(dict, "value1", 1, TRUE), gc_main);
     printf("%s", tmp_str = js_var_to_str(tmp_result_5, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);

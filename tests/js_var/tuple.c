@@ -241,9 +241,7 @@ struct js_var js_var_to_number(struct js_var v)
     return result;
 }
 
-static ARRAY(void *) gc_main;
-
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -285,7 +283,8 @@ struct js_var js_var_plus(struct js_var left, struct js_var right)
     return result;
 }
 
-int16_t gc_i;
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static struct js_var tuple[3];
 static int16_t i;
@@ -319,7 +318,7 @@ int main(void) {
             free((void *)tmp_str);
     }
     printf(" ]\n");
-    tuple[0] = js_var_plus(js_var_from_int16_t(12), js_var_to_number(tuple[1]));
+    tuple[0] = js_var_plus(js_var_from_int16_t(12), js_var_to_number(tuple[1]), gc_main);
     tuple[2] = js_var_from_uint8_t(FALSE);
     printf("[ ");
     for (k = 0; k < 3; k++) {
