@@ -72,16 +72,21 @@ export class CEmptyStatement {
 
 @CodeTemplate(`
 {destructors}
-return {expression};
+{#if expression}
+    return {expression};
+{#else}
+    return;
+{/if}
 `, kataw.SyntaxKind.ReturnStatement)
 export class CReturnStatement extends CTemplateBase {
-    public expression: CExpression;
+    public expression: CExpression = null;
     public destructors: CVariableDestructors;
     public retVarName: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
     constructor(scope: IScope, node: kataw.ReturnStatement) {
         super();
-        this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+        if (node.expression !== null)
+            this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
         this.destructors = new CVariableDestructors(scope, node);
     }
 }
