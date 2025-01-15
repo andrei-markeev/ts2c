@@ -109,7 +109,6 @@ export class CAsNumber extends CTemplateBase {
         {tmpVarName} = malloc(STR_INT16_T_BUFLEN);
         assert({tmpVarName} != NULL);
         sprintf({tmpVarName}, "%d", {arg});
-        ARRAY_PUSH(gc_main, (void *){tmpVarName});
     {#elseif isUniversalVar}
         {tmpVarName} = js_var_to_str({arg}, &{needDisposeVarName});
         if ({needDisposeVarName})
@@ -123,7 +122,6 @@ export class CAsNumber extends CTemplateBase {
                 strcat({tmpVarName}, ",");
             {arrayElementCat}
         }
-        ARRAY_PUSH(gc_main, (void *){tmpVarName});
     {/if}
 {/statements}
 {#if isNumberLiteral}
@@ -161,9 +159,11 @@ export class CAsString extends CTemplateBase {
         this.isUniversalVar = type === UniversalVarType;
         this.isArray = type instanceof ArrayType;
         if (this.isNumber || this.isArray || this.isUniversalVar) {
-            this.tmpVarName = scope.root.symbolsHelper.addTemp(node, "buf");
+            this.tmpVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             scope.variables.push(new CVariable(scope, this.tmpVarName, "char *"));
-            scope.root.headerFlags.gc_iterator = true;
+            const gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+            if (gcVarName)
+                scope.root.headerFlags.gc_iterator = true;
         }
         if (this.isNumber)
             scope.root.headerFlags.str_int16_t_buflen = true;

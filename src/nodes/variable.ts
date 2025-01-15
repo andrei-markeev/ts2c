@@ -45,7 +45,7 @@ export class CVariableDeclaration extends CTemplateBase {
         const name = varDecl.binding.text;
         const type = scope.root.typeHelper.getCType(varDecl.binding);
         const scopeVar = kataw.isIdentifier(varDecl.binding) ? scope.root.typeHelper.isScopeVariableDeclaration(varDecl.binding) : false;
-        if (type instanceof ArrayType && !type.isDynamicArray && isArrayLiteral(varDecl.initializer) && !scopeVar) {
+        if (type instanceof ArrayType && !type.isDynamicArray && type.elementType !== UniversalVarType && isArrayLiteral(varDecl.initializer) && !scopeVar) {
             const canUseInitializerList = varDecl.initializer.elementList.elements.every(e => isNumericLiteral(e) || isStringLiteral(e));
             if (canUseInitializerList) {
                 let s = "{ ";

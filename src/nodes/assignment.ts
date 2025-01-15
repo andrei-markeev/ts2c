@@ -4,7 +4,7 @@ import {IScope} from '../program';
 import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types/ctypes';
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
-import { CAsUniversalVar } from './typeconvert';
+import { CAsString, CAsUniversalVar } from './typeconvert';
 import { getNodeText, isArrayLiteral, isObjectLiteral, isPropertyDefinition, isStringLiteral } from '../types/utils';
 
 export class AssignmentHelper {
@@ -26,6 +26,8 @@ export class AssignmentHelper {
                     argumentExpression = ident;
                 else
                     argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
+            } else if (varType instanceof DictType) {
+                argumentExpression = new CAsString(scope, elemAccess.expression);
             } else
                 argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
         }

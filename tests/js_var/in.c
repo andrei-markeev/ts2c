@@ -137,24 +137,19 @@ struct tmp_obj_t {
     const char * x;
 };
 
-static ARRAY(void *) gc_main;
-static int16_t gc_i;
-
 static struct obj1_t * obj1;
 static DICT(const char *) obj2;
 static DICT(void *) obj3;
 static const char * arr[3] = { "some", "thing", "1,2,3" };
 static const char *obj1_t_props[1] = { "some" };
 static struct tmp_obj_t * tmp_obj = NULL;
-static int16_t tmp_array[3] = { 1, 2, 3 };
-static char * buf;
+static int16_t tmp_array_2[3] = { 1, 2, 3 };
+static char * tmp_array;
 static int16_t i;
 static struct js_var tmp_key;
 static struct js_var tmp_key_2;
 
 int main(void) {
-    ARRAY_CREATE(gc_main, 2, 0);
-
     obj1 = malloc(sizeof(*obj1));
     assert(obj1 != NULL);
     obj1->some = "thing";
@@ -176,16 +171,15 @@ int main(void) {
     assert(tmp_obj != NULL);
     tmp_obj->x = "something ";
     printf("%s\n", dict_find_pos(obj2->index->data, obj2->index->size, "[object Object]") > -1 ? "true" : "false");
-    buf = malloc((STR_INT16_T_BUFLEN + 1) * 3);
-    assert(buf != NULL);
-    buf[0] = '\0';
+    tmp_array = malloc((STR_INT16_T_BUFLEN + 1) * 3);
+    assert(tmp_array != NULL);
+    tmp_array[0] = '\0';
     for (i = 0; i < 3; i++) {
         if (i != 0)
-            strcat(buf, ",");
-        str_int16_t_cat(buf, tmp_array[i]);
+            strcat(tmp_array, ",");
+        str_int16_t_cat(tmp_array, tmp_array_2[i]);
     }
-    ARRAY_PUSH(gc_main, (void *)buf);
-    printf("%s\n", dict_find_pos(obj2->index->data, obj2->index->size, buf) > -1 ? "true" : "false");
+    printf("%s\n", dict_find_pos(obj2->index->data, obj2->index->size, tmp_array) > -1 ? "true" : "false");
     tmp_key = str_to_int16_t("1");
     printf("%s\n", (tmp_key.type != JS_VAR_NAN && tmp_key.number >= 0 && tmp_key.number < 3) ? "true" : "false");
     tmp_key_2 = str_to_int16_t("some");
@@ -205,10 +199,7 @@ int main(void) {
     free(obj3->values);
     free(obj3);
     free(tmp_obj);
-    for (gc_i = 0; gc_i < gc_main->size; gc_i++)
-        free(gc_main->data[gc_i]);
-    free(gc_main->data);
-    free(gc_main);
+    free(tmp_array);
 
     return 0;
 }

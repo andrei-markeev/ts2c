@@ -4,7 +4,7 @@ import { IScope } from '../program';
 import { CType, ArrayType, StructType, DictType, StringVarType, UniversalVarType, PointerVarType, FuncType } from '../types/ctypes';
 import { CExpression } from './expressions';
 import { CUndefined } from './literals';
-import { CAsUniversalVar } from './typeconvert';
+import { CAsString, CAsUniversalVar } from './typeconvert';
 import { isInBoolContext, findParentFunction, isFieldPropertyAccess, isFieldElementAccess, isStringLiteral } from '../types/utils';
 
 
@@ -54,7 +54,9 @@ export class CElementAccess extends CTemplateBase {
             } else
                 elementAccess = new CElementAccess(scope, node.member);
 
-            if (type === UniversalVarType)
+            if (type instanceof DictType) {
+                argumentExpression = new CAsString(scope, node.expression);
+            } else if (type === UniversalVarType)
                 argumentExpression = new CAsUniversalVar(scope, node.expression);
             else if (type instanceof StructType && isStringLiteral(node.expression)) {
                 let ident = node.expression.text;

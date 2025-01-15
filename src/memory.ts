@@ -32,6 +32,7 @@ export class MemoryManager {
     constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper, private standardCallHelper: StandardCallHelper) { }
 
     public scheduleNodeDisposals(nodes: kataw.SyntaxNode[]) {
+        // TODO: use symbol refs
         nodes.filter(n => kataw.isIdentifier(n)).forEach(n => {
             const decl = this.typeHelper.getDeclaration(n);
             if (decl) {
@@ -84,7 +85,7 @@ export class MemoryManager {
                         if (binExpr.operatorToken.kind === kataw.SyntaxKind.InKeyword
                                 && !(rightType instanceof ArrayType)
                                 && (leftType === UniversalVarType || leftType instanceof ArrayType || leftType === NumberVarType && !isNumericLiteral(binExpr.left)))
-                            this.needsGCMain = true;
+                            this.scheduleNodeDisposal(binExpr.left);
                             
                     }
                     break;
@@ -114,6 +115,17 @@ export class MemoryManager {
                             this.scheduleNodeDisposal(node, { subtype: "closure" });
                         else if (type instanceof FuncType && type.scopeType)
                             this.scheduleNodeDisposal(node, { subtype: "scope", canReuse: false });
+                    }
+                    break;
+                case kataw.SyntaxKind.MemberAccessExpression:
+                    {
+                        const elemAccess = <kataw.MemberAccessExpression>node;
+                        const type = this.typeHelper.getCType(elemAccess.member);
+                        const elemType = this.typeHelper.getCType(elemAccess.expression);
+                        if (type instanceof DictType && elemType === NumberVarType && !isNumericLiteral(elemAccess.expression)) {
+                            // we will have to convert a number to string
+                            this.scheduleNodeDisposal(elemAccess.expression, { canReuse: false });
+                        }
                     }
                     break;
             }

@@ -129,13 +129,17 @@ export class TypeMerger {
         let props = Object.keys(structType.properties);
         let needPromoteToDictionary = false;
         let needPromoteToTuple = false;
-        for (let p of props) {
-            if (p == "length")
-                continue;
-            if (isNaN(+p))
-                needPromoteToDictionary = true;
-            if (this.mergeTypes(arrayType.elementType, structType.properties[p]).replaced)
-                needPromoteToTuple = true;
+        if (props.length === 0)
+            needPromoteToDictionary = true;
+        else {
+            for (let p of props) {
+                if (p == "length")
+                    continue;
+                if (isNaN(+p))
+                    needPromoteToDictionary = true;
+                if (this.mergeTypes(arrayType.elementType, structType.properties[p]).replaced)
+                    needPromoteToTuple = true;
+            }
         }
         if (needPromoteToDictionary && needPromoteToTuple)
             return { type: this.ensureNoTypeDuplicates(new DictType(UniversalVarType)), replaced: true };
