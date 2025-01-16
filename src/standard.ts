@@ -21,7 +21,7 @@ export interface ITypeExtensionResolver extends IResolver<MaybeStandardCall> {
 }
 
 export interface IGlobalSymbolResolver extends IResolver<kataw.CallExpression> {
-    addSymbols(s: SymbolsHelper): void;
+    addSymbols(rootId: number, s: SymbolsHelper): void;
 }
 
 export interface IResolverMatchOptions {
@@ -138,7 +138,7 @@ export function canBeStandardCall(memberType: CType, stringPropName: string) {
     return false;
 }
 
-export function addStandardCallSymbols(symbolHelper: SymbolsHelper) {
+export function addStandardCallSymbols(rootId: number, symbolHelper: SymbolsHelper) {
     for (var resolver of globalSymbolResolvers)
-        resolver.addSymbols(symbolHelper);
+        resolver.addSymbols(rootId, symbolHelper);
 }

@@ -11,9 +11,9 @@ import { SymbolInfo, SymbolsHelper } from '../../symbols';
 class IsNaNResolver implements IGlobalSymbolResolver {
     isNaNSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
-    public addSymbols(symbolHelper: SymbolsHelper): void {
+    public addSymbols(rootId: number, symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.isNaNSymbol = symbolHelper.registerSyntheticSymbol(null, 'isNaN', this);
+        this.isNaNSymbol = symbolHelper.registerSyntheticSymbol(rootId, null, 'isNaN', this);
     }
     public argumentTypes(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return [ UniversalVarType ];
