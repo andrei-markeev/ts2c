@@ -13,6 +13,7 @@ export interface SymbolInfo {
     members: SymbolInfo[];
     conflict: boolean;
     resolver?: IGlobalSymbolResolver;
+    exported: boolean;
 }
 
 export interface SymbolScope {
@@ -28,37 +29,48 @@ export class SymbolsHelper {
     private userStructs: { [name: string]: StructType } = {};
     private arrayStructs: CType[] = [];
 
-    private scopes: SymbolScope[] = [];
+    private scopes: Record<number, SymbolScope[]> = {};
+    public exportedSymbols: Record<number, SymbolInfo[]> = {};
     private nextId = 1;
     public globalSymbolsWithResolvers: SymbolInfo[] = [];
 
-    public createSymbolScope(start: number, end: number) {
-        const currentScope = this.findSymbolScope({ start, end });
+    public createSymbolScope(rootId: number, start: number, end: number) {
+        const currentScope = this.findSymbolScope({ rootId, start, end });
         const newScope = {
             symbols: {},
             parent: currentScope,
             start: start,
             end: end
         };
-        this.scopes.push(newScope);
+        if (!this.scopes[rootId])
+            this.scopes[rootId] = [];
+        this.scopes[rootId].push(newScope);
         return newScope;
     }
 
-    public registerSymbol(node: kataw.Identifier) {
+    public registerSymbol(node: kataw.Identifier, exported?: boolean) {
         let [path, parent] = this.getSymbolPath(node);
         if (!path)
             return;
-        this.findSymbolScope(node).symbols[path] = {
+        const symbol = {
             id: this.nextId++,
             parent: parent,
             valueDeclaration: node,
             references: [node],
             members: [],
-            conflict: node.text === path && reservedCSymbolNames.indexOf(path) > -1
+            conflict: node.text === path && reservedCSymbolNames.indexOf(path) > -1,
+            exported: exported === true
         };
+        node.symbol = symbol;
+        this.findSymbolScope(node).symbols[path] = symbol;
+        if (exported === true) {
+            if (!this.exportedSymbols[node.rootId])
+                this.exportedSymbols[node.rootId] = [];
+            this.exportedSymbols[node.rootId].push(symbol);
+        }
     }
 
-    public registerSyntheticSymbol(parentSymbol: SymbolInfo | null, name: string, resolver?: IGlobalSymbolResolver) {
+    public registerSyntheticSymbol(rootId: number, parentSymbol: SymbolInfo | null, name: string, resolver?: IGlobalSymbolResolver) {
         let symbolPath = name;
         if (parentSymbol)
             symbolPath = parentSymbol.id + ":" + symbolPath;
@@ -70,10 +82,11 @@ export class SymbolsHelper {
             references: [],
             members: [],
             conflict: false,
-            resolver
+            resolver,
+            exported: false
         };
 
-        this.scopes[0].symbols[symbolPath] = symbol;
+        this.scopes[rootId][0].symbols[symbolPath] = symbol;
         if (resolver)
             this.globalSymbolsWithResolvers.push(symbol);
 
@@ -90,6 +103,14 @@ export class SymbolsHelper {
             symbol.references.push(node);
     }
 
+    public insertExistingSymbolIntoScope(node: kataw.Identifier, symbol: SymbolInfo) {
+        this.findSymbolScope(node).symbols[node.text] = symbol;
+
+        if (symbol.references.indexOf(node) === -1)
+            symbol.references.push(node);
+        node.symbol = symbol;
+    }
+
     public getSymbolAtLocation(node: kataw.SyntaxNode) {
         const [symbolPath] = this.getSymbolPath(node);
         if (!symbolPath)
@@ -97,7 +118,7 @@ export class SymbolsHelper {
         return this.getSymbolByPath(node, symbolPath);
     }
 
-    private getSymbolByPath(span: { start: number, end: number }, path: string) {
+    private getSymbolByPath(span: { rootId: number, start: number, end: number }, path: string) {
         let scope = this.findSymbolScope(span)
         let found: SymbolInfo | undefined = undefined;
         while (scope && !found) {
@@ -151,11 +172,13 @@ export class SymbolsHelper {
         return [symbolPath, parentSymbol];
     }
 
-    public findSymbolScope(span: { start: number, end: number }) {
-        for (let i = this.scopes.length - 1; i >= 0; i--) {
-            const scope = this.scopes[i];
-            if (span.start >= scope.start && span.end <= scope.end)
-                return scope;
+    public findSymbolScope(span: { rootId: number, start: number, end: number }) {
+        if (this.scopes[span.rootId]) {
+            for (let i = this.scopes[span.rootId].length - 1; i >= 0; i--) {
+                const scope = this.scopes[span.rootId][i];
+                if (span.start >= scope.start && span.end <= scope.end)
+                    return scope;
+            }
         }
         return undefined;
     }
@@ -172,26 +195,29 @@ export class SymbolsHelper {
         return !scope.parent;
     }
 
-    public addStandardSymbols() {
-        this.registerSyntheticSymbol(null, 'NaN');
-        this.registerSyntheticSymbol(null, 'undefined');
+    public addStandardSymbols(rootId: number) {
+        this.registerSyntheticSymbol(rootId, null, 'NaN');
+        this.registerSyntheticSymbol(rootId, null, 'undefined');
     }
 
     // TODO: improve
     // current system doesn't account for conflicting renames
     public renameConflictingSymbols() {
-        for (const scope of this.scopes)
-            for (const path in scope.symbols) {
-                const symb = scope.symbols[path];
-                if (symb.conflict) {
-                    const newName = path + "_";
-                    scope.symbols[path] = undefined;
-                    scope.symbols[newName] = symb;
-                    symb.conflict = false;
-                    for (const ref of symb.references)
-                        (ref as any).text = newName;
+        for (const rootId in this.scopes) {
+            for (const scope of this.scopes[rootId]) {
+                for (const path in scope.symbols) {
+                    const symb = scope.symbols[path];
+                    if (symb.conflict) {
+                        const newName = path + "_";
+                        scope.symbols[path] = undefined;
+                        scope.symbols[newName] = symb;
+                        symb.conflict = false;
+                        for (const ref of symb.references)
+                            (ref as any).text = newName;
+                    }
                 }
             }
+        }
     }
 
     public getStructsAndFunctionPrototypes(typeHelper: TypeHelper) {
@@ -288,7 +314,7 @@ export class SymbolsHelper {
     private symbolOrTempVarExists(scopeId: string | number, scopeNode: kataw.SyntaxNode, varName: string) {
         return this.temporaryVariables[scopeId].indexOf(varName) > -1
             || scopeNode && this.getSymbolByPath(scopeNode, varName) !== undefined
-            || this.scopes[0].symbols[varName] !== undefined;
+            || this.scopes[scopeNode.rootId][0].symbols[varName] !== undefined;
     }
 
     private temporaryVariables: { [scopeId: string]: string[] } = {

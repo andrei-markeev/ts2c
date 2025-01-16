@@ -11,9 +11,9 @@ import { SymbolInfo, SymbolsHelper } from '../../symbols';
 class NumberCallResolver implements IGlobalSymbolResolver {
     numberSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
-    public addSymbols(symbolHelper: SymbolsHelper): void {
+    public addSymbols(rootId: number, symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.numberSymbol = symbolHelper.registerSyntheticSymbol(null, 'Number', this);
+        this.numberSymbol = symbolHelper.registerSyntheticSymbol(rootId, null, 'Number', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         const type = typeHelper.getCType(call.argumentList.elements[0]);

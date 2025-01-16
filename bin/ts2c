@@ -9,15 +9,29 @@ if (process.argv.length < 3) {
     process.exit();
 }
 
-var fileName = process.argv[2];
-if (fileName === '-v' || fileName === '--version') {
-    const packageJson = require(path.join(__dirname, "../package.json"));
-    console.log(packageJson.version);
-    process.exit(0);
+var multiFiles = true;
+var fileName = null;
+
+for (var i = 2; i < process.argv.length; i++) {
+    var arg = process.argv[i];
+    if (arg === '-v' || arg === '--version') {
+        const packageJson = require(path.join(__dirname, "../package.json"));
+        console.log(packageJson.version);
+        process.exit(0);
+    } else if (arg === '-s' || arg === '--single-file') {
+        multiFiles = false;
+    } else
+        fileName = arg;
 }
 var sourceCode = fs.readFileSync(fileName, 'utf-8');
 
-var transpiledCode = ts2c.transpile(sourceCode, { fileName });
-fs.writeFileSync(fileName.slice(0, -3) + '.c', transpiledCode);
+if (multiFiles) {
+    var files = ts2c.transpile(sourceCode, { fileName, terminal: true, multiFiles });
+    for (var file of files)
+        fs.writeFileSync(file.fileName, file.source);
+} else {
+    var transpiledCode = ts2c.transpile(sourceCode, { fileName, terminal: true });
+    fs.writeFileSync(fileName.replace(/(\.ts|\.js)$/) + '.c', transpiledCode);
+}
 
 process.exit();

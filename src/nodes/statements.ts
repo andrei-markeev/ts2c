@@ -496,14 +496,29 @@ export class CImport extends CTemplateBase {
         }
 
         let moduleName = moduleNameNode.text;
-        const isCInclude = moduleName.indexOf('ts2c-target') == 0;
-        if (isCInclude) {
+        const isLibInclude = moduleName.indexOf('ts2c-target') === 0;
+        if (isLibInclude) {
             moduleName = moduleName.split('/').slice(1).join('/');
             if (moduleName.slice(-6) == "/index")
                 moduleName = moduleName.slice(0, -6);
-            if (scope.root.includes.indexOf(moduleName) == -1)
+            moduleName = "<" + moduleName + ">";
+            if (scope.root.includes.indexOf(moduleName) === -1)
+                scope.root.includes.push(moduleName);
+        } else {
+            moduleName = '"' + moduleName.replace(/^\.\//, '') + '.h"';
+            if (scope.root.includes.indexOf(moduleName) === -1)
                 scope.root.includes.push(moduleName);
         }
+    }
+}
+
+@CodeTemplate(`{declaration}`, kataw.SyntaxKind.ExportDeclaration)
+export class CExport extends CTemplateBase {
+    public declaration: CExpression = null;
+    public nodeText: string = null;
+    constructor(scope: IScope, node: kataw.ExportDeclaration) {
+        super();
+        this.declaration = CodeTemplateFactory.createForNode(scope, node.declaration);
     }
 }
 

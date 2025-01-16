@@ -10,7 +10,7 @@
 		"**/*.js.map": true
     },
     "files.associations": {
-        "stdio.h": "c"
-    }
+		"*.h": "c"
+	}
 	
 }

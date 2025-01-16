@@ -11,9 +11,9 @@ import { SymbolInfo, SymbolsHelper } from '../../symbols';
 class ParseIntResolver implements IGlobalSymbolResolver {
     parseIntSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
-    public addSymbols(symbolHelper: SymbolsHelper): void {
+    public addSymbols(rootId: number, symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.parseIntSymbol = symbolHelper.registerSyntheticSymbol(null, 'parseInt', this);
+        this.parseIntSymbol = symbolHelper.registerSyntheticSymbol(rootId, null, 'parseInt', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return NumberVarType;
