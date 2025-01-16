@@ -7,7 +7,7 @@ import { CAssignment } from './assignment';
 import { CRegexSearchFunction } from './regexfunc';
 import { CExpression } from './expressions';
 import { CAsUniversalVar } from './typeconvert';
-import { isNumericLiteral, isPropertyDefinition, isStringLiteral, SyntaxKind_NaNIdentifier } from '../types/utils';
+import { findParentSourceFile, isNumericLiteral, isPropertyDefinition, isStringLiteral, SyntaxKind_NaNIdentifier } from '../types/utils';
 
 @CodeTemplate(`
 {#if universalWrapper}
@@ -148,7 +148,7 @@ class CRegexLiteralExpression extends CTemplateBase {
         super();
         let template = node.text;
         if (!regexNames[template]) {
-            regexNames[template] = scope.root.symbolsHelper.addTemp(null, "regex");
+            regexNames[template] = scope.root.symbolsHelper.addTemp(findParentSourceFile(node), "regex");
             scope.root.functions.splice(scope.parent ? -2 : -1, 0, new CRegexSearchFunction(scope, template, regexNames[template]));
         }
         this.expression = regexNames[template];

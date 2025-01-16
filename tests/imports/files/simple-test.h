@@ -1,0 +1,6 @@
+#ifndef TS2C_IMPORTS_FILES_SIMPLE_TEST_H
+#define TS2C_IMPORTS_FILES_SIMPLE_TEST_H
+
+extern int16_t a;
+
+#endif

@@ -14,10 +14,10 @@ import { SymbolInfo, SymbolsHelper } from '../../symbols';
 export class ConsoleLogResolver implements IGlobalSymbolResolver {
     consoleSymbol: SymbolInfo;
     symbolHelper: SymbolsHelper;
-    public addSymbols(symbolHelper: SymbolsHelper): void {
+    public addSymbols(rootId: number, symbolHelper: SymbolsHelper): void {
         this.symbolHelper = symbolHelper;
-        this.consoleSymbol = symbolHelper.registerSyntheticSymbol(null, 'console');
-        symbolHelper.registerSyntheticSymbol(this.consoleSymbol, 'log', this);
+        this.consoleSymbol = symbolHelper.registerSyntheticSymbol(rootId, null, 'console');
+        symbolHelper.registerSyntheticSymbol(rootId, this.consoleSymbol, 'log', this);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return VoidType;

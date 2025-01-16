@@ -44,6 +44,7 @@ export class CVariableDeclaration extends CTemplateBase {
         }
         const name = varDecl.binding.text;
         const type = scope.root.typeHelper.getCType(varDecl.binding);
+        const symbol = scope.root.symbolsHelper.getSymbolAtLocation(varDecl.binding);
         const scopeVar = kataw.isIdentifier(varDecl.binding) ? scope.root.typeHelper.isScopeVariableDeclaration(varDecl.binding) : false;
         if (type instanceof ArrayType && !type.isDynamicArray && type.elementType !== UniversalVarType && isArrayLiteral(varDecl.initializer) && !scopeVar) {
             const canUseInitializerList = varDecl.initializer.elementList.elements.every(e => isNumericLiteral(e) || isStringLiteral(e));
@@ -56,13 +57,13 @@ export class CVariableDeclaration extends CTemplateBase {
                     s += typeof cExpr === 'string' ? cExpr : (<any>cExpr).resolve();
                 }
                 s += " }";
-                scope.variables.push(new CVariable(scope, name, type, { initializer: s }));
+                scope.variables.push(new CVariable(scope, name, type, { initializer: s, removeStorageSpecifier: symbol.exported }));
                 return;
             }
         }
 
         if (!scope.variables.some(v => v.name === name) && !scopeVar)
-            scope.variables.push(new CVariable(scope, name, type));
+            scope.variables.push(new CVariable(scope, name, type, { removeStorageSpecifier: symbol.exported }));
         if (varDecl.initializer)
             this.initializer = AssignmentHelper.create(scope, varDecl.binding, varDecl.initializer);
     }
