@@ -6,7 +6,7 @@ export class CircularTypesFinder {
     constructor(private allNodes: kataw.SyntaxNode[], private symbolsHelper: SymbolsHelper) { }
 
     private assignments: { [key: string]: string[] } = {};
-    private circularAssignments: { [pos: number]: { node: kataw.SyntaxNode, propChain: string[] } } = {};
+    private circularAssignments: { [id: number]: { node: kataw.SyntaxNode, propChain: string[] } } = {};
 
     public findCircularAssignments() {
         this.circularAssignments = {};
@@ -56,7 +56,7 @@ export class CircularTypesFinder {
             const key = symbolLeft.valueDeclaration.start + "->" + leftProps.map(p => p + "->").join("");
             const value = symbolRight.valueDeclaration.start + "->" + rightProps.map(p => p + "->").join("");
             if (key.indexOf(value) === 0 || Object.keys(this.assignments).filter(k => k.indexOf(value) === 0).some(k => this.assignments[k].some(a => key.indexOf(a) === 0)))
-                this.circularAssignments[refNode.start] = { node: symbolLeft.valueDeclaration, propChain: leftProps };
+                this.circularAssignments[refNode.id] = { node: symbolLeft.valueDeclaration, propChain: leftProps };
             this.assignments[key] = (this.assignments[key] || []).concat(value);
         }
     }
