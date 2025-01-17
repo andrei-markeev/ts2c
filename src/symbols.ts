@@ -221,8 +221,17 @@ export class SymbolsHelper {
     }
 
     public ensureStruct(structType: StructType, name: string) {
-        if (!structType.structName)
-            structType.structName = name + "_t";
+        if (!structType.structName) {
+            let structName = name + "_t";
+            if (this.symbolOrTempVarExists('main', null, structName)) {
+                let i = 2;
+                while (this.symbolOrTempVarExists('main', null, structName + "_" + i))
+                    i++;
+                structName = structName + "_" + i;
+            }
+            structType.structName = structName;
+            this.temporaryVariables['main'].push(structName);
+        }
 
         let found = this.findStructByType(structType);
         if (!found)

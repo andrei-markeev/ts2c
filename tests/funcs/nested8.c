@@ -26,21 +26,28 @@ typedef short int16_t;
 }
 
 struct scope_t {
-    int16_t c;
     int16_t a;
-    int16_t b;
 };
 struct closure_t {
     struct null * (*func)(int16_t, struct closure_t *);
     struct scope_t * scope;
 };
+struct scope_t_2 {
+    int16_t a;
+    int16_t b;
+};
 struct closure_2_t {
     struct null * (*func)(int16_t, struct closure_2_t *);
-    struct scope_t * scope;
+    struct scope_t_2 * scope;
+};
+struct scope_t_3 {
+    int16_t c;
+    int16_t a;
+    int16_t b;
 };
 struct closure_3_t {
     int16_t (*func)(int16_t, struct closure_3_t *);
-    struct scope_t * scope;
+    struct scope_t_3 * scope;
 };
 
 static ARRAY(void *) gc_main;
@@ -58,7 +65,7 @@ int16_t func_3(int16_t d, struct closure_3_t * closure)
 }
 struct closure_3_t * func_2(int16_t c, struct closure_2_t * closure)
 {
-    struct scope_t * scope;
+    struct scope_t_3 * scope;
     struct closure_3_t * closure_3;
 
     scope = malloc(sizeof(*scope));
@@ -77,7 +84,7 @@ struct closure_3_t * func_2(int16_t c, struct closure_2_t * closure)
 }
 struct closure_2_t * func(int16_t b, struct closure_t * closure)
 {
-    struct scope_t * scope;
+    struct scope_t_2 * scope;
     struct closure_2_t * closure_2;
 
     scope = malloc(sizeof(*scope));
