@@ -116,6 +116,7 @@ export class FuncType {
     }
 
     public returnType: CType;
+    public returnTypeIsCircular: boolean;
     public parameterTypes?: CType[];
     public instanceType: CType;
     public closureParams: { assigned: boolean, node: kataw.Identifier, refs: kataw.Identifier[] }[];
@@ -158,7 +159,8 @@ export class FuncType {
         const paramTypes = [].concat(this.parameterTypes);
         if (this.instanceType)
             paramTypes.unshift(this.instanceType);
-        return getTypeBodyText(this.returnType) 
+        const retTypeText = this.returnTypeIsCircular ? PointerVarType : getTypeBodyText(this.returnType);
+        return  retTypeText
             + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
             + (this.scopeType ? " scope=" + getTypeBodyText(this.scopeType) : "")
             + (this.closureParams.length ? " closure" : "")
@@ -168,6 +170,7 @@ export class FuncType {
     constructor(
         data: {
             returnType?: CType,
+            returnTypeIsCircular?: boolean,
             parameterTypes?: CType[],
             /** type of `new function()` */
             instanceType?: CType,
@@ -181,6 +184,7 @@ export class FuncType {
         }
     ) {
         this.returnType = data.returnType || VoidType;
+        this.returnTypeIsCircular = data.returnTypeIsCircular || false;
         this.parameterTypes = data.parameterTypes || [];
         this.instanceType = data.instanceType || null;
         this.closureParams = data.closureParams || [];

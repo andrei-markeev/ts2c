@@ -14,7 +14,7 @@ export class TypeMerger {
         else if (!type1 && !type2)
             return noChanges;
 
-        else if (typeof type1 == "string" && typeof type2 == "string" && type1 == type2)
+        else if (typeof type1 === "string" && typeof type2 === "string" && type1 === type2)
             return noChanges;
 
         else if (type1 === VoidType)
@@ -94,9 +94,21 @@ export class TypeMerger {
                 return noChanges;
         }
         else if (type1 instanceof FuncType && type2 instanceof FuncType) {
-            const { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
+            let { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
             const { type: instanceType, replaced: instanceTypeReplaced } = this.mergeTypes(type1.instanceType, type2.instanceType);
             const { type: scopeType, replaced: scopeTypeReplaced } = this.mergeTypes(type1.scopeType, type2.scopeType) as { type: StructType, replaced: boolean };
+
+            if (returnTypeReplaced) {
+                let retType = returnType;
+                while (retType instanceof FuncType) {
+                    if (retType.returnType === type1 || retType.returnType === type2) {
+                        retType.returnTypeIsCircular = true;
+                        break;
+                    }
+                    retType = retType.returnType;
+                }
+            }
+
             const paramCount = Math.max(type1.parameterTypes.length, type2.parameterTypes.length);
             let paramTypesReplaced = type1.parameterTypes.length !== type2.parameterTypes.length;
             let parameterTypes = [];
@@ -116,8 +128,11 @@ export class TypeMerger {
             const needsClosureStructReplaced = type1.needsClosureStruct != type2.needsClosureStruct;
             const needsClosureStruct = type1.needsClosureStruct || type2.needsClosureStruct;
 
-            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced)
-                return { type: this.ensureNoTypeDuplicates(new FuncType({ returnType, parameterTypes, instanceType, closureParams, needsClosureStruct, scopeType })), replaced: true };
+            const returnTypeIsCircularReplaced = type1.returnTypeIsCircular != type2.returnTypeIsCircular;
+            const returnTypeIsCircular = type1.returnTypeIsCircular || type2.returnTypeIsCircular;
+
+            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced || returnTypeIsCircularReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType({ returnType, returnTypeIsCircular, parameterTypes, instanceType, closureParams, needsClosureStruct, scopeType })), replaced: true };
             else
                 return noChanges;
         }

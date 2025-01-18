@@ -443,7 +443,7 @@ export class TypeResolver {
         allNodes
             .filter(n => isFunction(n))
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
-        */allNodes
+        allNodes
             .filter(n => (!kataw.isKeyword(n) || n.kind === kataw.SyntaxKind.ThisKeyword)
                 && n.kind !== kataw.SyntaxKind.Block
                 && n.kind !== kataw.SyntaxKind.BlockStatement
@@ -453,7 +453,7 @@ export class TypeResolver {
             )
             .forEach(n => {
                 const type = this.typeHelper.getCType(n);
-                console.log(getNodeTextInContext(n), "|", kataw.SyntaxKind[n.kind], "|", type == null || typeof type === "string" ? type : type.getBodyText());
+                console.log(getNodeTextInContext(n), " (id=" + n.id + ") |", kataw.SyntaxKind[n.kind], "|", type == null || typeof type === "string" ? type : type.getBodyText());
             })
         //*/
 

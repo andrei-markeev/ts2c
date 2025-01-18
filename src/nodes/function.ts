@@ -6,17 +6,18 @@ import { FuncType, getTypeText } from '../types/ctypes';
 import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction, getNodeText, isPropertyDefinition, isVariableDeclaration, isCall, isFunctionDeclaration, isFunctionExpression, isMaybeStandardCall } from '../types/utils';
 import { CExpression } from './expressions';
 
-@CodeTemplate(`{returnType} {name}({parameters {, }=> {this}});`)
+@CodeTemplate(`{funcDecl}({parameters {, }=> {this}});`)
 export class CFunctionPrototype extends CTemplateBase {
-    public returnType: string;
+    public funcDecl: CVariable;
     public name: string;
     public parameters: (CVariable | string)[] = [];
     constructor(scope: IScope, node: kataw.FunctionDeclaration) {
         super();
-        const funcType = scope.root.typeHelper.getCType(node) as FuncType;
-        this.returnType = scope.root.typeHelper.getTypeString(funcType.returnType);
-
         this.name = node.name.text;
+
+        const funcType = scope.root.typeHelper.getCType(node) as FuncType;
+        this.funcDecl = new CVariable(scope, this.name, funcType.returnType, { removeStorageSpecifier: true, arraysToPointers: true, funcDecl: true });
+
         this.parameters = node.formalParameterList.formalParameters.map((p, i) => 
             kataw.isIdentifier(p) ?
                 new CVariable(scope, p.text, funcType.parameterTypes[i], { removeStorageSpecifier: true })
@@ -119,27 +120,22 @@ export class CFunction extends CTemplateBase implements IScope {
 
         if (node.name) {
             const nodesInFunction = getAllNodesUnder(node);
-            const declaredFunctionNames = (root.functions as {name: string}[]).concat(root.functionPrototypes).map(f => f.name);
-            nodesInFunction
-                .filter(n => {
-                    if (!isCall(n))
-                        return false;
-                    if (isMaybeStandardCall(n) && this.root.standardCallHelper.isStandardCall(n))
-                        return false;
-                    const symbol = this.root.symbolsHelper.getSymbolAtLocation(n.expression);
-                    if (symbol && symbol.resolver)
-                        return false;
-                    return true;
-                })
-                .forEach((c: kataw.CallExpression) => {
-                    if (kataw.isIdentifier(c.expression) && declaredFunctionNames.indexOf(c.expression.text) === -1) {
-                        const decl = root.typeHelper.getDeclaration(c.expression);
-                        if (decl && decl !== node.name && isFunctionDeclaration(decl.parent)) {
-                            root.functionPrototypes.push(new CFunctionPrototype(root, decl.parent))
-                            declaredFunctionNames.push(decl.text);
-                        }
+            const declaredFunctionNames = new Set<string>();
+            declaredFunctionNames.add(node.name.text);
+            for (const func of root.functions)
+                if ('name' in func)
+                    declaredFunctionNames.add(func.name);
+            for (const funcProt of root.functionPrototypes)
+                declaredFunctionNames.add(funcProt.name);
+            for (let n of nodesInFunction) {
+                if (kataw.isIdentifier(n) && !declaredFunctionNames.has(n.text)) {
+                    const decl = root.typeHelper.getDeclaration(n);
+                    if (decl && decl.id !== n.id && isFunctionDeclaration(decl.parent)) {
+                        root.functionPrototypes.push(new CFunctionPrototype(root, decl.parent))
+                        declaredFunctionNames.add(decl.text);
                     }
-                });
+                }
+            }
         }
     }
 }
