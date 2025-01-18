@@ -128,11 +128,13 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] hasOwnProperty
      - [ ] isPrototypeOf
      - [ ] propertyIsEnumerable
+     - [ ] `prototype` and prototypal inheritance
  - [ ] Function
      - [ ] ~~new~~  _(will not be implemented)_
-     - [ ] ~~toString~~  _(will not be implemented)_
+     - [ ] toString
      - [ ] apply
      - [ ] call
+     - [ ] `arguments` object
  - [ ] Array
      - [ ] new
      - [x] **toString**
