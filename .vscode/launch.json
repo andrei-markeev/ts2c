@@ -8,7 +8,7 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/funcs/recursive1.ts"],
+            "args": ["tests/objs/obj8.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

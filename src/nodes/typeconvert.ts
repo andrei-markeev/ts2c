@@ -123,6 +123,9 @@ export class CAsNumber extends CTemplateBase {
             {arrayElementCat}
         }
     {/if}
+    {#if gcVarName}
+        ARRAY_PUSH({gcVarName}, (void *){tmpVarName});
+    {/if}
 {/statements}
 {#if isNumberLiteral}
     "{arg}"
@@ -145,6 +148,7 @@ export class CAsString extends CTemplateBase {
     public isUniversalVar: boolean;
     public tmpVarName: string;
     public iteratorVarName: string;
+    public gcVarName: string = '';
     public arraySize: CArraySize;
     public arrayStrLen: CAsString_Length;
     public arrayElementCat: CAsString_Concat;
@@ -161,8 +165,8 @@ export class CAsString extends CTemplateBase {
         if (this.isNumber || this.isArray || this.isUniversalVar) {
             this.tmpVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
             scope.variables.push(new CVariable(scope, this.tmpVarName, "char *"));
-            const gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
-            if (gcVarName)
+            this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
+            if (this.gcVarName)
                 scope.root.headerFlags.gc_iterator = true;
         }
         if (this.isNumber)

@@ -105,6 +105,7 @@ int main(void) {
         tmp = malloc(STR_INT16_T_BUFLEN);
         assert(tmp != NULL);
         sprintf(tmp, "%d", indices[x]);
+        ARRAY_PUSH(gc_main, (void *)tmp);
         DICT_SET(obj, tmp, values[x]);
     }
     y = 0;
@@ -114,6 +115,7 @@ int main(void) {
         tmp_2 = malloc(STR_INT16_T_BUFLEN);
         assert(tmp_2 != NULL);
         sprintf(tmp_2, "%d", indices[y]);
+        ARRAY_PUSH(gc_main, (void *)tmp_2);
         printf("%s\n", DICT_GET(obj, tmp_2, 0));
     }
     free(obj->index->data);
