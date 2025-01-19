@@ -55,7 +55,7 @@ export class CFunction extends CTemplateBase implements IScope {
     public scopeVarAllocator: CVariableAllocation = null;
     public statements: CExpression[] = [];
     public gcVarNames: string[];
-    public destructors: CVariableDestructors;
+    public destructors: CVariableDestructors | string = '';
 
     constructor(public root: CProgram, node: kataw.FunctionDeclaration | kataw.FunctionExpression) {
         super();

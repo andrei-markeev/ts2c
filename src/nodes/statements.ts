@@ -1,12 +1,12 @@
 import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CProgram, IScope} from '../program';
-import { ArrayType, NumberVarType, StringVarType } from '../types/ctypes';
+import { ArrayType, FuncType, NumberVarType, StringVarType } from '../types/ctypes';
 import { CVariable, CVariableDeclaration, CVariableDestructors } from './variable';
 import { CExpression, CCondition } from './expressions';
 import { CElementAccess, CArraySize, CSimpleElementAccess } from './elementaccess';
 import { AssignmentHelper } from './assignment';
-import { getAllNodesUnder, getNodeText, getVarDeclFromSimpleInitializer, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForInStatement, isForOfStatement, isForStatement, isSimpleInitializer, isStringLiteral, isWhileStatement } from '../types/utils';
+import { findParentFunction, getAllNodesUnder, getNodeText, getVarDeclFromSimpleInitializer, isBinaryExpression, isBreakStatement, isCaseClause, isContinueStatement, isDoWhileStatement, isForInStatement, isForOfStatement, isForStatement, isSimpleInitializer, isStringLiteral, isWhileStatement } from '../types/utils';
 
 @CodeTemplate(`{statement}{breakLabel}`, kataw.SyntaxKind.LabelledStatement)
 export class CLabeledStatement extends CTemplateBase {
@@ -71,8 +71,15 @@ export class CEmptyStatement {
 }
 
 @CodeTemplate(`
-{destructors}
-{#if expression}
+{#statements}
+    {#if retVarName}
+        {retVarName} = {expression};
+    {/if}
+    {destructors}
+{/statements}
+{#if retVarName}
+    return {retVarName};
+{#elseif expression}
     return {expression};
 {#else}
     return;
@@ -80,13 +87,32 @@ export class CEmptyStatement {
 `, kataw.SyntaxKind.ReturnStatement)
 export class CReturnStatement extends CTemplateBase {
     public expression: CExpression = null;
-    public destructors: CVariableDestructors;
+    public destructors: CVariableDestructors = null;
     public retVarName: string = null;
     public closureParams: { name: string, value: CExpression }[] = [];
     constructor(scope: IScope, node: kataw.ReturnStatement) {
         super();
-        if (node.expression !== null)
+        if (node.expression !== null) {
             this.expression = CodeTemplateFactory.createForNode(scope, node.expression);
+            let needRetVar = false;
+            let returnExprNodes = getAllNodesUnder(node.expression);
+            let destructors = scope.root.memoryManager.getDestructorsForScope(node);
+            for (let n of returnExprNodes) {
+                if (kataw.isIdentifier(n)) {
+                    let symbol = scope.root.symbolsHelper.getSymbolAtLocation(n);
+                    if (symbol) {
+                        if (destructors.some(d => d.varName === n.text))
+                            needRetVar = true;
+                    }
+                }
+            }
+            if (needRetVar) {
+                const funcNode = findParentFunction(node);
+                const funcType = scope.root.typeHelper.getCType(funcNode) as FuncType;
+                this.retVarName = scope.root.symbolsHelper.addTemp(node, 'result');
+                scope.variables.push(new CVariable(scope, this.retVarName, funcType.returnType));
+            }
+        }
         this.destructors = new CVariableDestructors(scope, node);
     }
 }

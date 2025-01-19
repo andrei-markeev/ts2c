@@ -137,6 +137,7 @@ void ask(int16_t n)
         default:
             printf("Please pick a number from 0 to 5!\n");
     }
+
     free((char *)tmp_result);
     free((char *)tmp_result_2);
     free((char *)tmp_result_3);

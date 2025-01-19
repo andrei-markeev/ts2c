@@ -129,6 +129,7 @@ int main(void) {
     free(obj->values->data);
     free(obj->values);
     free(obj);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

@@ -422,6 +422,7 @@ int main(void) {
     free(dict->values);
     free(dict);
     free((char *)tmp_result);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

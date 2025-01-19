@@ -86,6 +86,7 @@ const char * alloc(int16_t n)
         free((char *)tmp_result_2);
         return "";
     }
+
     free((char *)tmp_result_2);
 }
 void use(int16_t index, const char * search)
@@ -99,6 +100,7 @@ void use(int16_t index, const char * search)
         printf("%s\n", value);
     else
         printf("%s not found!\n", search);
+
     for (gc_i = 0; gc_i < gc_212->size; gc_i++)
         free(gc_212->data[gc_i]);
     free(gc_212->data);

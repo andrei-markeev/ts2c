@@ -386,6 +386,7 @@ int main(void) {
     free(y->values->data);
     free(y->values);
     free(y);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

@@ -116,6 +116,7 @@ int main(void) {
     }
     free(gc_main_arrays->data);
     free(gc_main_arrays);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

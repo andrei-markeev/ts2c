@@ -1003,6 +1003,7 @@ int main(void) {
     for (gc_i = 0; gc_i < gc_main_arrays_c->size; gc_i++) {
         for (gc_j = 0; gc_j < (gc_main_arrays_c->data[gc_i] ? gc_main_arrays_c->data[gc_i]->size : 0); gc_j++)
             free((void*)gc_main_arrays_c->data[gc_i]->data[gc_j]);
+
         free(gc_main_arrays_c->data[gc_i] ? gc_main_arrays_c->data[gc_i]->data : NULL);
         free(gc_main_arrays_c->data[gc_i]);
     }

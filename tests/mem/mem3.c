@@ -54,6 +54,7 @@ void func()
     printf("{ ");
     printf("key: \"%s\"", x->key);
     printf(" }\n");
+
     for (gc_i = 0; gc_i < gc_74->size; gc_i++)
         free(gc_74->data[gc_i]);
     free(gc_74->data);

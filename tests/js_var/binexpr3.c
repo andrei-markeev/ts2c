@@ -2532,6 +2532,7 @@ int main(void) {
     free((char *)tmp_result_78);
     free((char *)tmp_result_84);
     free((char *)tmp_result_88);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

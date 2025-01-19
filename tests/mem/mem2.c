@@ -41,6 +41,7 @@ void testInNestedFunc()
         printf("%d", obj->data[i]);
     }
     printf(" ]\n");
+
     free(obj->data);
     free(obj);
 }

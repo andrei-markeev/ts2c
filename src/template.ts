@@ -82,6 +82,12 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
         let endIfPos = template.indexOf("{/if}", ifPos);
         let elseIfPos = template.indexOf("{#elseif ", ifPos);
         let elsePos = template.indexOf("{#else}", ifPos);
+
+        if (elseIfPos !== -1 && elseIfPos > endIfPos)
+            elseIfPos = -1;
+        if (elsePos !== -1 && elsePos > endIfPos)
+            elsePos = -1;
+
         let endIfBodyPos = endIfPos;
         if (elseIfPos != -1 && elseIfPos < endIfBodyPos)
             endIfBodyPos = elseIfPos;

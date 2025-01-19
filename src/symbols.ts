@@ -1,7 +1,7 @@
 import * as kataw from '@andrei-markeev/kataw'
 import { CType, StructType, ArrayType, NumberVarType, FuncType } from './types/ctypes';
 import { TypeHelper } from './types/typehelper';
-import { findParentFunction, isFieldPropertyAccess, isPropertyDefinition, isStringLiteral } from './types/utils';
+import { findParentFunction, isEqualsExpression, isFieldPropertyAccess, isObjectLiteral, isPropertyDefinition, isStringLiteral, isVariableDeclaration } from './types/utils';
 import { reservedCSymbolNames } from './program';
 import { IGlobalSymbolResolver } from './standard';
 
@@ -111,8 +111,19 @@ export class SymbolsHelper {
         let parentSymbol: SymbolInfo = null;
         let mustHaveParent = false;
         if (isPropertyDefinition(node.parent) && node.parent.left === node) {
-            // don't track symbols inside of object literals
-            return [null, null];
+            mustHaveParent = true;
+            let propDefinitionList = <kataw.PropertyDefinitionList>node.parent.parent;
+            if (!isObjectLiteral(propDefinitionList.parent))
+                return [null, null];
+            let objLiteralParent = propDefinitionList.parent.parent;
+            if (isVariableDeclaration(objLiteralParent))
+                parentSymbol = this.getSymbolAtLocation(objLiteralParent.binding);
+            else if (isPropertyDefinition(objLiteralParent))
+                parentSymbol = this.getSymbolAtLocation(objLiteralParent.left);
+            else if (isEqualsExpression(objLiteralParent) && kataw.isIdentifier(objLiteralParent.left))
+                parentSymbol = this.getSymbolAtLocation(objLiteralParent.left);
+            else
+                return [null, null];
         } else if (isFieldPropertyAccess(node.parent) && node.parent.expression === node) {
             mustHaveParent = true;
             parentSymbol = kataw.isIdentifier(node.parent.member) && this.getSymbolAtLocation(node.parent.member);

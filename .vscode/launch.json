@@ -8,7 +8,7 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/objs/obj8.ts"],
+            "args": ["tests/mem/mem7.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

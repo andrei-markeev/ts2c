@@ -43,6 +43,7 @@ void do_stuff()
     printf("a: %d", obj->a);    printf(", ");
     printf("b: \"%s\"", obj->b);
     printf(" }\n");
+
     free(obj);
 }
 

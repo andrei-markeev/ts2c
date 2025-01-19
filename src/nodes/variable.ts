@@ -120,45 +120,43 @@ export class CVariableAllocation extends CTemplateBase {
 }
 
 @CodeTemplate(`
-{#statements}
-    {arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}
-    {destructors => free({this});\n}
-    {#if gcArraysCVarName}
-        for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {
-            for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)
-                free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n
-            free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);
-            free({gcArraysCVarName}->data[gc_i]);
-        }
-        free({gcArraysCVarName}->data);
-        free({gcArraysCVarName});
-    {/if}
-    {#if gcArraysVarName}
-        for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
-            free({gcArraysVarName}->data[gc_i]->data);
-            free({gcArraysVarName}->data[gc_i]);
-        }
-        free({gcArraysVarName}->data);
-        free({gcArraysVarName});
-    {/if}
-    {#if gcDictsVarName}
-        for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {
-            free({gcDictsVarName}->data[gc_i]->index->data);
-            free({gcDictsVarName}->data[gc_i]->index);
-            free({gcDictsVarName}->data[gc_i]->values->data);
-            free({gcDictsVarName}->data[gc_i]->values);
-            free({gcDictsVarName}->data[gc_i]);
-        }
-        free({gcDictsVarName}->data);
-        free({gcDictsVarName});
-    {/if}
-    {#if gcVarName}
-        for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
-            free({gcVarName}->data[gc_i]);
-        free({gcVarName}->data);
-        free({gcVarName});
-    {/if}
-{/statements}`
+{arrayDestructors => for (gc_i = 0; gc_i < ({this} ? {this}->size : 0); gc_i++) free((void*){this}->data[gc_i]);\n}
+{destructors => free({this});\n}
+{#if gcArraysCVarName}
+    for (gc_i = 0; gc_i < {gcArraysCVarName}->size; gc_i++) {
+        for (gc_j = 0; gc_j < ({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->size : 0); gc_j++)
+            free((void*){gcArraysCVarName}->data[gc_i]->data[gc_j]);\n
+        free({gcArraysCVarName}->data[gc_i] ? {gcArraysCVarName}->data[gc_i]->data : NULL);
+        free({gcArraysCVarName}->data[gc_i]);
+    }
+    free({gcArraysCVarName}->data);
+    free({gcArraysCVarName});
+{/if}
+{#if gcArraysVarName}
+    for (gc_i = 0; gc_i < {gcArraysVarName}->size; gc_i++) {
+        free({gcArraysVarName}->data[gc_i]->data);
+        free({gcArraysVarName}->data[gc_i]);
+    }
+    free({gcArraysVarName}->data);
+    free({gcArraysVarName});
+{/if}
+{#if gcDictsVarName}
+    for (gc_i = 0; gc_i < {gcDictsVarName}->size; gc_i++) {
+        free({gcDictsVarName}->data[gc_i]->index->data);
+        free({gcDictsVarName}->data[gc_i]->index);
+        free({gcDictsVarName}->data[gc_i]->values->data);
+        free({gcDictsVarName}->data[gc_i]->values);
+        free({gcDictsVarName}->data[gc_i]);
+    }
+    free({gcDictsVarName}->data);
+    free({gcDictsVarName});
+{/if}
+{#if gcVarName}
+    for (gc_i = 0; gc_i < {gcVarName}->size; gc_i++)
+        free({gcVarName}->data[gc_i]);
+    free({gcVarName}->data);
+    free({gcVarName});
+{/if}`
 )
 export class CVariableDestructors extends CTemplateBase {
     public gcVarName: string = null;

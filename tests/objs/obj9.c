@@ -56,6 +56,7 @@ int main(void) {
     tmp_obj->b = 96;
     printf("%d\n", getT(tmp_obj, 2, 3));
     free(a);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

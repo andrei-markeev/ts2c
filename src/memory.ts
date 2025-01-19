@@ -26,20 +26,11 @@ export class MemoryManager {
     private scopesOfVariables: { [key: string]: VariableScopeInfo } = {};
     private reusedVariables: { [key: number]: number } = {};
     private originalNodes: { [key: string]: kataw.SyntaxNode } = {};
-    private references: { [key: string]: kataw.SyntaxNode[] } = {};
     private needsGCMain: boolean = false;
 
     constructor(private typeHelper: TypeHelper, private symbolsHelper: SymbolsHelper, private standardCallHelper: StandardCallHelper) { }
 
     public scheduleNodeDisposals(nodes: kataw.SyntaxNode[]) {
-        // TODO: use symbol refs
-        nodes.filter(n => kataw.isIdentifier(n)).forEach(n => {
-            const decl = this.typeHelper.getDeclaration(n);
-            if (decl) {
-                this.references[decl.start] = this.references[decl.start] || [];
-                this.references[decl.start].push(n);
-            }
-        });
         for (let node of nodes) {
             switch (node.kind) {
                 case kataw.SyntaxKind.ArrayLiteral:
@@ -260,11 +251,13 @@ export class MemoryManager {
 
             let refs = [node];
             if (kataw.isIdentifier(node)) {
-                const decl = this.typeHelper.getDeclaration(node);
-                if (decl)
-                    refs = this.references[decl.start] || refs;
+                const symbol = this.symbolsHelper.getSymbolAtLocation(node);
+                if (symbol)
+                    refs = symbol.references;
             } else if (isFunctionDeclaration(node)) {
-                refs = this.references[node.name.start] || refs;
+                const symbol = this.symbolsHelper.getSymbolAtLocation(node.name);
+                if (symbol)
+                    refs = symbol.references;
             }
             let returned = false;
             for (let ref of refs) {

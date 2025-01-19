@@ -65,6 +65,7 @@ void f2()
     printf("key1: \"%s\"", b->key1);    printf(", ");
     printf("key2: \"%s\"", b->key2);
     printf(" }\n");
+
     for (gc_i = 0; gc_i < gc_146_214->size; gc_i++)
         free(gc_146_214->data[gc_i]);
     free(gc_146_214->data);
@@ -83,6 +84,7 @@ void f1()
     printf("key1: \"%s\"", a->key1);    printf(", ");
     printf("key2: \"%s\"", a->key2);
     printf(" }\n");
+
     for (gc_i = 0; gc_i < gc_146_214->size; gc_i++)
         free(gc_146_214->data[gc_i]);
     free(gc_146_214->data);

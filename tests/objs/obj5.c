@@ -133,6 +133,7 @@ int main(void) {
     free(dict->values->data);
     free(dict->values);
     free(dict);
+
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);
