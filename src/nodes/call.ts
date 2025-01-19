@@ -42,7 +42,7 @@ export class CCallExpression extends CTemplateBase {
 
         // calling function that uses "this"
         const funcType = scope.root.typeHelper.getCType(call.expression) as FuncType;
-        if (!funcType || funcType.instanceType != null) {
+        if (!funcType || !(funcType instanceof FuncType) || funcType.instanceType != null) {
             this.nodeText = getNodeText(call);
             return;
         }

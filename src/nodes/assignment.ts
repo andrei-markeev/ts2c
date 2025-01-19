@@ -5,33 +5,45 @@ import {CType, ArrayType, StructType, DictType, UniversalVarType} from '../types
 import {CElementAccess, CSimpleElementAccess} from './elementaccess';
 import {CExpression} from './expressions';
 import { CAsString, CAsUniversalVar } from './typeconvert';
-import { getNodeText, isArrayLiteral, isObjectLiteral, isPropertyDefinition, isStringLiteral } from '../types/utils';
+import { getNodeText, isArrayLiteral, isFieldElementAccess, isFieldPropertyAccess, isObjectLiteral, isPropertyDefinition, isStringLiteral } from '../types/utils';
 
 export class AssignmentHelper {
     public static create(scope: IScope, left: kataw.ExpressionNode, right: kataw.ExpressionNode, inline: boolean = false) {
         let accessor;
         let varType;
         let argumentExpression;
-        if (left.kind === kataw.SyntaxKind.MemberAccessExpression) {
-            let elemAccess = <kataw.MemberAccessExpression>left;
-            varType = scope.root.typeHelper.getCType(elemAccess.member);
-            if (kataw.isIdentifier(elemAccess.member))
-                accessor = elemAccess.member.text;
+        if (isFieldElementAccess(left)) {
+            varType = scope.root.typeHelper.getCType(left.member);
+            if (kataw.isIdentifier(left.member))
+                accessor = left.member.text;
             else
-                accessor = new CElementAccess(scope, elemAccess.member);
+                accessor = new CElementAccess(scope, left.member);
 
-            if (varType instanceof StructType && isStringLiteral(elemAccess.expression)) {
-                let ident = elemAccess.expression.text;
-                if (ident.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
-                    argumentExpression = ident;
+            if (varType instanceof StructType && isStringLiteral(left.expression)) {
+                let identText = left.expression.text;
+                if (identText.search(/^[_A-Za-z][_A-Za-z0-9]*$/) > -1)
+                    argumentExpression = identText;
                 else
-                    argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
+                    argumentExpression = CodeTemplateFactory.createForNode(scope, left.expression);
             } else if (varType instanceof DictType) {
-                argumentExpression = new CAsString(scope, elemAccess.expression);
+                argumentExpression = new CAsString(scope, left.expression);
             } else
-                argumentExpression = CodeTemplateFactory.createForNode(scope, elemAccess.expression);
-        }
-        else {
+                argumentExpression = CodeTemplateFactory.createForNode(scope, left.expression);
+        } else if (isFieldPropertyAccess(left)) {
+            varType = scope.root.typeHelper.getCType(left.member);
+            if (varType instanceof DictType || varType === UniversalVarType) {
+                if (kataw.isIdentifier(left.member))
+                    accessor = left.member.text;
+                else
+                    accessor = new CElementAccess(scope, left.member);
+
+                argumentExpression = '"' + left.expression.text + '"';
+            } else {
+                varType = scope.root.typeHelper.getCType(left);
+                accessor = new CElementAccess(scope, left);
+                argumentExpression = null;
+            }
+        } else {
             varType = scope.root.typeHelper.getCType(left);
             accessor = new CElementAccess(scope, left);
             argumentExpression = null;
