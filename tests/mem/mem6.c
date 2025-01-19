@@ -26,6 +26,12 @@ typedef short int16_t;
 }
 	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct array_number_t {
     int16_t size;
     int16_t capacity;
@@ -34,7 +40,7 @@ struct array_number_t {
 
 static int16_t gc_i;
 
-static ARRAY(ARRAY(void *)) gc_main_arrays;
+static ARRAY(struct array_pointer_t *) gc_main_arrays;
 static struct array_number_t * init_arr;
 
 void recurse(struct array_number_t * incoming_arr);

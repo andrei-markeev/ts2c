@@ -85,7 +85,13 @@ int16_t tmp_dict_pos2;
 
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 
-static ARRAY(void *) gc_main;
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
 static int16_t indices[3] = { 1, 2, 3 };

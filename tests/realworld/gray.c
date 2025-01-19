@@ -25,6 +25,12 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct gray_t {
     struct array_number_t * data;
     int16_t height;
@@ -41,10 +47,10 @@ struct array_number_t {
     int16_t* data;
 };
 
-static ARRAY(void *) gc_main;
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
-static ARRAY(ARRAY(void *)) gc_main_arrays;
+static ARRAY(struct array_pointer_t *) gc_main_arrays;
 static struct imageSrc_t * colorImage;
 static struct gray_t * grayImage;
 static int16_t i;

@@ -91,7 +91,13 @@ void str_int16_t_cat(char *str, int16_t num) {
     strcat(str, numstr);
 }
 
-static ARRAY(void *) gc_main;
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
 static DICT(int16_t) obj;

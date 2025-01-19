@@ -11,11 +11,6 @@ typedef unsigned char uint8_t;
 typedef short int16_t;
 typedef unsigned short uint16_t;
 
-#define ARRAY(T) struct {\
-    int16_t size;\
-    int16_t capacity;\
-    T *data;\
-} *
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -108,6 +103,12 @@ struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
+};
+
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
 };
 
 struct dict_js_var_t {
@@ -265,7 +266,7 @@ struct js_var js_var_dict_inc(struct dict_js_var_t * dict, const char * key, int
     }
 }
 
-struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
+struct js_var js_var_plus(struct js_var left, struct js_var right, struct array_pointer_t *gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -356,7 +357,7 @@ struct js_var js_var_compute(struct js_var left, enum js_var_op op, struct js_va
     return result;
 }
 
-static ARRAY(void *) gc_main;
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
 static int16_t num;

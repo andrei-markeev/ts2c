@@ -4,11 +4,6 @@
 
 typedef short int16_t;
 
-#define ARRAY(T) struct {\
-    int16_t size;\
-    int16_t capacity;\
-    T *data;\
-} *
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -25,6 +20,12 @@ typedef short int16_t;
     array->data[array->size++] = item; \
 }
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct alloc_t {
     const char * key1;
     const char * key2;
@@ -32,7 +33,7 @@ struct alloc_t {
 
 static int16_t gc_i;
 
-static ARRAY(void *) gc_146_214;
+static struct array_pointer_t * gc_146_214;
 
 struct alloc_t * alloc()
 {

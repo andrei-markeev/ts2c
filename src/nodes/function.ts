@@ -104,10 +104,14 @@ export class CFunction extends CTemplateBase implements IScope {
         for (let gcVarName of this.gcVarNames) {
             if (root.variables.filter(v => v.name == gcVarName).length)
                 continue;
-            let gcType = "ARRAY(void *)";
-            if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
-            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
+            root.headerFlags.array_pointer_t = true;
+            const simplePointerArray = "struct array_pointer_t *"
+            let gcType = simplePointerArray;
+            if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(struct array_pointer_t *)";
+            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(struct array_pointer_t *))";
             if (gcVarName.indexOf("_dicts") > -1) gcType = "ARRAY(DICT(void *))";
+            if (gcType !== simplePointerArray)
+                root.headerFlags.gc_array = true;
             root.variables.push(new CVariable(root, gcVarName, gcType));
         }
 

@@ -106,6 +106,12 @@ struct array_string_t {
     const char ** data;
 };
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {
     int16_t i;
     for (i = 0; i < groupN; i++) {
@@ -139,7 +145,7 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
 static int16_t gc_i;
 static int16_t gc_j;
 
-static ARRAY(ARRAY(ARRAY(void *))) gc_main_arrays_c;
+static ARRAY(ARRAY(struct array_pointer_t *)) gc_main_arrays_c;
 static struct array_string_t * match;
 static struct array_string_t * match_array;
 static struct array_string_t * match_array_2;

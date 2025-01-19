@@ -35,6 +35,12 @@ void str_int16_t_cat(char *str, int16_t num) {
     strcat(str, numstr);
 }
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct scope_t {
     int16_t x;
 };
@@ -48,10 +54,10 @@ struct array_closure_t {
     struct closure_t ** data;
 };
 
-static ARRAY(void *) gc_main;
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
-static ARRAY(ARRAY(void *)) gc_main_arrays;
+static ARRAY(struct array_pointer_t *) gc_main_arrays;
 static struct array_closure_t * arr;
 static int16_t i;
 

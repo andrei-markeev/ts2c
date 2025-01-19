@@ -110,6 +110,12 @@ struct array_string_t {
     const char ** data;
 };
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
@@ -294,7 +300,7 @@ struct js_var js_var_get(struct js_var v, struct js_var arg) {
         return js_var_from(JS_VAR_UNDEFINED);
 }
 
-struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
+struct js_var js_var_plus(struct js_var left, struct js_var right, struct array_pointer_t *gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -336,7 +342,7 @@ struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *)
     return result;
 }
 
-static ARRAY(void *) gc_main;
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
 static int16_t num;

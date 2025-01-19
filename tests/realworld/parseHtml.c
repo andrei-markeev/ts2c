@@ -5,10 +5,12 @@
 #include <limits.h>
 #include <ctype.h>
 #include <setjmp.h>
+
 #define TRUE 1
 #define FALSE 0
 typedef unsigned char uint8_t;
 typedef short int16_t;
+
 struct regex_indices_struct_t {
     int16_t index;
     int16_t end;
@@ -24,6 +26,7 @@ struct regex_struct_t {
     const char * str;
     regex_func_t * func;
 };
+
 #define ARRAY(T) struct {\
     int16_t size;\
     int16_t capacity;\
@@ -44,6 +47,7 @@ struct regex_struct_t {
     }  \
     array->data[array->size++] = item; \
 }
+
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\
@@ -51,6 +55,12 @@ struct regex_struct_t {
         array->data[pos] = item; \
     } \
 }
+
+#define DICT(T) struct { \
+    ARRAY(const char *) index; \
+    ARRAY(T) values; \
+} *
+
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
     int16_t high = keys_size - 1;
@@ -73,6 +83,7 @@ int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
 
     return -1 - low;
 }
+
 #define DICT_CREATE(dict, init_capacity) { \
     dict = malloc(sizeof(*dict)); \
     ARRAY_CREATE(dict->index, init_capacity, 0); \
@@ -92,7 +103,9 @@ int16_t tmp_dict_pos2;
     } else \
         dict->values->data[tmp_dict_pos2] = value; \
 }
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
+
 int16_t str_pos(const char * str, const char *search) {
     int16_t i;
     const char * found = strstr(str, search);
@@ -109,6 +122,7 @@ int16_t str_pos(const char * str, const char *search) {
     }
     return pos;
 }
+
 int16_t str_len(const char * str) {
     int16_t len = 0;
     int16_t i = 0;
@@ -122,6 +136,7 @@ int16_t str_len(const char * str) {
     }
     return len;
 }
+
 const char * str_substring(const char * str, int16_t start, int16_t end) {
     int16_t i, tmp, pos, len = str_len(str), byte_start = -1;
     char *p, *buf;
@@ -154,55 +169,65 @@ const char * str_substring(const char * str, int16_t start, int16_t end) {
     buf[len] = '\0';
     return buf;
 }
+
 void str_int16_t_cat(char *str, int16_t num) {
     char numstr[STR_INT16_T_BUFLEN];
     sprintf(numstr, "%d", num);
     strcat(str, numstr);
 }
+
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
 struct js_var {
     enum js_var_type type;
     int16_t number;
     void *data;
 };
+
 struct array_js_var_t {
     int16_t size;
     int16_t capacity;
     struct js_var *data;
 };
+
 struct array_string_t {
     int16_t size;
     int16_t capacity;
     const char ** data;
 };
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
 };
+
 struct js_var js_var_from(enum js_var_type type) {
     struct js_var v;
     v.type = type;
     v.data = NULL;
     return v;
 }
+
 struct js_var js_var_from_str(const char *s) {
     struct js_var v;
     v.type = JS_VAR_STRING;
     v.data = (void *)s;
     return v;
 }
+
 struct js_var js_var_from_array(struct array_js_var_t *arr) {
     struct js_var v;
     v.type = JS_VAR_ARRAY;
     v.data = (void *)arr;
     return v;
 }
+
 struct js_var js_var_from_dict(struct dict_js_var_t *dict) {
     struct js_var v;
     v.type = JS_VAR_DICT;
     v.data = (void *)dict;
     return v;
 }
+
 struct js_var str_to_int16_t(const char * str) {
     struct js_var v;
     const char *p = str;
@@ -232,6 +257,7 @@ struct js_var str_to_int16_t(const char * str) {
     v.number = (int16_t)r;
     return v;
 }
+
 const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
 {
     char *buf;
@@ -318,6 +344,7 @@ uint8_t js_var_to_bool(struct js_var v)
     else
         return TRUE;
 }
+
 int err_i = 0;
 jmp_buf err_jmp[10];
 #define TRY { int err_val = setjmp(err_jmp[err_i++]); if (!err_val) {
@@ -325,6 +352,7 @@ jmp_buf err_jmp[10];
 #define THROW(x) longjmp(err_jmp[--err_i], x)
 struct array_string_t * err_defs;
 #define END_TRY err_defs->size--; } }
+
 struct js_var js_var_get(struct js_var v, struct js_var arg) {
     struct js_var tmp;
     const char *key;
@@ -348,9 +376,8 @@ struct js_var js_var_get(struct js_var v, struct js_var arg) {
     } else
         return js_var_from(JS_VAR_UNDEFINED);
 }
-static ARRAY(void *) gc_main;
 
-struct js_var js_var_plus(struct js_var left, struct js_var right)
+struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -363,7 +390,7 @@ struct js_var js_var_plus(struct js_var left, struct js_var right)
     {
         left_as_string = js_var_to_str(left, &need_dispose_left);
         right_as_string = js_var_to_str(right, &need_dispose_right);
-        
+
         result.type = JS_VAR_STRING;
         result.data = malloc(strlen(left_as_string) + strlen(right_as_string) + 1);
         assert(result.data != NULL);
@@ -392,10 +419,6 @@ struct js_var js_var_plus(struct js_var left, struct js_var right)
     return result;
 }
 
-struct special_t {
-    int16_t script;
-    int16_t style;
-};
 struct array_pointer_t {
     int16_t size;
     int16_t capacity;
@@ -409,6 +432,7 @@ void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN
         match_info->matches[i].end = -1;
     }
 }
+
 struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) {
     struct regex_match_struct_t match_info;
     struct array_string_t *match_array = NULL;
@@ -430,35 +454,39 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
 
     return match_array;
 }
-int16_t gc_i;
+
+static ARRAY(void *) gc_main;
+static int16_t gc_i;
 
 static ARRAY(ARRAY(void *)) gc_main_arrays;
-static ARRAY(void *) gc_main_dicts;
+static ARRAY(DICT(void *)) gc_main_dicts;
 static ARRAY(void *) gc_456;
-static ARRAY(ARRAY(void *)) gc_456_arrays_c;
+static ARRAY(ARRAY(ARRAY(void *))) gc_456_arrays_c;
 static struct js_var result;
 static const char * tmp_str;
 static uint8_t tmp_need_dispose;
-struct js_var newNode(struct js_var tagName, const char * attrs, struct js_var parent)
+
+struct js_var newNode(const char * tagName, const char * attrs, struct js_var parent)
 {
     struct dict_js_var_t * tmp_obj = NULL;
     struct array_pointer_t * tmp_array = NULL;
+
     ARRAY_CREATE(tmp_array, 2, 0);
     ARRAY_PUSH(gc_main_arrays, (void *)tmp_array);
     DICT_CREATE(tmp_obj, 4);
     ARRAY_PUSH(gc_main_dicts, (void *)tmp_obj);
-    DICT_SET(tmp_obj, "tagName", tagName);
+    DICT_SET(tmp_obj, "tagName", js_var_from_str(tagName));
     DICT_SET(tmp_obj, "attrs", js_var_from_str(attrs));
     DICT_SET(tmp_obj, "childNodes", js_var_from_array(tmp_array));
     DICT_SET(tmp_obj, "parentNode", parent);
     DICT_SET(tmp_obj, "innerHTML", js_var_from_str(""));
     return js_var_from_dict(tmp_obj);
-
 }
 struct regex_match_struct_t regex_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[3];
     if (capture) {
         result.matches = malloc(3 * sizeof(*result.matches));
@@ -466,6 +494,7 @@ struct regex_match_struct_t regex_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 3);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -790,6 +819,7 @@ struct regex_match_struct_t regex_2_search(const char *str, int16_t capture) {
     int16_t state = 0, next = -1, iterator, len = strlen(str), index = 0, end = -1;
     struct regex_match_struct_t result;
     char ch;
+
     int16_t started[1];
     if (capture) {
         result.matches = malloc(1 * sizeof(*result.matches));
@@ -797,6 +827,7 @@ struct regex_match_struct_t regex_2_search(const char *str, int16_t capture) {
         regex_clear_matches(&result, 1);
         memset(started, 0, sizeof started);
     }
+
     for (iterator = 0; iterator < len; iterator++) {
         ch = str[iterator];
 
@@ -876,27 +907,28 @@ struct regex_struct_t regex_2 = { "/^<\\/([-A-Za-z0-9_]+)[^>]*>/", regex_2_searc
 struct js_var appendChild(struct js_var node, const char * tagName, const char * attrs)
 {
     struct js_var n;
-    n = newNode(js_var_from_str(tagName), attrs, node);
-    js_var_get(js_var_get(node, js_var_from_str("childNodes")), js_var_from_str("push"))(n);
-    return n;
 
+    n = newNode(tagName, attrs, node);
+    /* Unsupported function call: 
+         node.childNodes.push(n) */;
+    return n;
 }
 void appendInnerHTML(struct js_var node, const char * html)
 {
     struct js_var n;
+
     n = node;
     while (js_var_to_bool(n))
     {
-        (js_var_get(n, js_var_from_str("innerHTML")) = js_var_plus(js_var_get(n, js_var_from_str("innerHTML")), js_var_from_str(html)));
+        (js_var_get(n, js_var_from_str("innerHTML")) = js_var_plus(js_var_get(n, js_var_from_str("innerHTML")), js_var_from_str(html), gc_main));
         n = js_var_get(n, js_var_from_str("parentNode"));
     }
-
 }
 struct js_var parseHtml(const char * html)
 {
     struct regex_struct_t startTagRegex;
     struct regex_struct_t endTagRegex;
-    struct special_t * special;
+    DICT(int16_t) special;
     int16_t index;
     uint8_t chars;
     struct array_string_t * match;
@@ -910,18 +942,21 @@ struct js_var parseHtml(const char * html)
 
     startTagRegex = regex;
     endTagRegex = regex_2;
-    special = malloc(sizeof(*special));
-    assert(special != NULL);
-    special->script = 1;
-    special->style = 1;
+    DICT_CREATE(special, 4);
+    DICT_SET(special, "script", 1);
+    DICT_SET(special, "style", 1);
     last = html;
-    currentNode = newNode(js_var_from_str(""), "{}", js_var_from(JS_VAR_NULL));
+    currentNode = newNode("", "{}", js_var_from(JS_VAR_NULL));
     rootNode = currentNode;
     while (str_len(html))
     {
+        char * null;
         chars = TRUE;
         printf("1\n");
-        if (!special->js_var_get(currentNode, js_var_from_str("tagName")))
+        null = js_var_to_str(js_var_get(currentNode, js_var_from_str("tagName")), &{needDisposeVarName});
+        if ({needDisposeVarName})
+            ARRAY_PUSH(gc_main, (void *)null);
+        if (!DICT_GET(special, null, 0))
         {
             if (str_pos(html, "<!--") == 0)
             {
@@ -981,12 +1016,16 @@ struct js_var parseHtml(const char * html)
         }
         else
         {
-            html = str_substring(html, str_pos(html, js_var_plus(js_var_plus(js_var_from_str("</"), js_var_get(currentNode, js_var_from_str("tagName"))), js_var_from_str(">"))), str_len(html));
+            html = str_substring(html, str_pos(html, js_var_plus(js_var_plus(js_var_from_str("</"), js_var_get(currentNode, js_var_from_str("tagName")), gc_main), js_var_from_str(">"), gc_main)), str_len(html));
         }
         printf("html==last...\n");
         if (strcmp(html, last) == 0)
         {
             printf("Parse Error: %s\n", html);
+            free(special->index->data);
+            free(special->index);
+            free(special->values->data);
+            free(special->values);
             free(special);
             for (gc_i = 0; gc_i < gc_456_arrays_c->size; gc_i++) {
                 for (gc_j = 0; gc_j < (gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->size : 0); gc_j++)
@@ -1011,6 +1050,10 @@ struct js_var parseHtml(const char * html)
         ARRAY_PUSH(gc_456, tmp_result);
         last = tmp_result;
     }
+    free(special->index->data);
+    free(special->index);
+    free(special->values->data);
+    free(special->values);
     free(special);
     for (gc_i = 0; gc_i < gc_456_arrays_c->size; gc_i++) {
         for (gc_j = 0; gc_j < (gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->size : 0); gc_j++)
@@ -1025,14 +1068,12 @@ struct js_var parseHtml(const char * html)
     free(gc_456->data);
     free(gc_456);
     return rootNode;
-
 }
 
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
     ARRAY_CREATE(gc_main_arrays, 2, 0);
     ARRAY_CREATE(gc_main_dicts, 2, 0);
-
     ARRAY_CREATE(err_defs, 2, 0);
 
     result = parseHtml("<html><body></body></html>");

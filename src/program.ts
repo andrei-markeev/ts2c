@@ -90,9 +90,11 @@ class HeaderFlags {
     array_string_t: boolean = false;
     array_int16_t_cmp: boolean = false;
     array_str_cmp: boolean = false;
+    array_pointer_t: boolean = false;
     gc_main: boolean = false;
     gc_iterator: boolean = false;
     gc_iterator2: boolean = false;
+    gc_array: boolean = false;
     dict: boolean = false;
     dict_find_pos: boolean = false;
     str_int16_t_buflen: boolean = false;
@@ -206,7 +208,7 @@ export const reservedCSymbolNames = [
     };
 {/if}
 
-{#if headerFlags.gc_iterator || headerFlags.gc_iterator2 || headerFlags.gc_main || headerFlags.dict || headerFlags.js_var_plus || headerFlags.js_var_get}
+{#if headerFlags.gc_array || headerFlags.dict || headerFlags.js_var_get}
     #define ARRAY(T) struct {\\
         int16_t size;\\
         int16_t capacity;\\
@@ -483,6 +485,14 @@ export const reservedCSymbolNames = [
         int16_t size;
         int16_t capacity;
         const char ** data;
+    };
+{/if}
+
+{#if headerFlags.array_pointer_t || headerFlags.gc_main || headerFlags.js_var_plus}
+    struct array_pointer_t {
+        int16_t size;
+        int16_t capacity;
+        void ** data;
     };
 {/if}
 
@@ -849,7 +859,7 @@ export const reservedCSymbolNames = [
 
 {#if headerFlags.js_var_plus}
 
-    struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
+    struct js_var js_var_plus(struct js_var left, struct js_var right, struct array_pointer_t *gc_main)
     {
         struct js_var result, left_to_number, right_to_number;
         const char *left_as_string, *right_as_string;
@@ -989,7 +999,7 @@ export const reservedCSymbolNames = [
 {/if}
 
 {#if headerFlags.gc_main || headerFlags.js_var_plus}
-    static ARRAY(void *) gc_main;
+    static struct array_pointer_t *gc_main;
 {/if}
 {#if headerFlags.gc_iterator || headerFlags.js_var_plus}
     static int16_t gc_i;
@@ -1033,14 +1043,18 @@ export class CProgram implements IScope {
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
             this.headerFlags.array = true;
+            this.headerFlags.array_pointer_t = true;
             if (gcVarName == "gc_main") {
                 this.headerFlags.gc_main = true;
                 continue;
             }
-            let gcType = "ARRAY(void *)";
-            if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(ARRAY(void *))";
-            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(ARRAY(void *)))";
+            const simplePointerArray = "struct array_pointer_t *"
+            let gcType = simplePointerArray;
+            if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(struct array_pointer_t *)";
+            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(struct array_pointer_t *))";
             if (gcVarName.indexOf("_dicts") > -1) gcType = "ARRAY(DICT(void *))";
+            if (gcType !== simplePointerArray)
+                this.headerFlags.gc_array = true;
             this.variables.push(new CVariable(this, gcVarName, gcType));
         }
 
@@ -1048,10 +1062,11 @@ export class CProgram implements IScope {
             this.statements.push(CodeTemplateFactory.createForNode(this, s));
 
         let [structs] = this.symbolsHelper.getStructsAndFunctionPrototypes(this.typeHelper);
+        this.headerFlags.array_pointer_t = this.headerFlags.array_pointer_t || structs.filter(s => s.name == "array_pointer_t").length > 0;
         this.headerFlags.array_string_t = this.headerFlags.array_string_t || structs.filter(s => s.name == "array_string_t").length > 0;
         this.headerFlags.js_var_array = this.headerFlags.js_var_array || structs.filter(s => s.name == "array_js_var_t").length > 0;
         this.headerFlags.js_var_dict = this.headerFlags.js_var_dict || structs.filter(s => s.name == "dict_js_var_t").length > 0;
-        this.userStructs = structs.filter(s => ["array_string_t", "array_js_var_t", "dict_js_var_t"].indexOf(s.name) == -1).map(s => ({
+        this.userStructs = structs.filter(s => ["array_string_t", "array_pointer_t", "array_js_var_t", "dict_js_var_t"].indexOf(s.name) == -1).map(s => ({
             name: s.name,
             properties: s.properties.map(p => new CVariable(this, p.name, p.type, { removeStorageSpecifier: true }))
         }));
