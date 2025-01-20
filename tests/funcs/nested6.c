@@ -41,7 +41,7 @@ static struct closure_t * add;
 
 int16_t func_2(struct closure_t * closure)
 {
-    (closure->scope->counter = closure->scope->counter + 1);
+    closure->scope->counter += 1;
     return closure->scope->counter;
 }
 struct closure_t * func()

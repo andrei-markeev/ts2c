@@ -62,14 +62,10 @@ export class StandardCallHelper {
     }
 
     public matchStringPropName(member: kataw.ExpressionNode, stringPropName: string) {
-        if (!StandardResolversByPropName[stringPropName])
+        if (StandardResolversByPropName[stringPropName] === undefined)
             return false;
         const memberType = this.typeHelper.getCType(member);
-        for (const resolver of StandardResolversByPropName[stringPropName]) {
-            if (resolver.matchesNode(memberType))
-                return true;
-        }
-        return false;
+        return canBeStandardCall(memberType, stringPropName);
     }
 
     public createTemplate(scope: IScope, call: MaybeStandardCall) {
@@ -130,6 +126,16 @@ export class StandardCallHelper {
         }
         return null;
     }
+}
+
+export function canBeStandardCall(memberType: CType, stringPropName: string) {
+    if (StandardResolversByPropName[stringPropName] === undefined)
+        return false;
+    for (const resolver of StandardResolversByPropName[stringPropName]) {
+        if (resolver.matchesNode(memberType))
+            return true;
+    }
+    return false;
 }
 
 export function addStandardCallSymbols(symbolHelper: SymbolsHelper) {

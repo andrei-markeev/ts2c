@@ -73,10 +73,16 @@ export class CBinaryExpression extends CTemplateBase {
             this.expression = new CPlusExpression(scope, node);
             return;
         }
+        const leftType = scope.root.typeHelper.getCType(node.left);
+        const rightType = scope.root.typeHelper.getCType(node.right);
+        if (node.operatorToken.kind === kataw.SyntaxKind.AddAssign && leftType === NumberVarType && rightType === NumberVarType) {
+            this.expression = new CArithmeticExpression(scope, node);
+            return;
+        }
         if (node.operatorToken.kind === kataw.SyntaxKind.AddAssign) {
-            const left = CodeTemplateFactory.createForNode(scope, node.left);
-            const right = new CPlusExpression(scope, node);
-            this.expression = "(" + CodeTemplateFactory.templateToString(left) + " = " + CodeTemplateFactory.templateToString(right) + ")";
+            node.operatorToken.kind = kataw.SyntaxKind.Add;
+            this.expression = AssignmentHelper.create(scope, node.left, node);
+            return;
         }
         if (isNumberOp(node.operatorToken.kind) || isIntegerOp(node.operatorToken.kind)) {
             this.expression = new CArithmeticExpression(scope, node);

@@ -7,7 +7,7 @@ static int16_t b;
 
 int main(void) {
     n = 0;
-    (n = n + 5);
+    n += 5;
     n *= 2;
     printf("%d\n", n);
     n -= 3;

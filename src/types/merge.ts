@@ -1,3 +1,4 @@
+import { canBeStandardCall } from "../standard";
 import { CType, VoidType, PointerVarType, UniversalVarType, StringVarType, StructType, ArrayType, DictType, FuncType, getTypeBodyText, NumberVarType } from "./ctypes";
 
 export class TypeMerger {
@@ -33,11 +34,11 @@ export class TypeMerger {
             return type2_result;
 
         else if (type1 === StringVarType && type2 instanceof StructType) {
-            if (Object.keys(type2.properties).length === 1 && (type2.properties["length"] === PointerVarType || type2.properties["length"] === NumberVarType))
+            if (Object.keys(type2.properties).every(p => p === 'length' || canBeStandardCall(StringVarType, p)))
                 return type1_result;
         }
         else if (type1 instanceof StructType && type2 === StringVarType) {
-            if (Object.keys(type1.properties).length === 1 && (type1.properties["length"] === PointerVarType || type1.properties["length"] === NumberVarType))
+            if (Object.keys(type1.properties).every(p => p === 'length' || canBeStandardCall(StringVarType, p)))
                 return type2_result;
         }
         else if (type1 instanceof ArrayType && type2 instanceof ArrayType) {

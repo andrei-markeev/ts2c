@@ -55,7 +55,7 @@ void bar(int16_t a, const char ** s)
     strcat(tmp_result, *s);
     strcat(tmp_result, tmp_result_2);
     ARRAY_PUSH(gc_main, tmp_result);
-    (*s = tmp_result);
+    *s = tmp_result;
 
     free((char *)tmp_result_2);
 }

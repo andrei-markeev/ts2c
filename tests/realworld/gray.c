@@ -70,7 +70,7 @@ struct gray_t * gray(struct imageSrc_t * imageSrc)
     imageDst->height = imageSrc->height;
     imageDst->width = imageSrc->width;
     i = 0;
-    for (;i < 40;(i = i + 4))
+    for (;i < 40;i += 4)
         ARRAY_PUSH(imageDst->data, (imageSrc->data[i] * 299 + imageSrc->data[i + 1] * 587 + imageSrc->data[i + 2] * 114 + 500) / 1000 & 0xff);
     return imageDst;
 }

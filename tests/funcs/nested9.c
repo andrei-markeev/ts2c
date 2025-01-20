@@ -52,7 +52,7 @@ static struct makeCounter_func_t * counter2;
 
 void changeBy(int16_t val, int16_t* privateCounter)
 {
-    (*privateCounter = *privateCounter + val);
+    *privateCounter += val;
 }
 void increment_func(struct increment_closure_t * closure)
 {

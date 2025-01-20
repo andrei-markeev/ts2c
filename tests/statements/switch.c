@@ -88,41 +88,41 @@ void ask(int16_t n)
             tmp_result[0] = '\0';
             strcat(tmp_result, output);
             strcat(tmp_result, "So ");
-            (output = tmp_result);
+            output = tmp_result;
         case 1:
             tmp_result_2 = malloc(strlen(output) + strlen("What ") + 1);
             assert(tmp_result_2 != NULL);
             tmp_result_2[0] = '\0';
             strcat(tmp_result_2, output);
             strcat(tmp_result_2, "What ");
-            (output = tmp_result_2);
+            output = tmp_result_2;
             tmp_result_3 = malloc(strlen(output) + strlen("Is ") + 1);
             assert(tmp_result_3 != NULL);
             tmp_result_3[0] = '\0';
             strcat(tmp_result_3, output);
             strcat(tmp_result_3, "Is ");
-            (output = tmp_result_3);
+            output = tmp_result_3;
         case 2:
             tmp_result_4 = malloc(strlen(output) + strlen("Your ") + 1);
             assert(tmp_result_4 != NULL);
             tmp_result_4[0] = '\0';
             strcat(tmp_result_4, output);
             strcat(tmp_result_4, "Your ");
-            (output = tmp_result_4);
+            output = tmp_result_4;
         case 3:
             tmp_result_5 = malloc(strlen(output) + strlen("Name") + 1);
             assert(tmp_result_5 != NULL);
             tmp_result_5[0] = '\0';
             strcat(tmp_result_5, output);
             strcat(tmp_result_5, "Name");
-            (output = tmp_result_5);
+            output = tmp_result_5;
         case 4:
             tmp_result_6 = malloc(strlen(output) + strlen("?") + 1);
             assert(tmp_result_6 != NULL);
             tmp_result_6[0] = '\0';
             strcat(tmp_result_6, output);
             strcat(tmp_result_6, "?");
-            (output = tmp_result_6);
+            output = tmp_result_6;
             printf("%s\n", output);
             break;
         case 5:
@@ -131,7 +131,7 @@ void ask(int16_t n)
             tmp_result_7[0] = '\0';
             strcat(tmp_result_7, output);
             strcat(tmp_result_7, "!");
-            (output = tmp_result_7);
+            output = tmp_result_7;
             printf("%s\n", output);
             break;
         default:

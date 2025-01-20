@@ -195,6 +195,12 @@ struct array_string_t {
     const char ** data;
 };
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
@@ -377,7 +383,7 @@ struct js_var js_var_get(struct js_var v, struct js_var arg) {
         return js_var_from(JS_VAR_UNDEFINED);
 }
 
-struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *) gc_main)
+struct js_var js_var_plus(struct js_var left, struct js_var right, struct array_pointer_t *gc_main)
 {
     struct js_var result, left_to_number, right_to_number;
     const char *left_as_string, *right_as_string;
@@ -419,12 +425,6 @@ struct js_var js_var_plus(struct js_var left, struct js_var right, ARRAY(void *)
     return result;
 }
 
-struct array_pointer_t {
-    int16_t size;
-    int16_t capacity;
-    void ** data;
-};
-
 void regex_clear_matches(struct regex_match_struct_t *match_info, int16_t groupN) {
     int16_t i;
     for (i = 0; i < groupN; i++) {
@@ -455,13 +455,13 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
     return match_array;
 }
 
-static ARRAY(void *) gc_main;
+static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
-static ARRAY(ARRAY(void *)) gc_main_arrays;
+static ARRAY(struct array_pointer_t *) gc_main_arrays;
 static ARRAY(DICT(void *)) gc_main_dicts;
-static ARRAY(void *) gc_456;
-static ARRAY(ARRAY(ARRAY(void *))) gc_456_arrays_c;
+static struct array_pointer_t * gc_456;
+static ARRAY(ARRAY(struct array_pointer_t *)) gc_456_arrays_c;
 static struct js_var result;
 static const char * tmp_str;
 static uint8_t tmp_need_dispose;
@@ -920,7 +920,8 @@ void appendInnerHTML(struct js_var node, const char * html)
     n = node;
     while (js_var_to_bool(n))
     {
-        (js_var_get(n, js_var_from_str("innerHTML")) = js_var_plus(js_var_get(n, js_var_from_str("innerHTML")), js_var_from_str(html), gc_main));
+        if (n.type == JS_VAR_DICT)
+            DICT_SET(((struct dict_js_var_t *)n.data), "innerHTML", js_var_plus(js_var_get(n, js_var_from_str("innerHTML")), js_var_from_str(html), gc_main));
         n = js_var_get(n, js_var_from_str("parentNode"));
     }
 }

@@ -104,7 +104,7 @@ export class CAssignment extends CTemplateBase {
         this.isDict = type instanceof DictType;
         this.isStruct = type instanceof StructType;
         this.isUniversalVar = type === UniversalVarType;
-        this.nodeText = right.start < 0 ? "(synthetized node)" : getNodeText(right);
+        this.nodeText = getNodeText(right);
 
         let argType = type;
         let argAccessor = accessor;
