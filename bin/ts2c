@@ -4,8 +4,10 @@ var path = require('path');
 var fs = require('fs');
 var ts2c = require(path.join(__dirname, "../ts2c.js"));
 
-if (process.argv.length < 2)
+if (process.argv.length < 3) {
+    console.log("Usage: ts2c <path/to/file.ts>")
     process.exit();
+}
 
 var fileName = process.argv[2];
 if (fileName === '-v' || fileName === '--version') {
