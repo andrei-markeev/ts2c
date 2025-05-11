@@ -20,7 +20,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
-	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
+#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 #define ARRAY_INSERT(array, pos, item) {\
     ARRAY_PUSH(array, item); \
     if (pos < array->size - 1) {\

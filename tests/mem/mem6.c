@@ -24,7 +24,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
-	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
+#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 
 struct array_pointer_t {
     int16_t size;
