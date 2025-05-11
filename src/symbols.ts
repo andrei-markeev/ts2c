@@ -314,7 +314,7 @@ export class SymbolsHelper {
     private symbolOrTempVarExists(scopeId: string | number, scopeNode: kataw.SyntaxNode, varName: string) {
         return this.temporaryVariables[scopeId].indexOf(varName) > -1
             || scopeNode && this.getSymbolByPath(scopeNode, varName) !== undefined
-            || this.scopes[scopeNode.rootId][0].symbols[varName] !== undefined;
+            || scopeNode && this.scopes[scopeNode.rootId][0].symbols[varName] !== undefined;
     }
 
     private temporaryVariables: { [scopeId: string]: string[] } = {
