@@ -6,7 +6,12 @@ endif
 
 TS := $(sort $(wildcard *.ts) $(wildcard */*.ts))
 TS := $(filter-out realworld/parseHtml.ts, $(TS)) # not passing yet
-TS := $(filter-out $(wildcard imports/*.ts), $(TS)) # can't handle multi-file tests via Makefile yet
+
+# multifile tests
+TS := $(filter-out $(wildcard imports/*.ts), $(TS))
+MULTIFILE_TS := $(wildcard imports/*/*.ts)
+MULTIFILE_RES := $(MULTIFILE_TS:.ts=.res)
+
 C = $(TS:.ts=.c)
 ifeq ($(target), Windows)
     ELF = $(TS:.ts=.exe)
@@ -49,7 +54,10 @@ else
 
 endif
 
-all: $(RES) $(ELF) $(C)
+all: $(RES) $(ELF) $(C) $(MULTIFILE_RES)
+
+$(MULTIFILE_RES): $(MULTIFILE_TS)
+	$(MAKE) -C $(@D)
 
 clean:
 ifeq ($(target), Windows)
