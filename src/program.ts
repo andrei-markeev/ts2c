@@ -120,7 +120,7 @@ export const reservedCSymbolNames = [
 
 {functions => {this}\n}
 
-int main(void) {
+int {mainFunctionName}(void) {
     {gcVarNames {    }=> ARRAY_CREATE({this}, 2, 0);\n}
     {#if headerFlags.try_catch || headerFlags.js_var_get}
         ARRAY_CREATE(err_defs, 2, 0);
@@ -146,9 +146,13 @@ export class CProgram implements IScope {
     public userStructs: { name: string, properties: CVariable[] }[];
     public headerFlags = new HeaderFlags();
     public runtimeCode: CCommon | string = '';
+    public mainFunctionName = 'main';
     constructor(rootNode: kataw.RootNode, commonHeaderFlags: HeaderFlags, public symbolsHelper: SymbolsHelper, public typeHelper: TypeHelper, public standardCallHelper: StandardCallHelper, public memoryManager: MemoryManager) {
-        if (symbolsHelper.exportedSymbols[rootNode.id] !== undefined)
+        if (symbolsHelper.exportedSymbols[rootNode.id] !== undefined) {
             this.includes.push('"' + rootNode.fileName.substring(rootNode.fileName.lastIndexOf('/') + 1).replace(/(\.js|\.ts)$/, '.h') + '"');
+            this.mainFunctionName = "init_" + rootNode.fileName.replace(/^\.\//, '').replace(/(\.js|\.ts)$/, '').replace(/[^A-Za-z0-9]/g, '_');
+            symbolsHelper.initFunctions[rootNode.id] = this.mainFunctionName;
+        }
         this.gcVarNames = this.memoryManager.getGCVariablesForScope(null);
         for (let gcVarName of this.gcVarNames) {
             this.headerFlags.array = true;
@@ -185,7 +189,7 @@ export class CProgram implements IScope {
         if (commonHeaderFlags === null)
             this.runtimeCode = new CCommon(this.headerFlags);
         else {
-            this.runtimeCode = '#include "common.h";';
+            this.runtimeCode = '#include "common.h"';
             for (var key in this.headerFlags)
                 commonHeaderFlags[key] |= this.headerFlags[key];
         }

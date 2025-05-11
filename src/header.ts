@@ -11,6 +11,10 @@ import { getNodeText, isFunctionDeclaration, isVariableDeclaration } from './typ
 #ifndef {headerId}
 #define {headerId}
 
+{#if initFunctionName}
+    int {initFunctionName}(void);
+{/if}
+
 {unsupported => /* Unsupported export: {this} */}
 
 {userStructs => struct {name} {\n    {properties {    }=> {this};\n}\n};\n}
@@ -28,8 +32,10 @@ export class CHeader {
     public userStructs: { name: string, properties: CVariable[] }[] = [];
     public variables: CVariable[] = [];
     public functionPrototypes: CFunctionPrototype[] = [];
+    public initFunctionName: string = "";
     constructor(scope: IScope, rootNode: kataw.RootNode, public symbolsHelper: SymbolsHelper, public typeHelper: TypeHelper) {
         this.headerId = "TS2C_" + rootNode.fileName.replace(/(\.ts|\.js)$/, '_H').replace(/([A-Z])([a-z])/g, "$1_$2").replace(/[^A-Za-z_]+/g, "_").toUpperCase();
+        this.initFunctionName = this.symbolsHelper.initFunctions[rootNode.id];
         const exportedSymbols = this.symbolsHelper.exportedSymbols[rootNode.id];
         for (const symbol of exportedSymbols) {
             if (isVariableDeclaration(symbol.valueDeclaration.parent))

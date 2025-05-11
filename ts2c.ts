@@ -55,8 +55,11 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
     const entryFilePath = options?.fileName || "__main__.ts";
     const endOfPathPos = entryFilePath.lastIndexOf('/');
     let baseDir = '';
-    if (endOfPathPos > -1)
+    let commonHeaderPath = 'common.h';
+    if (endOfPathPos > -1) {
         baseDir = entryFilePath.substring(0, endOfPathPos);
+        commonHeaderPath = baseDir + '/common.h';
+    }
     
     const startParse = performance.now();
     var parseResult = parse(entryFilePath, sourceCode, { useColors: options?.terminal });
@@ -105,8 +108,11 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
         transpiled.push({ fileName: rootNode.fileName.replace(/(\.ts|\.js)$/, '.c'), source: transpiledProgramCode });
         console.log('emit ' + rootNode.fileName + ':', performance.now() - startEmit);
     }
-    if (commonFlags !== null)
-        transpiled.unshift({ fileName: baseDir + '/common.h', source: new CCommon(commonFlags, true)["resolve"]() });
+    if (commonFlags !== null) {
+        const startEmitCommonHeader = performance.now();
+        transpiled.unshift({ fileName: commonHeaderPath, source: new CCommon(commonFlags, true)["resolve"]() });
+        console.log('emit common.h:', performance.now() - startEmitCommonHeader);
+    }
 
     if (options?.multiFiles)
         return transpiled;

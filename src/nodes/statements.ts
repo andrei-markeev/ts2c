@@ -505,9 +505,12 @@ export class CImport extends CTemplateBase {
             if (scope.root.includes.indexOf(moduleName) === -1)
                 scope.root.includes.push(moduleName);
         } else {
+            const initFunctionName = "init_" + moduleName.replace(/^\.\//, '').replace(/[^A-Za-z0-9]/g, '_');
             moduleName = '"' + moduleName.replace(/^\.\//, '') + '.h"';
-            if (scope.root.includes.indexOf(moduleName) === -1)
+            if (scope.root.includes.indexOf(moduleName) === -1) {
                 scope.root.includes.push(moduleName);
+                scope.root.statements.push(initFunctionName + "();");
+            }
         }
     }
 }

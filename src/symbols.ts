@@ -31,6 +31,7 @@ export class SymbolsHelper {
 
     private scopes: Record<number, SymbolScope[]> = {};
     public exportedSymbols: Record<number, SymbolInfo[]> = {};
+    public initFunctions: Record<number, string> = {};
     private nextId = 1;
     public globalSymbolsWithResolvers: SymbolInfo[] = [];
 
