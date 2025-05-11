@@ -21,7 +21,7 @@ typedef short int16_t;
     }  \
     array->data[array->size++] = item; \
 }
-	#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
+#define ARRAY_POP(a) (a->size != 0 ? a->data[--a->size] : 0)
 
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 
