@@ -201,15 +201,18 @@ export class SymbolsHelper {
         this.registerSyntheticSymbol(rootId, null, 'undefined');
     }
 
-    // TODO: improve
-    // current system doesn't account for conflicting renames
     public renameConflictingSymbols() {
         for (const rootId in this.scopes) {
             for (const scope of this.scopes[rootId]) {
                 for (const path in scope.symbols) {
                     const symb = scope.symbols[path];
                     if (symb.conflict) {
-                        const newName = path + "_";
+                        let newName = path + "_";
+                        let i = 2;
+                        while (scope.symbols[newName]) {
+                            newName = path + "_" + i;
+                            i++;
+                        }
                         scope.symbols[path] = undefined;
                         scope.symbols[newName] = symb;
                         symb.conflict = false;
