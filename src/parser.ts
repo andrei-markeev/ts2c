@@ -1,8 +1,8 @@
 import { parseModule } from "@andrei-markeev/kataw";
 
-export function parse(fileName: string, sourceCode: string, options?: { useColors?: boolean }) {
+export function parse(fileName: string, sourceCode: string, options?: { useColors?: boolean, allowTypes?: boolean }) {
     let fatalErrors = [];
-    var rootNode = parseModule(sourceCode, { impliedStrict: true }, (_, kind, message, start, end) => {
+    var rootNode = parseModule(sourceCode, { impliedStrict: true, allowTypes: options.allowTypes ?? false }, (_, kind, message, start, end) => {
         const formatted = getFormattedMessage(sourceCode, fileName, kind, message, start, end, options?.useColors);
         if (kind === 16) {
             console.error(formatted);

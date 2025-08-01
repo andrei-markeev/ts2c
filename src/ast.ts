@@ -95,34 +95,49 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
                     if (fileSystem === null)
                         console.error('File system is not supported in this environment! Skipping import of ' + moduleName);
                     else {
-                        let filePath: string;
+                        const rootDir = fileSystem.path.dirname(rootInfo[0].fileName);
+                        let filePaths: string[] = [];
                         if (moduleName.startsWith('.'))
-                            filePath = fileSystem.path.join(fileSystem.path.dirname(rootInfo[0].fileName), moduleName + '.ts');
+                            filePaths.push(
+                                fileSystem.path.join(rootDir, moduleName + '.ts'),
+                                fileSystem.path.join(rootDir, moduleName + '.js')
+                            );
                         else
-                            filePath = fileSystem.path.join(fileSystem.path.dirname(rootInfo[0].fileName), 'node_modules', moduleName + '.ts');
+                            filePaths.push(
+                                fileSystem.path.join(rootDir, 'node_modules', moduleName + '.d.ts'),
+                                fileSystem.path.join(rootDir, 'node_modules', moduleName + '.ts'),
+                                fileSystem.path.join(rootDir, 'node_modules', moduleName, 'index.d.ts'),
+                                fileSystem.path.join(rootDir, 'node_modules', moduleName, 'index.ts')
+                            );
 
-                        if (!loaded[filePath]) {
+                        while (filePaths.length > 0) {
+                            const filePath = filePaths.shift();
+                            if (loaded[filePath])
+                                continue;
+                            
                             loaded[filePath] = true;
-                            if (fileSystem.fs.existsSync(filePath)) {
-                                const contents = fileSystem.fs.readFileSync(filePath, 'utf-8');
-                                const parseResult = parse(filePath, contents);
-                                if (parseResult.fatalErrors.length === 0) {
-                                    const rootId = astInfo.nextNodeId++;
-                                    parseResult.rootNode.id = rootId;
-                                    parseResult.rootNode.rootId = rootId;
+                            if (!fileSystem.fs.existsSync(filePath))
+                                continue;
 
-                                    loaded[filePath] = rootId;
+                            const contents = fileSystem.fs.readFileSync(filePath, 'utf-8');
+                            const parseResult = parse(filePath, contents, { allowTypes: filePath.endsWith('.d.ts') });
+                            if (parseResult.fatalErrors.length > 0)
+                                continue;
 
-                                    symbolsHelper.createSymbolScope(rootId, rootNode.start, rootNode.end);
-                                    symbolsHelper.addStandardSymbols(rootId);
-                                    addStandardCallSymbols(rootId, symbolsHelper);
-                                
-                                    rootNodes.unshift(parseResult.rootNode);
-                                    rootInfo.unshift({ rootId, fileName: filePath });
-                                    kataw.visitEachChild(kataw.createTransform(), parseResult.rootNode, createVisitor(parseResult.rootNode));
-                                    rootInfo.shift();
-                                }
-                            }
+                            const rootId = astInfo.nextNodeId++;
+                            parseResult.rootNode.id = rootId;
+                            parseResult.rootNode.rootId = rootId;
+
+                            loaded[filePath] = rootId;
+
+                            symbolsHelper.createSymbolScope(rootId, rootNode.start, rootNode.end);
+                            symbolsHelper.addStandardSymbols(rootId);
+                            addStandardCallSymbols(rootId, symbolsHelper);
+                        
+                            rootNodes.unshift(parseResult.rootNode);
+                            rootInfo.unshift({ rootId, fileName: filePath });
+                            kataw.visitEachChild(kataw.createTransform(), parseResult.rootNode, createVisitor(parseResult.rootNode));
+                            rootInfo.shift();
                         }
                     }
                 }
