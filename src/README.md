@@ -1,21 +1,26 @@
 Implementation
 ==============
 
-This implementation uses public [TypeScript Compiler API](https://github.com/Microsoft/TypeScript/wiki/Using-the-Compiler-API)
-to get the AST and some of type information. It then performs extended type analysis and finally uses code templating to map
-TypeScript AST to C89 code.
+This implementation uses kataw to parse JS / TS code and get the AST. It then performs type analysis and uses
+code templating to map the AST to C89 code.
 
 Source code structure: 
 
- - program.ts - main transpilation entry point
- - types/*.ts - extended type analysis on top of TypeScript's type checker
- - memory.ts - memory management related stuff, escape analysis
- - symbols.ts - helper methods for working with variables and structs
- - template.ts - code templating engine
- - nodes/*.ts - code template classes for different syntax nodes  
- - standard.ts - standard call resolvers
- - standard/**.ts - code templates and resolvers for standard objects like Array, String, etc.
- - regex.ts - regular expression engine
+ - `../ts2c.ts` - main entry point
+ - `parser.ts` - parse AST (calls kataw to do the actual parsing)
+ - `ast.ts` - preprocess AST and register symbols
+ - `symbols.ts` - symbols and visibility scopes
+ - `fs.ts` - file system abstraction
+ - `modules.ts` - module resolution
+ - `types/*.ts` - type analysis
+ - `memory.ts` - escape analysis and memory management
+ - `template.ts` - code templating engine
+ - `program.ts` - code template for a program, generates a single C file
+ - `header.ts` - code template for a header, generates a single C header file
+ - `nodes/*.ts` - code template classes for different syntax nodes
+ - `standard.ts` - standard call resolvers
+ - `standard/**.ts` - code templates and resolvers for standard objects like Array, String, etc.
+ - `regex.ts` - regular expression engine
 
 Contributions
 -------------
@@ -25,7 +30,7 @@ Contributions are very welcome!
 I would however appreciate if you stick to the following rules:
 
  - only features of ANSI/ISO 9899-1990 International Standard can be used in the transpiled code
- - no dead code should ever be added to the output (see HeaderFlags in program.ts)
+ - no dead code should ever be added to the output (see e.g. `HeaderFlags` in program.ts)
  - if you're planning to do some heavy changes, please create an issue and let's discuss this first
 
 Thanks!
