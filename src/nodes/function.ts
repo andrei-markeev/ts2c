@@ -167,6 +167,9 @@ export class CFunctionExpression extends CTemplateBase {
     constructor(scope: IScope, node: kataw.FunctionExpression | kataw.FunctionDeclaration) {
         super();
 
+        if (isFunctionDeclaration(node) && node.declareKeyword)
+            return;
+
         const type = scope.root.typeHelper.getCType(node);
         const parentFunc = findParentFunction(node.parent);
         if (type instanceof FuncType && type.needsClosureStruct && parentFunc) {

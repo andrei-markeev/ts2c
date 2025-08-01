@@ -4,6 +4,7 @@ import { getAllNodesInFunction, isCall, isCatchClause, isExpressionStatement, is
 import { SymbolsHelper } from './symbols';
 import { parse } from './parser';
 import { getFileSystemWrapper } from './fs';
+import { getPossibleFilePaths } from './modules';
 
 export let astInfo = {
     nextNodeId: 1
@@ -18,6 +19,9 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
     addStandardCallSymbols(rootNode.id, symbolsHelper);
 
     const fileSystem = getFileSystemWrapper();
+    const rootDir = fileSystem.path.dirname(entryFileName);
+    let curDir = rootDir;
+
     const nodes: kataw.SyntaxNode[] = [rootNode];
     const rootNodes: kataw.RootNode[] = [rootNode];
     const loaded: Record<string, number | boolean> = { [entryFileName]: rootNode.id };
@@ -43,26 +47,32 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
                     symbolsHelper.registerSymbol(n);
                 else if (isCatchClause(n.parent) && n.parent.catchParameter === n)
                     symbolsHelper.registerSymbol(n);
+                else if (n.parent.kind === kataw.SyntaxKind.ExportSpecifier)
+                    symbolsHelper.addToExportedSymbols(n);
                 else if (n.parent.kind === kataw.SyntaxKind.ImportSpecifier) {
                     const specifier = <kataw.ImportSpecifier>n.parent;
                     const importDecl = <kataw.ImportDeclaration>n.parent.parent.parent.parent.parent;
                     const moduleNameNode = importDecl.fromClause.from;
                     const moduleName = isStringLiteral(moduleNameNode) ? moduleNameNode.text : null;
-                    let filePath: string;
-                    if (moduleName.startsWith('.'))
-                        filePath = fileSystem.path.join(fileSystem.path.dirname(rootInfo[0].fileName), moduleName + '.ts');
-                    else
-                        filePath = fileSystem.path.join(fileSystem.path.dirname(rootInfo[0].fileName), 'node_modules', moduleName + '.ts');
-                    const loadedValue = loaded[filePath];
-                    if (typeof loadedValue === 'number') {
-                        const exports = symbolsHelper.exportedSymbols[loadedValue];
-                        const exportName = specifier.name ? specifier.name.text : specifier.binding.text;
-                        const found = exports.find(e => e.valueDeclaration.text === exportName);
-                        if (!found)
-                            console.warn('Symbol with name ' + specifier.name.text + ' was not found among module ' + filePath + ' exports.');
-                        else
-                            symbolsHelper.insertExistingSymbolIntoScope(specifier.binding, found);
+
+                    const filePaths = getPossibleFilePaths(rootDir, curDir, moduleName);
+                    let moduleRootNodeFound = false;
+                    for (const filePath of filePaths) {
+                        const moduleRootNodeId = loaded[filePath];
+                        if (typeof moduleRootNodeId === 'number') {
+                            const exports = symbolsHelper.exportedSymbols[moduleRootNodeId];
+                            const exportName = specifier.name ? specifier.name.text : specifier.binding.text;
+                            const found = exports?.find(e => e.valueDeclaration.text === exportName);
+                            if (!found)
+                                console.warn('Symbol with name ' + exportName + ' was not found among module ' + filePath + ' exports.');
+                            else
+                                symbolsHelper.insertExistingSymbolIntoScope(specifier.binding, found);
+                            moduleRootNodeFound = true;
+                            break;
+                        }
                     }
+                    if (!moduleRootNodeFound)
+                        console.warn('Failed to resolve import "' + moduleName + '" in file ' + rootInfo[0].fileName + '.');
                 } else if (isFieldAccess(n.parent))
                     symbolsHelper.addReference(n);
                 else
@@ -95,20 +105,7 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
                     if (fileSystem === null)
                         console.error('File system is not supported in this environment! Skipping import of ' + moduleName);
                     else {
-                        const rootDir = fileSystem.path.dirname(rootInfo[0].fileName);
-                        let filePaths: string[] = [];
-                        if (moduleName.startsWith('.'))
-                            filePaths.push(
-                                fileSystem.path.join(rootDir, moduleName + '.ts'),
-                                fileSystem.path.join(rootDir, moduleName + '.js')
-                            );
-                        else
-                            filePaths.push(
-                                fileSystem.path.join(rootDir, 'node_modules', moduleName + '.d.ts'),
-                                fileSystem.path.join(rootDir, 'node_modules', moduleName + '.ts'),
-                                fileSystem.path.join(rootDir, 'node_modules', moduleName, 'index.d.ts'),
-                                fileSystem.path.join(rootDir, 'node_modules', moduleName, 'index.ts')
-                            );
+                        const filePaths = getPossibleFilePaths(rootDir, curDir, moduleName)
 
                         while (filePaths.length > 0) {
                             const filePath = filePaths.shift();
@@ -136,8 +133,10 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
                         
                             rootNodes.unshift(parseResult.rootNode);
                             rootInfo.unshift({ rootId, fileName: filePath });
+                            curDir = fileSystem.path.dirname(rootInfo[0].fileName);
                             kataw.visitEachChild(kataw.createTransform(), parseResult.rootNode, createVisitor(parseResult.rootNode));
                             rootInfo.shift();
+                            curDir = fileSystem.path.dirname(rootInfo[0].fileName);
                         }
                     }
                 }

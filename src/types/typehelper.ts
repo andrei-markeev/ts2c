@@ -1,7 +1,7 @@
 import * as kataw from '@andrei-markeev/kataw';
 
 import { StandardCallHelper } from '../standard';
-import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType } from './ctypes';
+import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, VoidType } from './ctypes';
 import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
 import { SymbolsHelper } from '../symbols';
@@ -58,6 +58,27 @@ export class TypeHelper {
         }
 
         return null;
+    }
+
+    public getCTypeFromTypeAnnotation(typeAnnotation: kataw.TypeAnnotation) {
+        switch (typeAnnotation.type.kind) {
+            case kataw.SyntaxKind.NumberKeyword:
+            case kataw.SyntaxKind.NumberType:
+                return NumberVarType;
+            case kataw.SyntaxKind.StringKeyword:
+            case kataw.SyntaxKind.StringType:
+                return StringVarType;
+            case kataw.SyntaxKind.BooleanKeyword:
+            case kataw.SyntaxKind.BooleanType:
+                return BooleanVarType;
+            case kataw.SyntaxKind.UndefinedKeyword:
+            case kataw.SyntaxKind.NullKeyword:
+                return UniversalVarType;
+            case kataw.SyntaxKind.VoidKeyword:
+                return VoidType;
+            default:
+                console.warn('Type annotation not supported yet!', typeAnnotation.type.kind)
+        }
     }
 
     /** Get textual representation of type of the parameter for inserting into the C code */

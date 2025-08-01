@@ -286,6 +286,11 @@ export function operandsToNumber(leftType: CType, op: kataw.SyntaxKind, rightTyp
         || isRelationalOp(op) && (leftType !== StringVarType || rightType !== StringVarType);
 }
 
+export function isTypeAnnotation(n: kataw.SyntaxNode): n is kataw.TypeAnnotation {
+    return n.kind === kataw.SyntaxKind.TypeAnnotation;
+}
+
+
 export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftType: CType, op: kataw.SyntaxKind, rightType: CType) {
     if (op === kataw.SyntaxKind.Assign)
         return rightType;
