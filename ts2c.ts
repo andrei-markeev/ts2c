@@ -97,6 +97,8 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
     if (rootNodes.length > 1)
         commonFlags = new HeaderFlags();
     for (const rootNode of rootNodes) {
+        if (rootNode.fileName.endsWith('.d.ts'))
+            continue;
         const startEmit = performance.now();
         const program = new CProgram(rootNode, commonFlags, symbolsHelper, typeHelper, typeHelper.standardCallHelper, memoryManager);
         if (symbolsHelper.exportedSymbols[rootNode.id]) {
@@ -105,7 +107,8 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
             transpiled.push({ fileName: rootNode.fileName.replace(/(\.ts|\.js)$/, '.h'), source: transpiledHeaderCode });
         }
         const transpiledProgramCode = program["resolve"]();
-        transpiled.push({ fileName: rootNode.fileName.replace(/(\.ts|\.js)$/, '.c'), source: transpiledProgramCode });
+        const transpiledFileName = rootNode.fileName.replace(/(\.ts|\.js)$/, '.c');
+        transpiled.push({ fileName: transpiledFileName, source: transpiledProgramCode });
         console.log('emit ' + rootNode.fileName + ':', performance.now() - startEmit);
     }
     if (commonFlags !== null) {

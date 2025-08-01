@@ -3,6 +3,4 @@
 
 #include <stdio.h>
 
-typedef short int16_t;
-
 #endif

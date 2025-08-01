@@ -521,7 +521,8 @@ export class CExport extends CTemplateBase {
     public nodeText: string = null;
     constructor(scope: IScope, node: kataw.ExportDeclaration) {
         super();
-        this.declaration = CodeTemplateFactory.createForNode(scope, node.declaration);
+        if (node.declaration !== null)
+            this.declaration = CodeTemplateFactory.createForNode(scope, node.declaration);
     }
 }
 

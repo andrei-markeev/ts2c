@@ -1,10 +1,10 @@
-#include <stdio.h>
+#include "common.h"
 
 #include <stdlib.h>
 
 int main(void) {
-    printf(/* Unsupported printf expression */);
-    printf(/* Unsupported printf expression */);
+    printf("%d\n", abs(-5));
+    printf("%d\n", abs(10));
 
     return 0;
 }

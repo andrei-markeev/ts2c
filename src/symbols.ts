@@ -104,6 +104,19 @@ export class SymbolsHelper {
             symbol.references.push(node);
     }
 
+    public addToExportedSymbols(node: kataw.Identifier) {
+        const symbol = this.getSymbolAtLocation(node);
+        if (!symbol) {
+            return;
+        }
+
+        symbol.exported = true;
+        if (!this.exportedSymbols[node.rootId])
+            this.exportedSymbols[node.rootId] = [];
+        if (this.exportedSymbols[node.rootId].indexOf(symbol) === -1)
+            this.exportedSymbols[node.rootId].push(symbol);
+    }
+
     public insertExistingSymbolIntoScope(node: kataw.Identifier, symbol: SymbolInfo) {
         this.findSymbolScope(node).symbols[node.text] = symbol;
 
