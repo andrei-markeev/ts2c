@@ -5,8 +5,9 @@ import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
-import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall, isNewExpression } from '../types/utils';
+import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall, isFunctionDeclaration } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
+import { CAssignment } from './assignment';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -49,6 +50,25 @@ export class CCallExpression extends CTemplateBase {
 
         this.funcName = CodeTemplateFactory.createForNode(scope, call.expression);
         this.arguments = call.argumentList.elements.map((a, i) => funcType.parameterTypes[i] === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        if (funcType.argumentsType) {
+            const argumentsArrayVarName = scope.root.symbolsHelper.addTemp(call, "args");
+            const argsCount = this.arguments.length;
+            scope.variables.push(new CVariable(scope, argumentsArrayVarName, funcType.argumentsType));
+            scope.statements.push(new CVariableAllocation(scope, argumentsArrayVarName, funcType.argumentsType, call));
+            for (let i = 0; i < this.arguments.length; i++) {
+                let assignment = new CAssignment(scope, argumentsArrayVarName, i + "", funcType.argumentsType, call.argumentList.elements[i])
+                scope.statements.push(assignment);
+            }
+            if (kataw.isIdentifier(call.expression)) {
+                const func = scope.root.typeHelper.getDeclaration(call.expression);
+                if (isFunctionDeclaration(func.parent))
+                    this.arguments.length = func.parent.formalParameterList.formalParameters.length;
+            } else
+                console.error("Unsupported call expression for arguments array!")
+
+            this.arguments.push(argumentsArrayVarName);
+            this.arguments.push(argsCount+"");
+        }
         if (funcType.needsClosureStruct) {
             // nested calls e.g. `func(1, 2)()`;
             if (this.funcName instanceof CCallExpression) {

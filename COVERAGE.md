@@ -134,7 +134,7 @@ List below is based on the [ES3 Standard](http://www-archive.mozilla.org/js/lang
      - [ ] toString
      - [ ] apply
      - [ ] call
-     - [ ] `arguments` object
+     - [x] **`arguments` object**
  - [ ] Array
      - [ ] new
      - [x] **toString**

@@ -214,6 +214,9 @@ export function isTypeofExpression(n: kataw.SyntaxNode): n is kataw.UnaryExpress
 export function isThisKeyword(n: kataw.SyntaxNode): n is kataw.SyntaxToken<kataw.SyntaxKind.ThisKeyword> {
     return n.kind === kataw.SyntaxKind.ThisKeyword;
 }
+export function isArgumentsIdentifier(n: kataw.SyntaxNode): n is kataw.SyntaxToken<kataw.SyntaxKind.ArgumentsIdentifier> {
+    return kataw.isIdentifier(n) && n.text === 'arguments' && findParentFunction(n) !== undefined;
+}
 export function isCompoundAssignment(n: kataw.SyntaxNode) {
     if (isBinaryExpression(n))
         return kataw.isAssignOp(n.operatorToken);

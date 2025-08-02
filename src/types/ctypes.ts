@@ -124,6 +124,7 @@ export class FuncType {
     public needsClosureStruct: boolean;
     public scopeType: StructType;
     public structName: string;
+    public argumentsType: ArrayType;
 
     public getText(forceFuncType:boolean = false) {
         if (this.closureParams.length && !forceFuncType)
@@ -162,7 +163,11 @@ export class FuncType {
             paramTypes.unshift(this.instanceType);
         const retTypeText = this.returnTypeIsCircular ? PointerVarType : getTypeBodyText(this.returnType);
         return  retTypeText
-            + "(" + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ") + ")"
+            + "("
+            + paramTypes.map(pt => pt ? getTypeBodyText(pt) : PointerVarType).join(", ")
+            + (paramTypes.length > 0 && this.argumentsType ? ", " : "") 
+            + (this.argumentsType ? getTypeBodyText(this.argumentsType) : "")
+            + ")"
             + (this.scopeType ? " scope=" + getTypeBodyText(this.scopeType) : "")
             + (this.closureParams.length ? " closure" : "")
             + (this.needsClosureStruct ? "_struct" : "")
@@ -181,7 +186,9 @@ export class FuncType {
             needsClosureStruct?: boolean,
             /** function scope (all local variables), only needed if it has nested closures */
             scopeType?: StructType,
-            structName?: string
+            structName?: string,
+            /** type of the arguments array, only if arguments is used inside function */
+            argumentsType?: ArrayType
         }
     ) {
         this.returnType = data.returnType || VoidType;
@@ -192,5 +199,6 @@ export class FuncType {
         this.needsClosureStruct = data.needsClosureStruct || false;
         this.scopeType = data.scopeType || null;
         this.structName = data.structName || null;
+        this.argumentsType = data.argumentsType || null;
     }
 }

@@ -2,7 +2,7 @@ import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../template';
 import { CVariable, CVariableDestructors, CVariableAllocation } from './variable';
 import { IScope, CProgram } from '../program';
-import { FuncType, getTypeText } from '../types/ctypes';
+import { FuncType, getTypeText, NumberVarType } from '../types/ctypes';
 import { isEqualsExpression, findParentSourceFile, getAllNodesUnder, findParentFunction, getNodeText, isPropertyDefinition, isVariableDeclaration, isCall, isFunctionDeclaration, isFunctionExpression, isMaybeStandardCall } from '../types/utils';
 import { CExpression } from './expressions';
 
@@ -83,6 +83,11 @@ export class CFunction extends CTemplateBase implements IScope {
         );
         if (funcType.instanceType)
             this.parameters.unshift(new CVariable(this, "this", funcType.instanceType, { removeStorageSpecifier: true }));
+        if (funcType.argumentsType) {
+            this.parameters.push(new CVariable(this, "arguments", funcType.argumentsType, { removeStorageSpecifier: true }));
+            // TODO: use addTemp for 'arguments_n'
+            this.parameters.push(new CVariable(this, "arguments_n", NumberVarType, { removeStorageSpecifier: true }));
+        }
         if (funcType.needsClosureStruct) {
             const closureParamVarName = root.symbolsHelper.getClosureVarName(node);
             this.parameters.push(new CVariable(this, closureParamVarName, funcType));

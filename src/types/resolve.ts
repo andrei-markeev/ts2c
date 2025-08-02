@@ -1,8 +1,8 @@
 import * as kataw from '@andrei-markeev/kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMaybeStandardCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding, isTypeAnnotation } from './utils';
-import { CType, NumberVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam } from './ctypes';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMaybeStandardCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding, isTypeAnnotation, isArgumentsIdentifier } from './utils';
+import { CType, NumberVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam, VoidType } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
 import { TypeHelper } from './typehelper';
@@ -229,7 +229,17 @@ export class TypeResolver {
                 return this.typeHelper.getCType(param) instanceof FuncType ? param : null;
             } else
                 return null;
-        });    
+        });
+        addEquality(isCallArgument, n => this.typeHelper.getFunctionDeclarationFromCallArgument(n), type(n => {
+            const func = this.typeHelper.getFunctionDeclarationFromCallArgument(n);
+            const funcType = this.typeHelper.getCType(func);
+            if (funcType instanceof FuncType && funcType.argumentsType) {
+                const argType = this.typeHelper.getCType(n);
+                const capacity = (n.parent as kataw.ArgumentList).elements.length;
+                return argType && argType !== PointerVarType ? new FuncType({ argumentsType: new ArrayType(argType, capacity, false) }) : null;
+            } else
+                return null;
+        }));
         addEquality(isCall, n => n.expression, type(n => {
             // nested call expression e.g. `func(1, 2)()`
             if (isCall(n) && isCall(n.expression)) {
@@ -257,6 +267,19 @@ export class TypeResolver {
             return new FuncType({ instanceType: this.typeHelper.getCType(n) })
         }));
         addEquality(isThisKeyword, n => n, type(n => FuncType.getInstanceType(this.typeHelper, findParentFunction(n))));
+
+        addEquality(isArgumentsIdentifier, n => findParentFunction(n), type(n => {
+            const elementType = isFieldElementAccess(n.parent) && n.parent.member === n ? this.typeHelper.getCType(n.parent) : null;
+            return new FuncType({ argumentsType: new ArrayType(elementType ?? PointerVarType, 0, false) })
+        }))
+        addEquality(isArgumentsIdentifier, n => n, type(n => {
+            const func = findParentFunction(n);
+            const funcType = this.typeHelper.getCType(func);
+            if (funcType instanceof FuncType && funcType.argumentsType)
+                return funcType.argumentsType;
+            else
+                return null;
+        }))
 
         addEquality(isMaybeStandardCall, n => n.expression.member, type(n => this.standardCallHelper.getObjectType(n)));
         addEquality(isMaybeStandardCall, n => n, type(n => this.standardCallHelper.getReturnType(n)));
@@ -455,7 +478,7 @@ export class TypeResolver {
         allNodes
             .filter(n => isFunction(n))
             .forEach(n => console.log(getNodeText(n), "|", kataw.SyntaxKind[n.kind], "|", (this.typeHelper.getCType(n) as FuncType).getBodyText()));
-        allNodes
+        */allNodes
             .filter(n => (!kataw.isKeyword(n) || n.kind === kataw.SyntaxKind.ThisKeyword)
                 && n.kind !== kataw.SyntaxKind.Block
                 && n.kind !== kataw.SyntaxKind.BlockStatement

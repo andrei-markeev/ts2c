@@ -102,6 +102,7 @@ export class TypeMerger {
             let { type: returnType, replaced: returnTypeReplaced } = this.mergeTypes(type1.returnType, type2.returnType);
             const { type: instanceType, replaced: instanceTypeReplaced } = this.mergeTypes(type1.instanceType, type2.instanceType);
             const { type: scopeType, replaced: scopeTypeReplaced } = this.mergeTypes(type1.scopeType, type2.scopeType) as { type: StructType, replaced: boolean };
+            const { type: argumentsType, replaced: argumentsTypeReplaced } = this.mergeTypes(type1.argumentsType, type2.argumentsType) as { type: ArrayType, replaced: boolean };
 
             if (returnTypeReplaced) {
                 let retType = returnType;
@@ -136,8 +137,8 @@ export class TypeMerger {
             const returnTypeIsCircularReplaced = type1.returnTypeIsCircular != type2.returnTypeIsCircular;
             const returnTypeIsCircular = type1.returnTypeIsCircular || type2.returnTypeIsCircular;
 
-            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced || returnTypeIsCircularReplaced)
-                return { type: this.ensureNoTypeDuplicates(new FuncType({ returnType, returnTypeIsCircular, parameterTypes, instanceType, closureParams, needsClosureStruct, scopeType })), replaced: true };
+            if (returnTypeReplaced || instanceTypeReplaced || scopeTypeReplaced || paramTypesReplaced || closureParamsReplaced || needsClosureStructReplaced || returnTypeIsCircularReplaced || argumentsTypeReplaced)
+                return { type: this.ensureNoTypeDuplicates(new FuncType({ returnType, returnTypeIsCircular, parameterTypes, instanceType, closureParams, needsClosureStruct, scopeType, argumentsType })), replaced: true };
             else
                 return noChanges;
         }

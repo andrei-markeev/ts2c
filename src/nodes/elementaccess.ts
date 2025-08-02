@@ -93,6 +93,8 @@ export class CElementAccess extends CTemplateBase {
     {elementAccess}->size
 {#elseif isDynamicArray}
     {elementAccess}->data[{argumentExpression}]
+{#elseif isStaticArray && elementAccess == 'arguments' && argumentExpression == 'length'}
+    arguments_n
 {#elseif isStaticArray && argumentExpression == 'length'}
     {arrayCapacity}
 {#elseif isStaticArray}

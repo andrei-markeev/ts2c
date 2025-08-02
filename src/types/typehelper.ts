@@ -5,7 +5,7 @@ import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, Arra
 import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
 import { SymbolsHelper } from '../symbols';
-import { findParentSourceFile, isTypeAlias, isTypeAnnotation, SyntaxKind_NaNIdentifier } from './utils';
+import { findParentSourceFile, isCall, isFunctionDeclaration, SyntaxKind_NaNIdentifier } from './utils';
 import { astInfo } from '../ast';
 
 
@@ -109,6 +109,12 @@ export class TypeHelper {
     public getDeclaration(n: kataw.Identifier): kataw.Identifier {
         let s = this.symbolsHelper.getSymbolAtLocation(n);
         return s && s.valueDeclaration;
+    }
+
+    public getFunctionDeclarationFromCallArgument(n: kataw.ArgumentListElement) {
+        const call = n.parent.parent as kataw.CallExpression;
+        const decl = kataw.isIdentifier(call.expression) ? this.getDeclaration(call.expression) : null;
+        return decl && isFunctionDeclaration(decl.parent) ? decl.parent : null;
     }
 
     private static syntheticNodesCounter = 0;
