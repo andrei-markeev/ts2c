@@ -289,6 +289,9 @@ export function operandsToNumber(leftType: CType, op: kataw.SyntaxKind, rightTyp
 export function isTypeAnnotation(n: kataw.SyntaxNode): n is kataw.TypeAnnotation {
     return n.kind === kataw.SyntaxKind.TypeAnnotation;
 }
+export function isTypeAlias(n: kataw.SyntaxNode): n is kataw.TypeAlias {
+    return n.kind === kataw.SyntaxKind.TypeAlias;
+}
 
 
 export function getBinExprResultType(mergeTypes: TypeMerger["mergeTypes"], leftType: CType, op: kataw.SyntaxKind, rightType: CType) {

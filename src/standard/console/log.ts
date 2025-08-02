@@ -1,6 +1,6 @@
 import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText } from '../../types/ctypes';
+import { CType, ArrayType, StructType, DictType, StringVarType, NumberVarType, BooleanVarType, RegexVarType, VoidType, UniversalVarType, getTypeText, CharVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { GlobalSymbolResolver, IGlobalSymbolResolver } from '../../standard';
@@ -211,7 +211,7 @@ class CPrintf {
 
     constructor(scope: IScope, printNode: kataw.SyntaxNode, public accessor: string, varType: CType, options: PrintfOptions) {
         this.isStringLiteral = varType == StringVarType && printNode.kind == kataw.SyntaxKind.StringLiteral;
-        this.isCString = varType == StringVarType;
+        this.isCString = varType == StringVarType || varType instanceof ArrayType && varType.elementType === CharVarType;
         this.isRegex = varType == RegexVarType;
         this.isInteger = varType == NumberVarType;
         this.isBoolean = varType == BooleanVarType;
@@ -238,7 +238,7 @@ class CPrintf {
         if (options.indent)
             this.INDENT = options.indent;
 
-        if (varType instanceof ArrayType) {
+        if (varType instanceof ArrayType && !this.isCString) {
             this.isArray = true;
             this.isStaticArray = !varType.isDynamicArray;
             this.elementFormatString = varType.elementType == NumberVarType ? '%d'

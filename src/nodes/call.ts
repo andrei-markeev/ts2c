@@ -5,7 +5,7 @@ import { CExpression } from './expressions';
 import { CVariable, CVariableAllocation } from './variable';
 import { FuncType, UniversalVarType, PointerVarType } from '../types/ctypes';
 import { CAsUniversalVar } from './typeconvert';
-import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall } from '../types/utils';
+import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall, isNewExpression } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
 
 @CodeTemplate(`
@@ -77,7 +77,9 @@ export class CCallExpression extends CTemplateBase {
 {#statements}
     {allocator}
 {/statements}
-{#if funcName}
+{#if standardCall}
+    {standardCall}
+{#elseif funcName}
     {funcName}({arguments {, }=> {this}})
 {#elseif expression}
     {expression}
@@ -90,8 +92,15 @@ export class CNew extends CTemplateBase {
     public allocator: CVariableAllocation | string = ""; 
     public expression: CExpression = "";
     public nodeText: string;
+    public standardCall: CExpression = "";
     constructor(scope: IScope, node: kataw.NewExpression) {
         super();
+
+        const symbol = scope.root.symbolsHelper.getSymbolAtLocation(node.expression);
+        if (symbol && symbol.resolver)
+            this.standardCall = symbol.resolver.createTemplate(scope, node);
+        if (this.standardCall)
+            return;
 
         const decl = kataw.isIdentifier(node.expression) ? scope.root.typeHelper.getDeclaration(node.expression) : null;
         if (decl) {

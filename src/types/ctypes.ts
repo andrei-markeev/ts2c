@@ -6,6 +6,7 @@ export const UniversalVarType = "struct js_var";
 export const VoidType = "void";
 export const PointerVarType = "void *";
 export const StringVarType = "const char *";
+export const CharVarType = "char";
 export const NumberVarType = "int16_t";
 export const BooleanVarType = "uint8_t";
 export const RegexVarType = "struct regex_struct_t";

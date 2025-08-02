@@ -5,7 +5,7 @@ import { CType, NumberVarType, BooleanVarType, StringVarType, RegexVarType, Arra
 import { TypeMerger } from './merge';
 import { TypeResolver } from './resolve';
 import { SymbolsHelper } from '../symbols';
-import { SyntaxKind_NaNIdentifier } from './utils';
+import { findParentSourceFile, isTypeAlias, isTypeAnnotation, SyntaxKind_NaNIdentifier } from './utils';
 import { astInfo } from '../ast';
 
 
@@ -60,8 +60,8 @@ export class TypeHelper {
         return null;
     }
 
-    public getCTypeFromTypeAnnotation(typeAnnotation: kataw.TypeAnnotation) {
-        switch (typeAnnotation.type.kind) {
+    public getCTypeFromTypeNode(typeNode: kataw.TypeAnnotation['type']) {
+        switch (typeNode.kind) {
             case kataw.SyntaxKind.NumberKeyword:
             case kataw.SyntaxKind.NumberType:
                 return NumberVarType;
@@ -76,8 +76,23 @@ export class TypeHelper {
                 return UniversalVarType;
             case kataw.SyntaxKind.VoidKeyword:
                 return VoidType;
+            case kataw.SyntaxKind.TypeReference:
+                const isExternalType = findParentSourceFile(typeNode).fileName.endsWith('.d.ts');
+                const typeName = (typeNode as kataw.TypeReference).typeName.text;
+                if (typeName === 'Uint8Array')
+                    return new ArrayType('char', 0, false);
+
+                // TODO: here we assume that it's a reference to an object type
+                // however, in practice, it can be any type alias
+                // in order to solve this, we need to implement type symbols
+                const type = new StructType({});
+                if (isExternalType) {
+                    type.forcedType = "struct " + typeName + " *";
+                    type.external = isExternalType;
+                }
+                return type;
             default:
-                console.warn('Type annotation not supported yet!', typeAnnotation.type.kind)
+                console.warn('Type node not supported yet!', kataw.SyntaxKind[typeNode.kind], '=', typeNode.kind)
         }
     }
 

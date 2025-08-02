@@ -47,6 +47,8 @@ import './src/standard/number/number';
 
 import './src/standard/console/log';
 
+import './src/standard/typedarray/uint8array';
+
 export function transpile(sourceCode: string): string;
 export function transpile(sourceCode: string, options: { fileName?: string, terminal?: boolean, multiFiles?: false | undefined }): string;
 export function transpile(sourceCode: string, options: { fileName?: string, terminal?: boolean, multiFiles: true }): { fileName: string, source: string }[];
@@ -94,22 +96,29 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
 
     const transpiled: { fileName: string, source: string }[] = [];
     let commonFlags: HeaderFlags | null = null
-    if (rootNodes.length > 1)
+    if (rootNodes.filter(n => !n.fileName.endsWith('.d.ts')).length > 1)
         commonFlags = new HeaderFlags();
     for (const rootNode of rootNodes) {
         if (rootNode.fileName.endsWith('.d.ts'))
             continue;
+
         const startEmit = performance.now();
         const program = new CProgram(rootNode, commonFlags, symbolsHelper, typeHelper, typeHelper.standardCallHelper, memoryManager);
-        if (symbolsHelper.exportedSymbols[rootNode.id]) {
-            const header = new CHeader(program, rootNode, symbolsHelper, typeHelper);
-            const transpiledHeaderCode = header["resolve"]();
-            transpiled.push({ fileName: rootNode.fileName.replace(/(\.ts|\.js)$/, '.h'), source: transpiledHeaderCode });
-        }
         const transpiledProgramCode = program["resolve"]();
         const transpiledFileName = rootNode.fileName.replace(/(\.ts|\.js)$/, '.c');
+        console.log('emit ' + transpiledFileName + ':', performance.now() - startEmit);
+
+        if (symbolsHelper.exportedSymbols[rootNode.id]) {
+
+            const startEmitHeader = performance.now();
+            const header = new CHeader(program, rootNode, symbolsHelper, typeHelper);
+            const transpiledHeaderCode = header["resolve"]();
+            const transpiledHeaderFileName = rootNode.fileName.replace(/(\.ts|\.js)$/, '.h');
+            console.log('emit ' + transpiledHeaderFileName + ':', performance.now() - startEmitHeader);
+
+            transpiled.push({ fileName: transpiledHeaderFileName, source: transpiledHeaderCode });
+        }
         transpiled.push({ fileName: transpiledFileName, source: transpiledProgramCode });
-        console.log('emit ' + rootNode.fileName + ':', performance.now() - startEmit);
     }
     if (commonFlags !== null) {
         const startEmitCommonHeader = performance.now();

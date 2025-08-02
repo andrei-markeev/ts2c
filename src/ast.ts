@@ -127,7 +127,7 @@ export function collectSymbolsAndTransformAst(rootNode: kataw.RootNode, entryFil
 
                             loaded[filePath] = rootId;
 
-                            symbolsHelper.createSymbolScope(rootId, rootNode.start, rootNode.end);
+                            symbolsHelper.createSymbolScope(rootId, parseResult.rootNode.start, parseResult.rootNode.end);
                             symbolsHelper.addStandardSymbols(rootId);
                             addStandardCallSymbols(rootId, symbolsHelper);
                         

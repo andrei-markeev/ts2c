@@ -375,10 +375,10 @@ export class TypeResolver {
         addEquality(isCatchClause, n => n.catchParameter, type(StringVarType));
 
         addEquality(isTypeAnnotation, n => n.parent, type(n => {
-            const cType = this.typeHelper.getCTypeFromTypeAnnotation(n);
+            const cType = this.typeHelper.getCTypeFromTypeNode(n.type);
             if (isFunction(n.parent))
                 return new FuncType({ returnType: cType });
-            else if (isBindingElement(n.parent))
+            else if (isVariableDeclaration(n.parent) || isBindingElement(n.parent))
                 return cType;
         }))
 
@@ -397,13 +397,17 @@ export class TypeResolver {
 
         for (const symbol of this.symbolsHelper.globalSymbolsWithResolvers) {
             for (const ref of symbol.references) {
-                if (!isCall(ref.parent))
+                if (!isCall(ref.parent) && !isNewExpression(ref.parent))
                     continue;
-                const returnType = symbol.resolver!.returnType(this.typeHelper, ref.parent);
+                if (!symbol.resolver) {
+                    console.error("globalSymbolsWithResolvers have a symbol without resolver!", symbol);
+                    continue;
+                }
+                const returnType = symbol.resolver.returnType(this.typeHelper, ref.parent);
                 this.setNodeType(ref.parent, returnType);
                 this.setNodeType(ref, returnType);
-                if (ref.parent.argumentList.elements.length > 0 && symbol.resolver!.argumentTypes) {
-                    const argTypes = symbol.resolver!.argumentTypes(this.typeHelper, ref.parent);
+                if (ref.parent.argumentList.elements.length > 0 && symbol.resolver.argumentTypes) {
+                    const argTypes = symbol.resolver.argumentTypes(this.typeHelper, ref.parent);
                     for (let i = 0; i < ref.parent.argumentList.elements.length; i++)
                         this.setNodeType(ref.parent.argumentList.elements[i], argTypes[i]);
                 }
@@ -443,7 +447,7 @@ export class TypeResolver {
             const type = this.typeOfNodeDict[k].type;
             if (type instanceof ArrayType && !type.isDynamicArray && type.capacity == 0)
                 type.isDynamicArray = true;
-            if (type instanceof StructType && Object.keys(type.properties).length == 0)
+            if (type instanceof StructType && Object.keys(type.properties).length == 0 && !type.external && !type.forcedType)
                 this.typeOfNodeDict[k].type = new DictType(PointerVarType);
         }
 

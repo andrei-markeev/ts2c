@@ -59,6 +59,10 @@ export class TypeMerger {
             return this.mergeDictAndArray(type2, type1);
         }
         else if (type1 instanceof StructType && type2 instanceof StructType) {
+            if (type1.forcedType && !type2.forcedType)
+                return type1_result;
+            if (type2.forcedType && !type1.forcedType)
+                return type2_result;
             let props = Object.keys(type1.properties).concat(Object.keys(type2.properties));
             let changed = false;
             let newProps = {};
