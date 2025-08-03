@@ -1,6 +1,6 @@
 {
   "name": "ts2c",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "TypeScript/JavaScript to C transpiler",
   "main": "ts2c.js",
   "bin": {
@@ -13,8 +13,7 @@
     "@andrei-markeev/kataw": "^0.0.84"
   },
   "devDependencies": {
-    "browserify": "^13.0.1",
-    "browserify-shim": "^3.8.12",
+    "esbuild": "^0.25.8",
     "nyc": "^15.0.0"
   },
   "browserify": {
@@ -27,8 +26,8 @@
   },
   "scripts": {
     "prepublishOnly": "tsc",
-    "build": "tsc && browserify ts2c.js -x typescript -s ts2c -o ts2c.bundle.js",
-    "publish-gh-pages": "npm run build && mv ts2c.bundle.js 222 && git checkout gh-pages && rm ts2c.bundle.js && mv 222 ts2c.bundle.js && git add ts2c.bundle.js && git commit -m \"updated bundle\" && git push && git checkout master",
+    "bundle": "esbuild ts2c.ts --bundle --minify --format=iife --global-name=ts2c --external:fs --external:path --external:kataw --external:node:perf_hooks --outfile=ts2c.bundle.js",
+    "publish-gh-pages": "npm run bundle && mv ts2c.bundle.js 222 && git checkout gh-pages && rm ts2c.bundle.js && mv 222 ts2c.bundle.js && git add ts2c.bundle.js && git commit -m \"updated bundle\" && git push && git checkout master",
     "cover": "nyc npm run test-no-valgrind",
     "cloc": "cloc . --exclude-lang=JavaScript --exclude-dir node_modules,package-lock.json,.vscode,sputniktests,tests",
     "test": "tsc && cd tests && make -B",

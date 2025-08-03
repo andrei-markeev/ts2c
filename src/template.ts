@@ -103,7 +103,7 @@ function processTemplate(template: string, args: string | CTemplateBase): [strin
         let evalText = template.slice(conditionStartPos, ifPos);
         for (let k in args)
             evalText = evalText.replace(new RegExp("\\b" + k + "\\b", "g"), function (m) { return "args." + m; });
-        let evalResult: boolean = eval(evalText);
+        let evalResult: boolean = new Function('args', 'return ' + evalText)(args);
         if (evalResult)
             template = template.slice(0, posBeforeIf) + template.slice(ifPos + 1, endIfBodyPos).replace(/\n    /g, '\n').replace(/^\n+/, '') + template.slice(posAfterIf);
         else if (elseIfPos > -1)

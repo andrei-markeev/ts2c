@@ -1,4 +1,3 @@
-var performance = require("node:perf_hooks").performance;
 import { parse } from './src/parser';
 import { SymbolsHelper } from './src/symbols';
 import { TypeHelper } from './src/types/typehelper';
@@ -63,6 +62,7 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
         commonHeaderPath = baseDir + '/common.h';
     }
     
+    const performance = typeof process === 'object' ? require("node:perf_hooks").performance : Date;
     const startParse = performance.now();
     var parseResult = parse(entryFilePath, sourceCode, { useColors: options?.terminal });
     console.log('parse:', performance.now() - startParse);
@@ -80,7 +80,7 @@ export function transpile(sourceCode: string, options?: { fileName?: string, ter
 
     const startProcessAst = performance.now();
     const symbolsHelper = new SymbolsHelper();
-    const { rootNodes, nodes } = collectSymbolsAndTransformAst(parseResult.rootNode, options?.fileName, symbolsHelper);
+    const { rootNodes, nodes } = collectSymbolsAndTransformAst(parseResult.rootNode, entryFilePath, symbolsHelper);
     nodes.sort((a, b) => b.rootId - a.rootId || a.start - b.start);
     console.log('process ast:', performance.now() - startProcessAst);
 

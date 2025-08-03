@@ -70,7 +70,7 @@ Project status
 
 __**Work in progress:**__ it works, but only about **70% of ES3** specification is currently supported: statements and expressions - 95%, built-in objects - 17%.
 
-Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `prototype`, `arguments` object, `eval`, `Date`, `Math`, etc.
+Notable NOT supported features include, for example: float and big numbers (all numbers are `int16_t` currently), `prototype`, `eval`, `Date`, `Math`, etc.
 
 Detailed information about supported and planned features can be found in [COVERAGE.md](https://github.com/andrei-markeev/ts2c/blob/master/COVERAGE.md).
 

@@ -15,6 +15,7 @@ Source code structure:
  - `types/*.ts` - type analysis
  - `memory.ts` - escape analysis and memory management
  - `template.ts` - code templating engine
+ - `common.ts` - common runtime code, e.g. helper functions, includes, etc.
  - `program.ts` - code template for a program, generates a single C file
  - `header.ts` - code template for a header, generates a single C header file
  - `nodes/*.ts` - code template classes for different syntax nodes

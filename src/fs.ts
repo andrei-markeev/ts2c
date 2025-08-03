@@ -12,7 +12,7 @@ export function getFileSystemWrapper() {
                 readFileSync: fs.readFileSync
             }
         }
-    } else if (typeof XMLHttpRequest === 'object') {
+    } else if (typeof XMLHttpRequest === 'function') {
         return {
             path: {
                 join: (...parts: string[]) => parts.map(p => p.replace(/^\/+|\/+$/, '')).filter(p => p !== '').join('/'),
@@ -23,7 +23,8 @@ export function getFileSystemWrapper() {
                 readFileSync: fetchFileWithXHR
             }
         }
-    }
+    } else
+        console.error('Unrecognized environment! Expected either "process" (Node.js) or "XMLHttpRequest" (browser) to be present.');
 }
 
 function fetchFileWithXHR(filePath: string) {
