@@ -60,10 +60,11 @@ class CArrayPush extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         const propAccess = <kataw.IndexExpression>call.expression;
-        const type = <ArrayType>scope.root.typeHelper.getCType(propAccess.member);
+        const type = scope.root.typeHelper.getCType(propAccess.member);
+        const asUniversalVar = type === UniversalVarType || type instanceof ArrayType && type.elementType === UniversalVarType;
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        const args = call.argumentList.elements.map(a => type.elementType === UniversalVarType ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
-        this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, a));
+        const args = call.argumentList.elements.map(a => asUniversalVar ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, type === UniversalVarType, a));
         this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
@@ -74,7 +75,13 @@ class CArrayPush extends CTemplateBase {
 
 }
 
-@CodeTemplate(`ARRAY_PUSH({varAccess}, {value});\n`)
+@CodeTemplate(`
+{#if isUniversalVar}
+    ARRAY_PUSH(((struct array_js_var_t *){varAccess}.data), {value});
+{#else}
+    ARRAY_PUSH({varAccess}, {value});
+{/if}
+`)
 class CPushValue {
-    constructor(scope: IScope, public varAccess: CElementAccess, public value: CExpression) { }
+    constructor(scope: IScope, public varAccess: CElementAccess, public isUniversalVar: boolean, public value: CExpression) {}
 }

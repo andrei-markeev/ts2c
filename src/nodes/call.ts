@@ -8,6 +8,7 @@ import { CAsUniversalVar } from './typeconvert';
 import { isNullOrUndefined, findParentFunction, getNodeText, isMaybeStandardCall, isFunctionDeclaration } from '../types/utils';
 import { CObjectLiteralExpression } from './literals';
 import { CAssignment } from './assignment';
+import { CJsVarStandardCall } from './jsvarstandardcall';
 
 @CodeTemplate(`
 {#if standardCall}
@@ -31,9 +32,17 @@ export class CCallExpression extends CTemplateBase {
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
 
-        this.standardCall = isMaybeStandardCall(call) && scope.root.standardCallHelper.createTemplate(scope, call);
-        if (this.standardCall)
-            return;
+        if (isMaybeStandardCall(call)) {
+            const objType = scope.root.typeHelper.getCType(call.expression.member);
+            if (objType === UniversalVarType) {
+                this.standardCall = new CJsVarStandardCall(scope, call);
+                return;
+            } else {
+                this.standardCall = scope.root.standardCallHelper.createTemplate(scope, call);
+                if (this.standardCall)
+                    return;
+            }
+        }
 
         const symbol = scope.root.symbolsHelper.getSymbolAtLocation(call.expression);
         if (symbol && symbol.resolver)
@@ -41,8 +50,7 @@ export class CCallExpression extends CTemplateBase {
         if (this.standardCall)
             return;
 
-        // calling function that uses "this"
-        const funcType = scope.root.typeHelper.getCType(call.expression) as FuncType;
+        const funcType = scope.root.typeHelper.getCType(call.expression);
         if (!funcType || !(funcType instanceof FuncType) || funcType.instanceType != null) {
             this.nodeText = getNodeText(call);
             return;
