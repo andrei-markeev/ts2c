@@ -188,10 +188,19 @@ jmp_buf err_jmp[10];
 struct array_string_t * err_defs;
 #define END_TRY err_defs->size--; } }
 
+#define JS_VAR_ARRAY_POP(a) (         ((struct array_js_var_t *)a.data)->size != 0 ?             ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size]             :             js_var_from_int16_t(0)     )
+
+struct tmp_obj_t {
+    struct js_var lastEl;
+};
+
 static struct js_var arr;
 static struct array_js_var_t * tmp_array = NULL;
+static struct js_var lastEl;
+static struct js_var tmp;
 static const char * tmp_str;
 static uint8_t tmp_need_dispose;
+static struct tmp_obj_t * tmp_obj = NULL;
 
 int main(void) {
     ARRAY_CREATE(err_defs, 2, 0);
@@ -203,6 +212,7 @@ int main(void) {
     switch (arr.type) {
         case JS_VAR_ARRAY:
             ARRAY_PUSH(((struct array_js_var_t *)arr.data), js_var_from_int16_t(10));
+            ARRAY_PUSH(((struct array_js_var_t *)arr.data), js_var_from_int16_t(11));
             break;
         case JS_VAR_NULL:
             ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading 'push')");
@@ -213,15 +223,44 @@ int main(void) {
             THROW(err_defs->size);
             break;
         default:
-            ARRAY_PUSH(err_defs, "TypeError: .push is not a function.");
+            ARRAY_PUSH(err_defs, "TypeError: arr.push is not a function.");
             THROW(err_defs->size);
             break;
-    };
+    }
+    ;
+    switch (arr.type) {
+        case JS_VAR_ARRAY:
+            tmp = JS_VAR_ARRAY_POP(arr);
+            break;
+        case JS_VAR_NULL:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading 'pop')");
+            THROW(err_defs->size);
+            break;
+        case JS_VAR_UNDEFINED:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of undefined (reading 'pop')");
+            THROW(err_defs->size);
+            break;
+        default:
+            ARRAY_PUSH(err_defs, "TypeError: arr.pop is not a function.");
+            THROW(err_defs->size);
+            break;
+    }
+    lastEl = tmp
+     ;
     printf("%s\n", tmp_str = js_var_to_str(arr, &tmp_need_dispose));
     if (tmp_need_dispose)
         free((void *)tmp_str);
+    tmp_obj = malloc(sizeof(*tmp_obj));
+    assert(tmp_obj != NULL);
+    tmp_obj->lastEl = lastEl;
+    printf("{ ");
+    printf(tmp_obj->lastEl.type == JS_VAR_STRING ? "lastEl: \"%s\"" : "lastEl: %s", tmp_str = js_var_to_str(tmp_obj->lastEl, &tmp_need_dispose));
+        if (tmp_need_dispose)
+            free((void *)tmp_str);
+    printf(" }\n");
     free(tmp_array->data);
     free(tmp_array);
+    free(tmp_obj);
 
     return 0;
 }

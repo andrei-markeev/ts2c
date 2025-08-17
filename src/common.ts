@@ -390,7 +390,7 @@ import { CodeTemplate } from "./template";
     }
 {/if}
 
-{#if headerFlags.js_var_from_int16_t || headerFlags.js_var_dict_inc}
+{#if headerFlags.js_var_from_int16_t || headerFlags.js_var_dict_inc || headerFlags.js_var_pop}
     struct js_var js_var_from_int16_t(int16_t n) {
         struct js_var v;
         v.type = JS_VAR_INT16;
@@ -828,6 +828,15 @@ import { CodeTemplate } from "./template";
     uint8_t js_var_isnan(struct js_var v) {
         return js_var_to_number(v).type == JS_VAR_NAN;
     }
+{/if}
+
+{#if headerFlags.js_var_pop}
+    #define JS_VAR_ARRAY_POP(a) ( \
+        ((struct array_js_var_t *)a.data)->size != 0 ? \
+            ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size] \
+            : \
+            js_var_from_int16_t(0) \
+    )
 {/if}
 
 {#if headerFlags.regex}

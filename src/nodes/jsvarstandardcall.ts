@@ -4,36 +4,50 @@ import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from "../template";
 import { CExpression } from "./expressions";
 import { StandardResolversByPropName } from "../standard";
 import { MaybeStandardCall } from "../types/utils";
-import { ArrayType, StringVarType } from "../types/ctypes";
+import { ArrayType, StringVarType, UniversalVarType } from "../types/ctypes";
+import { CVariable } from "./variable";
 
 @CodeTemplate(`
-{#if jsvar}
-    struct js_var {varName} = {jsvar};
-{/if}
-switch ({varName}.type) {
-{#if stringTemplate}
-        case JS_VAR_STRING:
-            {stringTemplate}
+{#statements}
+    {#if jsvar}
+        {varName} = {jsvar};
+    {/if}
+    switch ({varName}.type) {
+    {#if stringTemplate && tempVarName}
+            case JS_VAR_STRING:
+                {tempVarName} = {stringTemplate}
+                break;
+    {#elseif stringTemplate && !tempVarName}
+            case JS_VAR_STRING:
+                {stringTemplate}
+                break;
+    {/if}
+    {#if arrayTemplate && tempVarName}
+            case JS_VAR_ARRAY:
+                {tempVarName} = {arrayTemplate}
+                break;
+    {#elseif arrayTemplate && !tempVarName}
+            case JS_VAR_ARRAY:
+                {arrayTemplate}
+                break;
+    {/if}
+        case JS_VAR_NULL:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading '{propName}')");
+            THROW(err_defs->size);
             break;
-{/if}
-{#if arrayTemplate}
-        case JS_VAR_ARRAY:
-            {arrayTemplate}
+        case JS_VAR_UNDEFINED:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of undefined (reading '{propName}')");
+            THROW(err_defs->size);
             break;
+        default:
+            ARRAY_PUSH(err_defs, "TypeError: {varName}.{propName} is not a function.");
+            THROW(err_defs->size);
+            break;
+    }
+{/statements}
+{#if !topExpressionOfStatement}
+    {tempVarName}
 {/if}
-    case JS_VAR_NULL:
-        ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading '{propName}')");
-        THROW(err_defs->size);
-        break;
-    case JS_VAR_UNDEFINED:
-        ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of undefined (reading '{propName}')");
-        THROW(err_defs->size);
-        break;
-    default:
-        ARRAY_PUSH(err_defs, "TypeError: {jsvar}.{propName} is not a function.");
-        THROW(err_defs->size);
-        break;
-}
 `)
 export class CJsVarStandardCall extends CTemplateBase {
     jsvar: CExpression = '';
@@ -41,13 +55,22 @@ export class CJsVarStandardCall extends CTemplateBase {
     arrayTemplate: CExpression = '';
     stringTemplate: CExpression = '';
     propName: string = '';
+    topExpressionOfStatement: boolean = false;
+    tempVarName: string = '';
     constructor(scope: IScope, call: MaybeStandardCall)
     {
         super();
 
+        this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
+        if (!this.topExpressionOfStatement) {
+            this.tempVarName = scope.root.symbolsHelper.addTemp(call, 'tmp');
+            scope.variables.push(new CVariable(scope, this.tempVarName, UniversalVarType));
+        }
+
         if (!kataw.isIdentifier(call.expression.member)) {
             this.jsvar = CodeTemplateFactory.createForNode(scope, call.expression.member);
             this.varName = scope.root.symbolsHelper.addTemp(call, 'tempJsVar');
+            scope.variables.push(new CVariable(scope, this.varName, UniversalVarType));
         } else {
             this.varName = call.expression.member.text;
         }

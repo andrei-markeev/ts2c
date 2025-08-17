@@ -13,10 +13,10 @@ import { MaybeStandardCall } from '../../types/utils';
 @StandardCallResolver('push')
 class ArrayPushResolver implements ITypeExtensionResolver {
     public matchesNode(memberType: CType, options: IResolverMatchOptions) {
-        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
+        return memberType === UniversalVarType || memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
     public objectType(typeHelper: TypeHelper, call: MaybeStandardCall) {
-        let elementType = call.argumentList.elements[0] && typeHelper.getCType(call.argumentList.elements[0]);
+        const elementType = call.argumentList.elements[0] && typeHelper.getCType(call.argumentList.elements[0]);
         return new ArrayType(elementType || PointerVarType, 0, true);
     }
     public argumentTypes(typeHelper: TypeHelper, call: MaybeStandardCall) {

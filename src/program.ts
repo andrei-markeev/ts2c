@@ -44,6 +44,7 @@ export class HeaderFlags {
     js_var_isnan: boolean = false;
     js_var_dict_inc: boolean = false;
     js_var_inc: boolean = false;
+    js_var_pop: boolean = false;
     array: boolean = false;
     array_pop: boolean = false;
     array_insert: boolean = false;

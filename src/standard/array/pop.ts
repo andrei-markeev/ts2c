@@ -1,23 +1,29 @@
 import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CTemplateBase } from '../../template';
 import { StandardCallResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
-import { ArrayType, CType, PointerVarType } from '../../types/ctypes';
+import { ArrayType, CType, PointerVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { MaybeStandardCall } from '../../types/utils';
 
 @StandardCallResolver('pop')
-class ArrayLastIndexOfResolver implements ITypeExtensionResolver {
+class ArrayPopResolver implements ITypeExtensionResolver {
     public matchesNode(memberType: CType, options: IResolverMatchOptions) {
-        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
+        return memberType === UniversalVarType || memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
-    public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
+    public objectType(typeHelper: TypeHelper, call: MaybeStandardCall) {
         return new ArrayType(PointerVarType, 0, true);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let propAccess = <kataw.IndexExpression>call.expression;
-        let objType = <ArrayType>typeHelper.getCType(propAccess.member);
-        return objType.elementType;
+        let objType = typeHelper.getCType(propAccess.member);
+        if (objType instanceof ArrayType)    
+            return objType.elementType;
+        else if (objType === UniversalVarType)
+            return UniversalVarType;
+        else
+            return null;
     }
     public createTemplate(scope: IScope, node: kataw.CallExpression) {
         return new CArrayPop(scope, node);
@@ -33,17 +39,27 @@ class ArrayLastIndexOfResolver implements ITypeExtensionResolver {
     }
 }
 
-@CodeTemplate(`ARRAY_POP({varAccess})`)
+@CodeTemplate(`
+{#if isUniversalVar}
+    JS_VAR_ARRAY_POP({varAccess})
+{#else}
+    ARRAY_POP({varAccess})
+{/if}`)
 class CArrayPop extends CTemplateBase {
-    public topExpressionOfStatement: boolean;
-    public tempVarName: string = '';
     public varAccess: CElementAccess = null;
+    public isUniversalVar = false;
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        scope.root.headerFlags.array = true;
-        scope.root.headerFlags.array_pop = true;
+        this.isUniversalVar = scope.root.typeHelper.getCType(propAccess.member) === UniversalVarType;
+        if (this.isUniversalVar) {
+            scope.root.headerFlags.array = true;
+            scope.root.headerFlags.js_var_pop = true;
+        } else {
+            scope.root.headerFlags.array = true;
+            scope.root.headerFlags.array_pop = true;
+        }
     }
 
 }
