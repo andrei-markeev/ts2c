@@ -1,7 +1,7 @@
 import * as kataw from '@andrei-markeev/kataw';
 
 import { StandardCallHelper } from '../standard';
-import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMaybeStandardCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding, isTypeAnnotation, isArgumentsIdentifier } from './utils';
+import { isEqualsExpression, isFieldPropertyAccess, isFieldElementAccess, isMaybeStandardCall, isLiteral, isForOfWithSimpleInitializer, isForOfWithIdentifierInitializer, isDeleteExpression, isThisKeyword, isCompoundAssignment, isUnaryExpression, isStringLiteralAsIdentifier, isLogicOp, isFunction, getUnaryExprResultType, getBinExprResultType, operandsToNumber, toNumberCanBeNaN, findParentFunction, isUnder, getAllNodesUnder, isFieldAssignment, getAllFunctionNodesInFunction, isBooleanLiteral, isForInWithIdentifierInitializer, isForInWithSimpleInitializer, isStringLiteral, isNumericLiteral, isObjectLiteral, isArrayLiteral, isPropertyDefinition, getNodeText, isForInStatement, isReturnStatement, isVariableDeclaration, isCall, isNewExpression, isFunctionDeclaration, isBinaryExpression, isFieldAccess, isParenthesizedExpression, isVoidExpression, isTypeofExpression, isConditionalExpression, isCaseClause, isCatchClause, isFieldElementAccessNotMethodCall, getVarDeclFromSimpleInitializer, isBindingElement, isCallArgument, isNewExpressionArgument, isParameter, isArrayLiteralElement, getNodeTextInContext, isLexicalBinding, isTypeAnnotation, isArgumentsIdentifier, isIdentifierProperty } from './utils';
 import { CType, NumberVarType, StringVarType, ArrayType, StructType, DictType, FuncType, PointerVarType, UniversalVarType, ClosureParam, VoidType } from './ctypes';
 import { CircularTypesFinder } from './findcircular';
 import { TypeMerger } from './merge';
@@ -113,7 +113,17 @@ export class TypeResolver {
                 return new FuncType({ needsClosureStruct: true });
             else
                 return null;
-        }))
+        }));
+        addEquality(isIdentifierProperty, n => n.parent.parent, type(n => {
+            return struct(n.text, n.start, this.typeHelper.getCType(n) || PointerVarType)
+        }));
+        addEquality(isIdentifierProperty, n => n, type(n => {
+            const propName = n.text;
+            const type = this.typeHelper.getCType(n.parent.parent);
+            return type instanceof StructType ? type.properties[propName]
+                : type instanceof DictType ? type.elementType
+                : null;
+        }));
         addEquality(isFieldPropertyAccess, n => n, n => n.expression);
         addEquality(isFieldPropertyAccess, n => n.member, type(n => {
             const type = this.typeHelper.getCType(n);

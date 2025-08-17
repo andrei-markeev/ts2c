@@ -116,6 +116,12 @@ export function isVariableDeclarationList(n: kataw.SyntaxNode): n is kataw.Varia
 export function isPropertyDefinition(n: kataw.SyntaxNode): n is PropertyDefinition {
     return n.kind === kataw.SyntaxKind.PropertyDefinition;
 }
+export function isIdentifierProperty(n: kataw.SyntaxNode): n is kataw.Identifier {
+    return kataw.isIdentifier(n) && n.parent && isPropertyDefinitionList(n.parent);
+}
+export function isPropertyDefinitionList(n: kataw.SyntaxNode): n is PropertyDefinitionList {
+    return n.kind === kataw.SyntaxKind.PropertyDefinitionList;
+}
 export function isFieldElementAccessNotMethodCall(n: kataw.SyntaxNode): n is kataw.MemberAccessExpression {
     return n.kind === kataw.SyntaxKind.MemberAccessExpression && (!isCall(n.parent) || n.parent.expression !== n);
 }

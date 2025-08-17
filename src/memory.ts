@@ -2,7 +2,7 @@ import * as kataw from '@andrei-markeev/kataw';
 import { ArrayType, DictType, StringVarType, NumberVarType, UniversalVarType, FuncType, StructType } from './types/ctypes';
 import { StandardCallHelper } from './standard';
 import { SymbolsHelper } from './symbols';
-import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText, isCallArgument, isMaybeStandardCall, MaybeStandardCall } from './types/utils';
+import { isPlusOp, isFunction, toPrimitive, findParentFunction, findParentSourceFile, getAllNodesInFunction, isCompoundAssignment, isEqualsExpression, isBinaryExpression, isCall, isFieldAccess, isNumericLiteral, isVariableDeclaration, isFunctionDeclaration, isFieldElementAccess, isFieldPropertyAccess, isPropertyDefinition, isReturnStatement, isFunctionExpression, isStringLiteral, isObjectLiteral, isArrayLiteral, isUnaryExpression, getNodeText, isCallArgument, isMaybeStandardCall, MaybeStandardCall, isPropertyDefinitionList, isIdentifierProperty } from './types/utils';
 import { TypeHelper } from './types/typehelper';
 
 type VariableScopeInfo = {
@@ -308,6 +308,10 @@ export class MemoryManager {
                     console.log(heapNodeText + " -> Detected passing to object literal: " + getNodeText(ref.parent) + ".");
                     queue.push({ node: ref.parent.left, nodeFunc });
                     queue.push({ node: ref.parent.parent.parent, nodeFunc });
+                }
+                if (isIdentifierProperty(ref)) {
+                    console.log(heapNodeText + " -> Detected passing to object literal: " + getNodeText(ref.parent) + ".");
+                    queue.push({ node: ref.parent.parent, nodeFunc });
                 }
                 if (ref.parent && ref.parent.kind == kataw.SyntaxKind.ArrayLiteral) {
                     console.log(heapNodeText + " -> Detected passing to array literal: " + getNodeText(ref.parent) + ".");

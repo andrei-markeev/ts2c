@@ -127,10 +127,19 @@ export class CObjectLiteralExpression extends CTemplateBase {
             
             this.allocator = new CVariableAllocation(scope, varName, type, node);
             this.initializers = node.propertyList.properties
-                .filter(p => isPropertyDefinition(p))
                 .map(p => {
-                    let propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) && p.left.text;
-                    return new CAssignment(scope, varName, this.isDict ? '"' + propName + '"' : propName, type, p.right)
+                    let propName: string, propVal: kataw.SyntaxNode;
+                    if (isPropertyDefinition(p)) {
+                        propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) ? p.left.text : "/* Unsupported property name */";
+                        propVal = p.right;
+                    } else if (kataw.isIdentifier(p)) {
+                        propName = p.text;
+                        propVal = p;
+                    } else {
+                        propName = "/* Unsupported property type */"
+                        propVal = null;
+                    }
+                    return new CAssignment(scope, varName, this.isDict ? '"' + propName + '"' : propName, type, propVal);
                 });
 
             this.expression = varName;

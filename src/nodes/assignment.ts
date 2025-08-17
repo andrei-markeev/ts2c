@@ -121,11 +121,22 @@ export class CAssignment extends CTemplateBase {
             this.isObjLiteralAssignment = true;
             let objLiteral = <kataw.ObjectLiteral>right;
             this.objInitializers = objLiteral.propertyList.properties
-                .filter(isPropertyDefinition)
                 .map(p => {
-                    const propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) && p.left.text;
-                    return new CAssignment(scope, argAccessor, this.isDict ? '"' + propName + '"' : propName, argType, p.right)
+                    let propName: string;
+                    let propVal: kataw.SyntaxNode;
+                    if (isPropertyDefinition(p)) {
+                        propName = (kataw.isIdentifier(p.left) || isStringLiteral(p.left)) ? p.left.text : "/* Unsupported property name */";
+                        propVal = p.right;
+                    } else if (kataw.isIdentifier(p)) {
+                        propName = p.text;
+                        propVal = p;
+                    } else {
+                        propName = "/* Unsupported property type */"
+                        propVal = null;
+                    }
+                    return new CAssignment(scope, argAccessor, this.isDict ? '"' + propName + '"' : propName, argType, propVal);
                 });
+
         } else if (isArrayLiteral(right) && !isTempVar) {
             this.isArrayLiteralAssignment = true;
             this.arrayLiteralSize = right.elementList.elements.length;
