@@ -15,20 +15,20 @@ import { CVariable } from "./variable";
     switch ({varName}.type) {
     {#if stringTemplate && tempVarName}
             case JS_VAR_STRING:
-                {tempVarName} = {stringTemplate}
+                {tempVarName} = {stringTemplate};
                 break;
     {#elseif stringTemplate && !tempVarName}
             case JS_VAR_STRING:
-                {stringTemplate}
+                {stringTemplate};
                 break;
     {/if}
     {#if arrayTemplate && tempVarName}
             case JS_VAR_ARRAY:
-                {tempVarName} = {arrayTemplate}
+                {tempVarName} = {arrayTemplate};
                 break;
     {#elseif arrayTemplate && !tempVarName}
             case JS_VAR_ARRAY:
-                {arrayTemplate}
+                {arrayTemplate};
                 break;
     {/if}
         case JS_VAR_NULL:

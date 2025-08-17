@@ -831,11 +831,11 @@ import { CodeTemplate } from "./template";
 {/if}
 
 {#if headerFlags.js_var_pop}
-    #define JS_VAR_ARRAY_POP(a) ( \
-        ((struct array_js_var_t *)a.data)->size != 0 ? \
-            ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size] \
-            : \
-            js_var_from_int16_t(0) \
+    #define JS_VAR_ARRAY_POP(a) ( \\
+        ((struct array_js_var_t *)a.data)->size != 0 ? \\
+            ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size] \\
+            : \\
+            js_var_from_int16_t(0) \\
     )
 {/if}
 

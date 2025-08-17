@@ -188,7 +188,12 @@ jmp_buf err_jmp[10];
 struct array_string_t * err_defs;
 #define END_TRY err_defs->size--; } }
 
-#define JS_VAR_ARRAY_POP(a) (         ((struct array_js_var_t *)a.data)->size != 0 ?             ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size]             :             js_var_from_int16_t(0)     )
+#define JS_VAR_ARRAY_POP(a) ( \
+    ((struct array_js_var_t *)a.data)->size != 0 ? \
+        ((struct array_js_var_t *)a.data)->data[--((struct array_js_var_t *)a.data)->size] \
+        : \
+        js_var_from_int16_t(0) \
+)
 
 struct tmp_obj_t {
     struct js_var lastEl;
@@ -213,6 +218,7 @@ int main(void) {
         case JS_VAR_ARRAY:
             ARRAY_PUSH(((struct array_js_var_t *)arr.data), js_var_from_int16_t(10));
             ARRAY_PUSH(((struct array_js_var_t *)arr.data), js_var_from_int16_t(11));
+            ;
             break;
         case JS_VAR_NULL:
             ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading 'push')");
