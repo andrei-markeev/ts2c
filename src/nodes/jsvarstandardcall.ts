@@ -6,6 +6,7 @@ import { StandardResolversByPropName } from "../standard";
 import { MaybeStandardCall } from "../types/utils";
 import { ArrayType, StringVarType, UniversalVarType } from "../types/ctypes";
 import { CVariable } from "./variable";
+import { CBlock } from "./statements";
 
 @CodeTemplate(`
 {#statements}
@@ -15,19 +16,23 @@ import { CVariable } from "./variable";
     switch ({varName}.type) {
     {#if stringTemplate && tempVarName}
             case JS_VAR_STRING:
+                {statements {        }=> {this}}
                 {tempVarName} = {stringTemplate};
                 break;
     {#elseif stringTemplate && !tempVarName}
             case JS_VAR_STRING:
+                {statements {        }=> {this}}
                 {stringTemplate};
                 break;
     {/if}
     {#if arrayTemplate && tempVarName}
             case JS_VAR_ARRAY:
+                {statements {        }=> {this}}
                 {tempVarName} = {arrayTemplate};
                 break;
     {#elseif arrayTemplate && !tempVarName}
             case JS_VAR_ARRAY:
+                {statements {        }=> {this}}
                 {arrayTemplate};
                 break;
     {/if}
@@ -52,7 +57,9 @@ import { CVariable } from "./variable";
 export class CJsVarStandardCall extends CTemplateBase {
     jsvar: CExpression = '';
     varName: string = '';
+    statements: CExpression[] = [];
     arrayTemplate: CExpression = '';
+    stringCodeBlock: IScope = null;
     stringTemplate: CExpression = '';
     propName: string = '';
     topExpressionOfStatement: boolean = false;
@@ -78,10 +85,17 @@ export class CJsVarStandardCall extends CTemplateBase {
         const matchingResolvers = StandardResolversByPropName[this.propName];
         for (const resolver of matchingResolvers) {
             const objType = resolver.objectType(scope.root.typeHelper, call);
-            if (objType === StringVarType)
-                this.stringTemplate = resolver.createTemplate(scope, call);
-            else if (objType instanceof ArrayType)
-                this.arrayTemplate = resolver.createTemplate(scope, call);
+            if (objType === StringVarType) {
+                const tempScope = { statements: [], variables: scope.variables, root: scope.root, func: scope.func, parent: scope.parent };
+                this.stringTemplate = resolver.createTemplate(this.stringCodeBlock, call);
+                for (let statement of tempScope.statements)
+                    this.statements.push(statement);
+            } else if (objType instanceof ArrayType) {
+                const tempScope = { statements: [], variables: scope.variables, root: scope.root, func: scope.func, parent: scope.parent };
+                this.arrayTemplate = resolver.createTemplate(tempScope, call);
+                for (let statement of tempScope.statements)
+                    this.statements.push(statement);
+            }
         }
         scope.root.headerFlags.try_catch = true;
     }
