@@ -6,7 +6,6 @@ import { StandardResolversByPropName } from "../standard";
 import { MaybeStandardCall } from "../types/utils";
 import { ArrayType, StringVarType, UniversalVarType } from "../types/ctypes";
 import { CVariable } from "./variable";
-import { CBlock } from "./statements";
 
 @CodeTemplate(`
 {#statements}
@@ -71,7 +70,8 @@ export class CJsVarStandardCall extends CTemplateBase {
         this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(call, 'tmp');
-            scope.variables.push(new CVariable(scope, this.tempVarName, UniversalVarType));
+            const returnType = scope.root.typeHelper.getCType(call);
+            scope.variables.push(new CVariable(scope, this.tempVarName, returnType));
         }
 
         if (!kataw.isIdentifier(call.expression.member)) {

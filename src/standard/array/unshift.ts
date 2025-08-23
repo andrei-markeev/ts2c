@@ -1,17 +1,18 @@
 import * as kataw from '@andrei-markeev/kataw';
 import { CodeTemplate, CodeTemplateFactory, CTemplateBase } from '../../template';
-import { StandardCallResolver, IResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
-import { ArrayType, CType, NumberVarType, PointerVarType } from '../../types/ctypes';
+import { StandardCallResolver, IResolverMatchOptions, ITypeExtensionResolver } from '../../standard';
+import { ArrayType, CType, NumberVarType, PointerVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
+import { CAsUniversalVar } from '../../nodes/typeconvert';
 
 @StandardCallResolver('unshift')
 class ArrayUnshiftResolver implements ITypeExtensionResolver {
     public matchesNode(memberType: CType, options: IResolverMatchOptions) {
-        return memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
+        return memberType === UniversalVarType || memberType instanceof ArrayType && memberType.isDynamicArray || options && options.determineObjectType;
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         let elementType = call.argumentList.elements[0] && typeHelper.getCType(call.argumentList.elements[0]);
@@ -41,7 +42,10 @@ class ArrayUnshiftResolver implements ITypeExtensionResolver {
 
 @CodeTemplate(`
 {#statements}
-    {#if !topExpressionOfStatement}
+    {#if !topExpressionOfStatement && isUniversalVar}
+        {unshiftValues}
+        {tempVarName} = ((struct array_js_var_t *){varAccess}.data)->size;
+    {#elseif !topExpressionOfStatement && !isUniversalVar}
         {unshiftValues}
         {tempVarName} = {varAccess}->size;
     {/if}
@@ -56,12 +60,16 @@ class CArrayUnshift extends CTemplateBase {
     public tempVarName: string = '';
     public varAccess: CElementAccess = null;
     public unshiftValues: CUnshiftValue[] = [];
+    public isUniversalVar: boolean = false;
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
         this.varAccess = new CElementAccess(scope, propAccess.member);
-        let args = call.argumentList.elements.map(a => CodeTemplateFactory.createForNode(scope, a));
-        this.unshiftValues = args.map(a => new CUnshiftValue(scope, this.varAccess, a));
+        const type = scope.root.typeHelper.getCType(propAccess.member);
+        this.isUniversalVar = type === UniversalVarType;
+        const argIsUniversalVar = type === UniversalVarType || type instanceof ArrayType && type.elementType === UniversalVarType;
+        let args = call.argumentList.elements.map(a => argIsUniversalVar ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
+        this.unshiftValues = args.reverse().map(a => new CUnshiftValue(scope, this.varAccess, type === UniversalVarType, a));
         this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
@@ -73,7 +81,13 @@ class CArrayUnshift extends CTemplateBase {
 
 }
 
-@CodeTemplate(`ARRAY_INSERT({varAccess}, 0, {value});\n`)
+@CodeTemplate(`
+{#if isUniversalVar}
+    ARRAY_INSERT(((struct array_js_var_t *){varAccess}.data), 0, {value});\n
+{#else}
+    ARRAY_INSERT({varAccess}, 0, {value});\n
+{/if}
+`)
 class CUnshiftValue extends CTemplateBase {
-    constructor(scope: IScope, public varAccess: CElementAccess, public value: CExpression) { super() }
+    constructor(scope: IScope, public varAccess: CElementAccess, public isUniversalVar: boolean, public value: CExpression) { super() }
 }
