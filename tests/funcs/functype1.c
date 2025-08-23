@@ -86,6 +86,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct obj_t {
     struct js_var (*echo)(struct js_var);
     int16_t k;
@@ -93,8 +115,6 @@ struct obj_t {
 
 static struct obj_t * obj;
 static struct js_var tmp_result;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static struct js_var tmp_result_2;
 static struct js_var tmp_result_3;
 
@@ -109,17 +129,11 @@ int main(void) {
     obj->echo = echo;
     obj->k = 0;
     tmp_result = echo(js_var_from_int16_t(obj->k));
-    printf("%s\n", tmp_str = js_var_to_str(tmp_result, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result, "\n", FALSE);
     tmp_result_2 = obj->echo(js_var_from_str("k"));
-    printf("%s\n", tmp_str = js_var_to_str(tmp_result_2, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_2, "\n", FALSE);
     tmp_result_3 = obj->echo(js_var_from_int16_t(-1));
-    printf("%s\n", tmp_str = js_var_to_str(tmp_result_3, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_3, "\n", FALSE);
     free(obj);
 
     return 0;

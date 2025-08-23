@@ -102,37 +102,43 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 static const char * s1;
 static const char * s2;
 static struct js_var n1;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 int main(void) {
     s1 = "123test";
     s2 = "33";
     n1 = str_to_int16_t("   1");
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t(s1), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t(s2), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(n1, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t("   "), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t(""), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t("   -"), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(str_to_int16_t("-20"), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", str_to_int16_t(s1), "\n", FALSE);
+    js_var_log("", str_to_int16_t(s2), "\n", FALSE);
+    js_var_log("", n1, "\n", FALSE);
+    js_var_log("", str_to_int16_t("   "), "\n", FALSE);
+    js_var_log("", str_to_int16_t(""), "\n", FALSE);
+    js_var_log("", str_to_int16_t("   -"), "\n", FALSE);
+    js_var_log("", str_to_int16_t("-20"), "\n", FALSE);
 
     return 0;
 }

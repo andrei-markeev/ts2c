@@ -224,6 +224,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -256,21 +278,15 @@ uint8_t js_var_isnan(struct js_var v) {
 
 static struct js_var n;
 static struct js_var x;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static struct array_js_var_t * tmp_array = NULL;
 static struct dict_js_var_t * tmp_obj = NULL;
 
 int main(void) {
     n = js_var_from(JS_VAR_NAN);
     x = js_var_from_int16_t(5);
-    printf("%s\n", tmp_str = js_var_to_str(n, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", n, "\n", FALSE);
     printf("%s\n", js_var_isnan(n) ? "true" : "false");
-    printf("%s\n", tmp_str = js_var_to_str(x, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", x, "\n", FALSE);
     printf("%s\n", js_var_isnan(x) ? "true" : "false");
     printf("%s\n", js_var_isnan(js_var_from_str("")) ? "true" : "false");
     printf("%s\n", js_var_isnan(js_var_from_str("31415")) ? "true" : "false");

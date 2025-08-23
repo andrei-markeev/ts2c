@@ -184,6 +184,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 int err_i = 0;
 jmp_buf err_jmp[10];
 #define TRY { int err_val = setjmp(err_jmp[err_i++]); if (!err_val) {
@@ -202,8 +224,6 @@ static struct js_var firstEl;
 static struct js_var tmp;
 static struct js_var value;
 static struct tmp_obj_t * tmp_obj = NULL;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 int main(void) {
     ARRAY_CREATE(err_defs, 2, 0);
@@ -239,9 +259,7 @@ int main(void) {
     assert(tmp_obj != NULL);
     tmp_obj->firstEl = firstEl;
     printf("{ ");
-    printf(tmp_obj->firstEl.type == JS_VAR_STRING ? "firstEl: \"%s\"" : "firstEl: %s", tmp_str = js_var_to_str(tmp_obj->firstEl, &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+    js_var_log("firstEl: ", tmp_obj->firstEl, "", TRUE);
     printf(" }\n");
     free(tmp_array->data);
     free(tmp_array);

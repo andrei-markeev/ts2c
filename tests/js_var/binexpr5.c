@@ -217,6 +217,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -299,8 +321,6 @@ static int16_t arr1[1] = { 33 };
 static struct array_js_var_t * arr2;
 static struct dict_js_var_t * tmp_obj = NULL;
 static struct dict_js_var_t * obj;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 int main(void) {
     str = "17";
@@ -313,28 +333,14 @@ int main(void) {
     arr2->data[1] = js_var_from_dict(tmp_obj);
     DICT_CREATE(obj, 4);
     DICT_SET(obj, "some", js_var_from_int16_t(12));
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_str(str), JS_VAR_SHL, js_var_from_int16_t(1)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_str(str), JS_VAR_SHR, js_var_from_int16_t(2)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_str(str), JS_VAR_USHR, js_var_from_int16_t(3)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_array(arr0), JS_VAR_OR, js_var_from_int16_t(22)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", js_var_compute(js_var_from_str(str), JS_VAR_SHL, js_var_from_int16_t(1)), "\n", FALSE);
+    js_var_log("", js_var_compute(js_var_from_str(str), JS_VAR_SHR, js_var_from_int16_t(2)), "\n", FALSE);
+    js_var_log("", js_var_compute(js_var_from_str(str), JS_VAR_USHR, js_var_from_int16_t(3)), "\n", FALSE);
+    js_var_log("", js_var_compute(js_var_from_array(arr0), JS_VAR_OR, js_var_from_int16_t(22)), "\n", FALSE);
     printf("%d\n", arr1[0] & 3);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_array(arr2), JS_VAR_OR, js_var_from_int16_t(2)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(js_var_from_dict(obj), JS_VAR_AND, js_var_from_int16_t(31)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(DICT_GET(obj, "some", js_var_from(JS_VAR_UNDEFINED)), JS_VAR_AND, js_var_from_int16_t(31)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", js_var_compute(js_var_from_array(arr2), JS_VAR_OR, js_var_from_int16_t(2)), "\n", FALSE);
+    js_var_log("", js_var_compute(js_var_from_dict(obj), JS_VAR_AND, js_var_from_int16_t(31)), "\n", FALSE);
+    js_var_log("", js_var_compute(DICT_GET(obj, "some", js_var_from(JS_VAR_UNDEFINED)), JS_VAR_AND, js_var_from_int16_t(31)), "\n", FALSE);
     free(arr0->data);
     free(arr0);
     free(arr2->data);

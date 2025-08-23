@@ -86,10 +86,30 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 static struct js_var a;
 static struct js_var b;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 struct js_var id(struct js_var x)
 {
@@ -99,12 +119,8 @@ struct js_var id(struct js_var x)
 int main(void) {
     a = id(js_var_from_int16_t(0));
     b = id(js_var_from_str("a"));
-    printf("%s", tmp_str = js_var_to_str(a, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(b, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", a, "", FALSE);
+    js_var_log(" ", b, "\n", FALSE);
 
     return 0;
 }

@@ -178,6 +178,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 uint8_t js_var_to_bool(struct js_var v)
 {
     if (v.type == JS_VAR_INT16)
@@ -195,8 +217,6 @@ uint8_t js_var_to_bool(struct js_var v)
 static struct dict_js_var_t * a;
 static int16_t b;
 static struct js_var c;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static struct js_var tmp1;
 static struct js_var tmp1_2;
 static struct js_var tmp1_3;
@@ -211,50 +231,22 @@ int main(void) {
     DICT_SET(a, "hello", js_var_from_str("world"));
     b = 17;
     c = js_var_from(JS_VAR_NULL);
-    printf("%s\n", tmp_str = js_var_to_str(a ? js_var_from_int16_t(b) : js_var_from_dict(a), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(a ? js_var_from_dict(a) : js_var_from_int16_t(b), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(a ? c : js_var_from_dict(a), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(a ? js_var_from_dict(a) : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(b ? js_var_from_dict(a) : js_var_from_int16_t(b), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(b ? js_var_from_int16_t(b) : js_var_from_dict(a), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(b ? c : js_var_from_int16_t(b), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(b ? js_var_from_int16_t(b) : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(c) ? js_var_from_dict(a) : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(c) ? c : js_var_from_dict(a), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(c) ? js_var_from_int16_t(b) : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(c) ? c : js_var_from_int16_t(b), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", a ? js_var_from_int16_t(b) : js_var_from_dict(a), "\n", FALSE);
+    js_var_log("", a ? js_var_from_dict(a) : js_var_from_int16_t(b), "\n", FALSE);
+    js_var_log("", a ? c : js_var_from_dict(a), "\n", FALSE);
+    js_var_log("", a ? js_var_from_dict(a) : c, "\n", FALSE);
+    js_var_log("", b ? js_var_from_dict(a) : js_var_from_int16_t(b), "\n", FALSE);
+    js_var_log("", b ? js_var_from_int16_t(b) : js_var_from_dict(a), "\n", FALSE);
+    js_var_log("", b ? c : js_var_from_int16_t(b), "\n", FALSE);
+    js_var_log("", b ? js_var_from_int16_t(b) : c, "\n", FALSE);
+    js_var_log("", js_var_to_bool(c) ? js_var_from_dict(a) : c, "\n", FALSE);
+    js_var_log("", js_var_to_bool(c) ? c : js_var_from_dict(a), "\n", FALSE);
+    js_var_log("", js_var_to_bool(c) ? js_var_from_int16_t(b) : c, "\n", FALSE);
+    js_var_log("", js_var_to_bool(c) ? c : js_var_from_int16_t(b), "\n", FALSE);
     tmp1 = a ? js_var_from_int16_t(b) : js_var_from_dict(a);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(tmp1) ? tmp1 : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", js_var_to_bool(tmp1) ? tmp1 : c, "\n", FALSE);
     tmp1_2 = js_var_from_int16_t(b - 17);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_bool(tmp1_2) ? tmp1_2 : c, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", js_var_to_bool(tmp1_2) ? tmp1_2 : c, "\n", FALSE);
     tmp1_3 = js_var_from_int16_t(dec_b());
     if (js_var_to_bool(js_var_to_bool(tmp1_3) ? tmp1_3 : c))
         printf("%d\n", b);

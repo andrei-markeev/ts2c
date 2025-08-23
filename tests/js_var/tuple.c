@@ -216,6 +216,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -289,8 +311,6 @@ static int16_t gc_i;
 
 static struct js_var tuple[3];
 static int16_t i;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static int16_t j;
 static int16_t k;
 
@@ -304,9 +324,7 @@ int main(void) {
     for (i = 0; i < 3; i++) {
         if (i != 0)
             printf(", ");
-        printf(tuple[i].type == JS_VAR_STRING ? "\"%s\"" : "%s", tmp_str = js_var_to_str(tuple[i], &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+        js_var_log("", tuple[i], "", TRUE);
     }
     printf(" ]\n");
     tuple[1] = js_var_from_str("test");
@@ -314,9 +332,7 @@ int main(void) {
     for (j = 0; j < 3; j++) {
         if (j != 0)
             printf(", ");
-        printf(tuple[j].type == JS_VAR_STRING ? "\"%s\"" : "%s", tmp_str = js_var_to_str(tuple[j], &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+        js_var_log("", tuple[j], "", TRUE);
     }
     printf(" ]\n");
     tuple[0] = js_var_plus(js_var_from_int16_t(12), js_var_to_number(tuple[1]), gc_main);
@@ -325,9 +341,7 @@ int main(void) {
     for (k = 0; k < 3; k++) {
         if (k != 0)
             printf(", ");
-        printf(tuple[k].type == JS_VAR_STRING ? "\"%s\"" : "%s", tmp_str = js_var_to_str(tuple[k], &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+        js_var_log("", tuple[k], "", TRUE);
     }
     printf(" ]\n");
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)

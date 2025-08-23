@@ -32,6 +32,7 @@ export class HeaderFlags {
     js_var_from_int16_t: boolean = false;
     js_var_from_uint8_t: boolean = false;
     js_var_to_str: boolean = false;
+    js_var_log: boolean = false;
     js_var_to_number: boolean = false;
     js_var_to_undefined: boolean = false;
     js_var_to_bool: boolean = false;

@@ -181,6 +181,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 static struct dict_js_var_t * dict;
 static int16_t tmp_dict_pos_2;
 static int16_t i;
@@ -188,8 +210,6 @@ static char * tmp_result = NULL;
 static int16_t tmp_dict_pos_3;
 static int16_t tmp_dict_pos_4;
 static int16_t j;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static int16_t tmp_dict_pos_5;
 static int16_t k;
 
@@ -231,9 +251,7 @@ int main(void) {
         if (j != 0)
             printf(", ");
         printf("\"%s\": ", dict->index->data[j]);
-        printf(dict->values->data[j].type == JS_VAR_STRING ? "\"%s\"" : "%s", tmp_str = js_var_to_str(dict->values->data[j], &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+        js_var_log("", dict->values->data[j], "", TRUE);
     }
     printf(" }\n");
     tmp_dict_pos_5 = dict_find_pos(dict->index->data, dict->index->size, "10");
@@ -248,9 +266,7 @@ int main(void) {
         if (k != 0)
             printf(", ");
         printf("\"%s\": ", dict->index->data[k]);
-        printf(dict->values->data[k].type == JS_VAR_STRING ? "\"%s\"" : "%s", tmp_str = js_var_to_str(dict->values->data[k], &tmp_need_dispose));
-        if (tmp_need_dispose)
-            free((void *)tmp_str);
+        js_var_log("", dict->values->data[k], "", TRUE);
     }
     printf(" }\n");
     free(dict->index->data);

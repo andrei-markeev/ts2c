@@ -140,6 +140,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -263,8 +285,6 @@ static int16_t gc_i;
 static int16_t a;
 static struct js_var r1;
 static struct js_var r2;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static struct js_var tmp_result;
 
 struct js_var add_and_substract(struct js_var x, struct js_var y, struct js_var z)
@@ -281,19 +301,11 @@ int main(void) {
     a = 10;
     r1 = add_and_substract(js_var_from_str("10"), js_var_from_int16_t(11), js_var_from_str("Hello"));
     r2 = add_and_substract(js_var_from_int16_t(a), js_var_from_str("11"), js_var_from_int16_t(100));
-    printf("%s\n", tmp_str = js_var_to_str(r1, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(r2, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_plus(r1, r2, gc_main), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", r1, "\n", FALSE);
+    js_var_log("", r2, "\n", FALSE);
+    js_var_log("", js_var_plus(r1, r2, gc_main), "\n", FALSE);
     tmp_result = add_and_substract(js_var_from_int16_t(a), js_var_from_int16_t(20), js_var_from_int16_t(5));
-    printf("%s\n", tmp_str = js_var_to_str(tmp_result, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result, "\n", FALSE);
     for (gc_i = 0; gc_i < gc_main->size; gc_i++)
         free(gc_main->data[gc_i]);
     free(gc_main->data);

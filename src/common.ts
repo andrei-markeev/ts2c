@@ -12,7 +12,7 @@ import { CodeTemplate } from "./template";
     || headerFlags.str_substring || headerFlags.dict_find_pos
     || headerFlags.array_insert || headerFlags.array_remove || headerFlags.dict || headerFlags.js_var_dict
     || headerFlags.js_var_from_str || headerFlags.js_var_to_str || headerFlags.js_var_eq || headerFlags.js_var_plus
-    || headerFlags.js_var_lessthan || headerFlags.dict_find_pos}
+    || headerFlags.js_var_lessthan || headerFlags.dict_find_pos || headerFlags.js_var_log}
     #include <string.h>
 {/if}
 {#if headerFlags.malloc || headerFlags.array || headerFlags.dict || headerFlags.str_substring || headerFlags.str_slice
@@ -30,7 +30,7 @@ import { CodeTemplate } from "./template";
 {#if headerFlags.printf || headerFlags.parse_int16_t || headerFlags.str_int16_t_cat}
     #include <stdio.h>
 {/if}
-{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
+{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_log}
     #include <limits.h>
 {/if}
 {#if headerFlags.str_to_int16_t || headerFlags.js_var_get || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
@@ -40,7 +40,7 @@ import { CodeTemplate } from "./template";
     #include <setjmp.h>
 {/if}
 
-{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove || headerFlags.js_var_dict_inc }
+{#if headerFlags.bool || headerFlags.js_var_to_bool || headerFlags.js_var_eq || headerFlags.dict_remove || headerFlags.js_var_dict_inc}
     #define TRUE 1
     #define FALSE 0
 {/if}
@@ -173,7 +173,7 @@ import { CodeTemplate } from "./template";
     }
 {/if}
 
-{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan}
+{#if headerFlags.str_int16_t_buflen || headerFlags.str_int16_t_cmp || headerFlags.str_int16_t_cat || headerFlags.js_var_plus || headerFlags.js_var_compute || headerFlags.js_var_to_str || headerFlags.js_var_lessthan || headerFlags.js_var_log}
     #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 {/if}
 {#if headerFlags.str_int16_t_cmp}
@@ -340,7 +340,7 @@ import { CodeTemplate } from "./template";
     };
 {/if}
 
-{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_dict_inc || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_to_number}
+{#if headerFlags.js_var_array || headerFlags.js_var_dict || headerFlags.js_var_dict_inc || headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_to_number || headerFlags.js_var_log}
     struct array_js_var_t {
         int16_t size;
         int16_t capacity;
@@ -459,7 +459,7 @@ import { CodeTemplate } from "./template";
     }
 {/if}
 
-{#if headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan}
+{#if headerFlags.js_var_to_str || headerFlags.js_var_plus || headerFlags.js_var_lessthan || headerFlags.js_var_log}
     const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     {
         char *buf;
@@ -505,6 +505,30 @@ import { CodeTemplate } from "./template";
             return "undefined";
 
         return NULL;
+    }
+{/if}
+
+{#if headerFlags.js_var_log}
+    void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+    {
+        int16_t i;
+        uint8_t need_dispose = 0;
+        const char *tmp;
+        if (v.type == JS_VAR_ARRAY) {
+            printf("%s[ ", prefix);
+            for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+                if (i != 0)
+                    printf(", ");
+                printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+                if (need_dispose)
+                    free((void *)tmp);
+            }
+            printf(" ]%s", postfix);
+        } else {
+            printf(is_quoted && v.type == JS_VAR_STRING ? "%s\\"%s\\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+            if (need_dispose)
+                free((void *)tmp);
+        }
     }
 {/if}
 

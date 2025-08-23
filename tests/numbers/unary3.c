@@ -210,6 +210,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -302,8 +324,6 @@ static struct js_var u1;
 static struct js_var u2;
 static struct array_js_var_t * u3;
 static struct js_var tmp_result;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 static struct js_var tmp_result_2;
 static struct js_var tmp_result_3;
 static struct js_var tmp_result_4;
@@ -317,47 +337,23 @@ int main(void) {
     u3->data[0] = js_var_from_int16_t(12);
     ARRAY_PUSH(u3, js_var_from_str("15"));
     tmp_result = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u1, 1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u1, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result, "", FALSE);
+    js_var_log(" ", u1, "\n", FALSE);
     tmp_result_2 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u1, -1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result_2, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u1, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_2, "", FALSE);
+    js_var_log(" ", u1, "\n", FALSE);
     tmp_result_3 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u2, 1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result_3, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u2, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_3, "", FALSE);
+    js_var_log(" ", u2, "\n", FALSE);
     tmp_result_4 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u2, -1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result_4, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u2, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_4, "", FALSE);
+    js_var_log(" ", u2, "\n", FALSE);
     tmp_result_5 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u3->data[1], 1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result_5, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u3->data[1], &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_5, "", FALSE);
+    js_var_log(" ", u3->data[1], "\n", FALSE);
     tmp_result_6 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u3->data[1], -1));
-    printf("%s", tmp_str = js_var_to_str(tmp_result_6, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf(" %s\n", tmp_str = js_var_to_str(u3->data[1], &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", tmp_result_6, "", FALSE);
+    js_var_log(" ", u3->data[1], "\n", FALSE);
     free(u3->data);
     free(u3);
 

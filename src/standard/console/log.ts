@@ -173,14 +173,8 @@ interface PrintfOptions {
     {INDENT}    {elementPrintfs}
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
-{#elseif isUniversalVar && quoted}
-    printf({accessor}.type == JS_VAR_STRING ? "{PREFIX}\\"%s\\"{POSTFIX}" : "{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
-    {INDENT}if ({needDisposeVarName})
-    {INDENT}    free((void *){tempVarName});
 {#elseif isUniversalVar}
-    printf("{PREFIX}%s{POSTFIX}", {tempVarName} = js_var_to_str({accessor}, &{needDisposeVarName}));
-    {INDENT}if ({needDisposeVarName})
-    {INDENT}    free((void *){tempVarName});
+    js_var_log("{PREFIX}", {accessor}, "{POSTFIX}", {trueIfQuotedOtherwiseFalse});
 {#else}
     printf(/* Unsupported printf expression */);
 {/if}`)
@@ -188,6 +182,7 @@ class CPrintf {
 
     public isStringLiteral: boolean = false;
     public quoted: boolean = false;
+    public trueIfQuotedOtherwiseFalse: string = 'FALSE';
     public isCString: boolean = false;
     public isRegex: boolean = false;
     public isInteger: boolean = false;
@@ -218,15 +213,12 @@ class CPrintf {
         this.isUniversalVar = varType == UniversalVarType;
 
         this.quoted = options.quotedString;
+        if (options.quotedString)
+            this.trueIfQuotedOtherwiseFalse = 'TRUE';
 
         if (this.isUniversalVar) {
-            this.tempVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_str", false);
-            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(printNode, "tmp_need_dispose", false);
-            if (!scope.variables.some(v => v.name == this.tempVarName))
-                scope.variables.push(new CVariable(scope, this.tempVarName, StringVarType));
-            if (!scope.variables.some(v => v.name == this.needDisposeVarName))
-                scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
-            scope.root.headerFlags.js_var_to_str = true;
+            scope.root.headerFlags.bool = true;
+            scope.root.headerFlags.js_var_log = true;
         }
 
         this.PREFIX = options.prefix || '';

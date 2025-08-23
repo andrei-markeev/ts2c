@@ -111,6 +111,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -191,8 +213,6 @@ static int16_t b;
 static struct js_var x;
 static struct js_var y;
 static struct js_var z;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 int main(void) {
     a = 10;
@@ -200,12 +220,8 @@ int main(void) {
     x = str_to_int16_t("12test");
     y = str_to_int16_t("55");
     z = js_var_compute(js_var_from_int16_t(a), JS_VAR_ASTERISK, x);
-    printf("%s\n", tmp_str = js_var_to_str(z, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(b)), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", z, "\n", FALSE);
+    js_var_log("", js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(b)), "\n", FALSE);
 
     return 0;
 }

@@ -222,6 +222,28 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
+            if (need_dispose)
+                free((void *)tmp);
+        }
+        printf(" ]%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -297,8 +319,6 @@ struct js_var js_var_get(struct js_var v, struct js_var arg) {
 static struct js_var x;
 static struct js_var y;
 static struct array_js_var_t * tmp_array = NULL;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 struct array_js_var_t * tmp_array_2 = NULL;
 
 int main(void) {
@@ -308,12 +328,8 @@ int main(void) {
     ARRAY_CREATE(tmp_array, 2, 1);
     tmp_array->data[0] = js_var_from_int16_t(5);
     y = js_var_from_array(tmp_array);
-    printf("%s\n", tmp_str = js_var_to_str(x, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
-    printf("%s\n", tmp_str = js_var_to_str(js_var_to_number(y), &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", x, "\n", FALSE);
+    js_var_log("", js_var_to_number(y), "\n", FALSE);
     x = js_var_get(y, x);
     if (js_var_to_bool(x))
     {
@@ -324,13 +340,9 @@ int main(void) {
         tmp_array_2->data[3] = x;
         x = js_var_from_array(tmp_array_2);
     }
-    printf("%s\n", tmp_str = js_var_to_str(x, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", x, "\n", FALSE);
     y = js_var_from_str("hello");
-    printf("%s\n", tmp_str = js_var_to_str(y, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", y, "\n", FALSE);
     free(tmp_array->data);
     free(tmp_array);
     free(tmp_array_2->data);
