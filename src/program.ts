@@ -59,6 +59,7 @@ export class HeaderFlags {
     gc_iterator: boolean = false;
     gc_iterator2: boolean = false;
     gc_array: boolean = false;
+    gc_dict: boolean = false;
     dict: boolean = false;
     dict_find_pos: boolean = false;
     str_int16_t_buflen: boolean = false;
@@ -128,6 +129,9 @@ int {mainFunctionName}(void) {
     {#if headerFlags.try_catch || headerFlags.js_var_get}
         ARRAY_CREATE(err_defs, 2, 0);
     {/if}
+    {#if headerFlags.js_var_log}
+        ARRAY_CREATE(js_var_log_circular, 4, 0);
+    {/if}
 
     {statements {    }=> {this}}
     {destructors}
@@ -167,8 +171,14 @@ export class CProgram implements IScope {
             const simplePointerArray = "struct array_pointer_t *"
             let gcType = simplePointerArray;
             if (gcVarName.indexOf("_arrays") > -1) gcType = "ARRAY(struct array_pointer_t *)";
-            if (gcVarName.indexOf("_arrays_c") > -1) gcType = "ARRAY(ARRAY(struct array_pointer_t *))";
-            if (gcVarName.indexOf("_dicts") > -1) gcType = "ARRAY(DICT(void *))";
+            if (gcVarName.indexOf("_arrays_c") > -1) {
+                gcType = "ARRAY(ARRAY(struct array_pointer_t *))";
+                this.headerFlags.gc_iterator2 = true;
+            }
+            if (gcVarName.indexOf("_dicts") > -1) {
+                gcType = "ARRAY(DICT(void *))";
+                this.headerFlags.gc_dict = true;
+            }
             if (gcType !== simplePointerArray)
                 this.headerFlags.gc_array = true;
             this.variables.push(new CVariable(this, gcVarName, gcType));

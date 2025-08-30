@@ -99,6 +99,12 @@ struct array_string_t {
     const char ** data;
 };
 
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
 struct dict_js_var_t {
     struct array_string_t *index;
     struct array_js_var_t *values;
@@ -210,21 +216,42 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
-void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+struct array_pointer_t * js_var_log_circular;
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted, uint8_t is_recursive)
 {
     int16_t i;
     uint8_t need_dispose = 0;
     const char *tmp;
+
+    if (!is_recursive)
+        js_var_log_circular->size = 0;
+    if (v.type == JS_VAR_ARRAY || v.type == JS_VAR_DICT) {
+        for (i = 0; i < js_var_log_circular->size; i++) {
+            if (js_var_log_circular->data[i] == v.data) {
+                printf("(circular)");
+                return;
+            }
+        }
+        ARRAY_PUSH(js_var_log_circular, v.data);
+    }
+
     if (v.type == JS_VAR_ARRAY) {
         printf("%s[ ", prefix);
         for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
             if (i != 0)
                 printf(", ");
-            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
-            if (need_dispose)
-                free((void *)tmp);
+            js_var_log("", ((struct array_js_var_t *)v.data)->data[i], "", TRUE, TRUE);
         }
         printf(" ]%s", postfix);
+    } else if (v.type == JS_VAR_DICT) {
+        printf("%s{ ", prefix);
+        for (i = 0; i < ((struct dict_js_var_t *)v.data)->index->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("\"%s\": ", ((struct dict_js_var_t *)v.data)->index->data[i]);
+            js_var_log("", ((struct dict_js_var_t *)v.data)->values->data[i], "", TRUE, TRUE);
+        }
+        printf(" }%s", postfix);
     } else {
         printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
         if (need_dispose)
@@ -331,29 +358,31 @@ static struct js_var tmp_result_5;
 static struct js_var tmp_result_6;
 
 int main(void) {
+    ARRAY_CREATE(js_var_log_circular, 4, 0);
+
     u1 = js_var_from_str("123");
     u2 = js_var_from_str("abc");
     ARRAY_CREATE(u3, 2, 1);
     u3->data[0] = js_var_from_int16_t(12);
     ARRAY_PUSH(u3, js_var_from_str("15"));
     tmp_result = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u1, 1));
-    js_var_log("", tmp_result, "", FALSE);
-    js_var_log(" ", u1, "\n", FALSE);
+    js_var_log("", tmp_result, "", FALSE, FALSE);
+    js_var_log(" ", u1, "\n", FALSE, FALSE);
     tmp_result_2 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u1, -1));
-    js_var_log("", tmp_result_2, "", FALSE);
-    js_var_log(" ", u1, "\n", FALSE);
+    js_var_log("", tmp_result_2, "", FALSE, FALSE);
+    js_var_log(" ", u1, "\n", FALSE, FALSE);
     tmp_result_3 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u2, 1));
-    js_var_log("", tmp_result_3, "", FALSE);
-    js_var_log(" ", u2, "\n", FALSE);
+    js_var_log("", tmp_result_3, "", FALSE, FALSE);
+    js_var_log(" ", u2, "\n", FALSE, FALSE);
     tmp_result_4 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u2, -1));
-    js_var_log("", tmp_result_4, "", FALSE);
-    js_var_log(" ", u2, "\n", FALSE);
+    js_var_log("", tmp_result_4, "", FALSE, FALSE);
+    js_var_log(" ", u2, "\n", FALSE, FALSE);
     tmp_result_5 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u3->data[1], 1));
-    js_var_log("", tmp_result_5, "", FALSE);
-    js_var_log(" ", u3->data[1], "\n", FALSE);
+    js_var_log("", tmp_result_5, "", FALSE, FALSE);
+    js_var_log(" ", u3->data[1], "\n", FALSE, FALSE);
     tmp_result_6 = js_var_compute(js_var_from_int16_t(10), JS_VAR_MINUS, js_var_inc(&u3->data[1], -1));
-    js_var_log("", tmp_result_6, "", FALSE);
-    js_var_log(" ", u3->data[1], "\n", FALSE);
+    js_var_log("", tmp_result_6, "", FALSE, FALSE);
+    js_var_log(" ", u3->data[1], "\n", FALSE, FALSE);
     free(u3->data);
     free(u3);
 

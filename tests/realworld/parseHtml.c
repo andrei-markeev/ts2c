@@ -311,6 +311,49 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
+struct array_pointer_t * js_var_log_circular;
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted, uint8_t is_recursive)
+{
+    int16_t i;
+    uint8_t need_dispose = 0;
+    const char *tmp;
+
+    if (!is_recursive)
+        js_var_log_circular->size = 0;
+    if (v.type == JS_VAR_ARRAY || v.type == JS_VAR_DICT) {
+        for (i = 0; i < js_var_log_circular->size; i++) {
+            if (js_var_log_circular->data[i] == v.data) {
+                printf("(circular)");
+                return;
+            }
+        }
+        ARRAY_PUSH(js_var_log_circular, v.data);
+    }
+
+    if (v.type == JS_VAR_ARRAY) {
+        printf("%s[ ", prefix);
+        for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
+            if (i != 0)
+                printf(", ");
+            js_var_log("", ((struct array_js_var_t *)v.data)->data[i], "", TRUE, TRUE);
+        }
+        printf(" ]%s", postfix);
+    } else if (v.type == JS_VAR_DICT) {
+        printf("%s{ ", prefix);
+        for (i = 0; i < ((struct dict_js_var_t *)v.data)->index->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("\"%s\": ", ((struct dict_js_var_t *)v.data)->index->data[i]);
+            js_var_log("", ((struct dict_js_var_t *)v.data)->values->data[i], "", TRUE, TRUE);
+        }
+        printf(" }%s", postfix);
+    } else {
+        printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
+        if (need_dispose)
+            free((void *)tmp);
+    }
+}
+
 struct js_var js_var_to_number(struct js_var v)
 {
     struct js_var result;
@@ -457,14 +500,13 @@ struct array_string_t *regex_match(struct regex_struct_t regex, const char * s) 
 
 static struct array_pointer_t *gc_main;
 static int16_t gc_i;
+static int16_t gc_j;
 
 static ARRAY(struct array_pointer_t *) gc_main_arrays;
 static ARRAY(DICT(void *)) gc_main_dicts;
 static struct array_pointer_t * gc_456;
 static ARRAY(ARRAY(struct array_pointer_t *)) gc_456_arrays_c;
 static struct js_var result;
-static const char * tmp_str;
-static uint8_t tmp_need_dispose;
 
 struct js_var newNode(const char * tagName, const char * attrs, struct js_var parent)
 {
@@ -907,10 +949,29 @@ struct regex_struct_t regex_2 = { "/^<\\/([-A-Za-z0-9_]+)[^>]*>/", regex_2_searc
 struct js_var appendChild(struct js_var node, const char * tagName, const char * attrs)
 {
     struct js_var n;
+    struct js_var tempJsVar;
 
     n = newNode(tagName, attrs, node);
-    /* Unsupported function call: 
-         node.childNodes.push(n) */;
+    tempJsVar = js_var_get(node, js_var_from_str("childNodes"));
+    switch (tempJsVar.type) {
+        case JS_VAR_ARRAY:
+            ARRAY_PUSH(((struct array_js_var_t *)js_var_get(node, js_var_from_str("childNodes")).data), n);
+            ;
+            break;
+        case JS_VAR_NULL:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of null (reading 'push')");
+            THROW(err_defs->size);
+            break;
+        case JS_VAR_UNDEFINED:
+            ARRAY_PUSH(err_defs, "TypeError: Cannot read properties of undefined (reading 'push')");
+            THROW(err_defs->size);
+            break;
+        default:
+            ARRAY_PUSH(err_defs, "TypeError: tempJsVar.push is not a function.");
+            THROW(err_defs->size);
+            break;
+    }
+    ;
     return n;
 }
 void appendInnerHTML(struct js_var node, const char * html)
@@ -951,13 +1012,14 @@ struct js_var parseHtml(const char * html)
     rootNode = currentNode;
     while (str_len(html))
     {
-        char * null;
+        char * tmp_str;
+        uint8_t need_dispose;
         chars = TRUE;
         printf("1\n");
-        null = js_var_to_str(js_var_get(currentNode, js_var_from_str("tagName")), &{needDisposeVarName});
-        if ({needDisposeVarName})
-            ARRAY_PUSH(gc_main, (void *)null);
-        if (!DICT_GET(special, null, 0))
+        tmp_str = js_var_to_str(js_var_get(currentNode, js_var_from_str("tagName")), &need_dispose);
+        if (need_dispose)
+            ARRAY_PUSH(gc_main, (void *)tmp_str);
+        if (!DICT_GET(special, tmp_str, 0))
         {
             if (str_pos(html, "<!--") == 0)
             {
@@ -1017,7 +1079,12 @@ struct js_var parseHtml(const char * html)
         }
         else
         {
-            html = str_substring(html, str_pos(html, js_var_plus(js_var_plus(js_var_from_str("</"), js_var_get(currentNode, js_var_from_str("tagName")), gc_main), js_var_from_str(">"), gc_main)), str_len(html));
+            char * tmp_str_2;
+            uint8_t need_dispose_2;
+            tmp_str_2 = js_var_to_str(js_var_plus(js_var_plus(js_var_from_str("</"), js_var_get(currentNode, js_var_from_str("tagName")), gc_main), js_var_from_str(">"), gc_main), &need_dispose_2);
+            if (need_dispose_2)
+                ARRAY_PUSH(gc_main, (void *)tmp_str_2);
+            html = str_substring(html, str_pos(html, tmp_str_2), str_len(html));
         }
         printf("html==last...\n");
         if (strcmp(html, last) == 0)
@@ -1077,10 +1144,10 @@ int main(void) {
     ARRAY_CREATE(gc_main_dicts, 2, 0);
     ARRAY_CREATE(err_defs, 2, 0);
 
+    ARRAY_CREATE(js_var_log_circular, 4, 0);
+
     result = parseHtml("<html><body></body></html>");
-    printf("%s\n", tmp_str = js_var_to_str(result, &tmp_need_dispose));
-    if (tmp_need_dispose)
-        free((void *)tmp_str);
+    js_var_log("", result, "\n", FALSE, FALSE);
     for (gc_i = 0; gc_i < gc_main_arrays->size; gc_i++) {
         free(gc_main_arrays->data[gc_i]->data);
         free(gc_main_arrays->data[gc_i]);

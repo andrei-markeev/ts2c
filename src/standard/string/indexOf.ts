@@ -7,6 +7,7 @@ import { CExpression } from '../../nodes/expressions';
 import { CElementAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
 import { getNodeText } from '../../types/utils';
+import { CAsString } from '../../nodes/typeconvert';
 
 @StandardCallResolver('indexOf')
 class StringIndexOfResolver implements ITypeExtensionResolver {
@@ -46,10 +47,10 @@ class CStringIndexOf extends CTemplateBase
         if (!this.topExpressionOfStatement) {
             if (call.argumentList.elements.length == 1) {
                 this.stringAccess = new CElementAccess(scope, propAccess.member);
-                this.arg1 = CodeTemplateFactory.createForNode(scope, call.argumentList.elements[0]);
+                this.arg1 = new CAsString(scope, call.argumentList.elements[0]);
                 scope.root.headerFlags.str_pos = true;
             } else
-                console.log("Unsupported number of parameters in " + getNodeText(call) + ". Expected one parameter.");
+                console.error("Unsupported number of parameters in " + getNodeText(call) + ". Expected one parameter.");
         }
     }
 }

@@ -9,6 +9,11 @@
 typedef unsigned char uint8_t;
 typedef short int16_t;
 
+#define ARRAY(T) struct {\
+    int16_t size;\
+    int16_t capacity;\
+    T *data;\
+} *
 #define ARRAY_CREATE(array, init_capacity, init_size) {\
     array = malloc(sizeof(*array)); \
     array->data = malloc((init_capacity) * sizeof(*array->data)); \
@@ -32,6 +37,11 @@ typedef short int16_t;
         array->data[pos] = item; \
     } \
 }
+
+#define DICT(T) struct { \
+    ARRAY(const char *) index; \
+    ARRAY(T) values; \
+} *
 
 int16_t dict_find_pos(const char ** keys, int16_t keys_size, const char * key) {
     int16_t low = 0;
@@ -115,6 +125,14 @@ struct js_var js_var_from(enum js_var_type type) {
     return v;
 }
 
+struct js_var js_var_from_uint8_t(uint8_t b) {
+    struct js_var v;
+    v.type = JS_VAR_BOOL;
+    v.number = b;
+    v.data = NULL;
+    return v;
+}
+
 struct js_var js_var_from_dict(struct dict_js_var_t *dict) {
     struct js_var v;
     v.type = JS_VAR_DICT;
@@ -169,21 +187,42 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
-void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+struct array_pointer_t * js_var_log_circular;
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted, uint8_t is_recursive)
 {
     int16_t i;
     uint8_t need_dispose = 0;
     const char *tmp;
+
+    if (!is_recursive)
+        js_var_log_circular->size = 0;
+    if (v.type == JS_VAR_ARRAY || v.type == JS_VAR_DICT) {
+        for (i = 0; i < js_var_log_circular->size; i++) {
+            if (js_var_log_circular->data[i] == v.data) {
+                printf("(circular)");
+                return;
+            }
+        }
+        ARRAY_PUSH(js_var_log_circular, v.data);
+    }
+
     if (v.type == JS_VAR_ARRAY) {
         printf("%s[ ", prefix);
         for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
             if (i != 0)
                 printf(", ");
-            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
-            if (need_dispose)
-                free((void *)tmp);
+            js_var_log("", ((struct array_js_var_t *)v.data)->data[i], "", TRUE, TRUE);
         }
         printf(" ]%s", postfix);
+    } else if (v.type == JS_VAR_DICT) {
+        printf("%s{ ", prefix);
+        for (i = 0; i < ((struct dict_js_var_t *)v.data)->index->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("\"%s\": ", ((struct dict_js_var_t *)v.data)->index->data[i]);
+            js_var_log("", ((struct dict_js_var_t *)v.data)->values->data[i], "", TRUE, TRUE);
+        }
+        printf(" }%s", postfix);
     } else {
         printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
         if (need_dispose)
@@ -191,42 +230,40 @@ void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_
     }
 }
 
-struct create_t {
-    uint8_t test;
-    struct js_var parent;
-};
-
-static struct array_pointer_t *gc_main;
 static int16_t gc_i;
 
-static struct create_t * obj;
-static struct create_t * child;
+static ARRAY(DICT(void *)) gc_main_dicts;
+static struct js_var obj;
+static struct js_var child;
 
-struct create_t * create(struct js_var parent)
+struct js_var create(struct js_var parent)
 {
-    struct create_t * tmp_obj = NULL;
+    struct dict_js_var_t * tmp_obj = NULL;
 
-    tmp_obj = malloc(sizeof(*tmp_obj));
-    assert(tmp_obj != NULL);
-    ARRAY_PUSH(gc_main, (void *)tmp_obj);
-    tmp_obj->test = TRUE;
-    tmp_obj->parent = parent;
-    return tmp_obj;
+    DICT_CREATE(tmp_obj, 4);
+    ARRAY_PUSH(gc_main_dicts, (void *)tmp_obj);
+    DICT_SET(tmp_obj, "test", js_var_from_uint8_t(TRUE));
+    DICT_SET(tmp_obj, "parent", parent);
+    return js_var_from_dict(tmp_obj);
 }
 
 int main(void) {
-    ARRAY_CREATE(gc_main, 2, 0);
+    ARRAY_CREATE(gc_main_dicts, 2, 0);
+
+    ARRAY_CREATE(js_var_log_circular, 4, 0);
 
     obj = create(js_var_from(JS_VAR_NULL));
-    child = create(js_var_from_dict(obj));
-    printf("{ ");
-    printf("test: %s", child->test ? "true" : "false");    printf(", ");
-    js_var_log("parent: ", child->parent, "", TRUE);
-    printf(" }\n");
-    for (gc_i = 0; gc_i < gc_main->size; gc_i++)
-        free(gc_main->data[gc_i]);
-    free(gc_main->data);
-    free(gc_main);
+    child = create(obj);
+    js_var_log("", child, "\n", FALSE, FALSE);
+    for (gc_i = 0; gc_i < gc_main_dicts->size; gc_i++) {
+        free(gc_main_dicts->data[gc_i]->index->data);
+        free(gc_main_dicts->data[gc_i]->index);
+        free(gc_main_dicts->data[gc_i]->values->data);
+        free(gc_main_dicts->data[gc_i]->values);
+        free(gc_main_dicts->data[gc_i]);
+    }
+    free(gc_main_dicts->data);
+    free(gc_main_dicts);
 
     return 0;
 }

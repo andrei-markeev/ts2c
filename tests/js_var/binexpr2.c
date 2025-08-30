@@ -11,6 +11,22 @@ typedef unsigned char uint8_t;
 typedef short int16_t;
 typedef unsigned short uint16_t;
 
+#define ARRAY_CREATE(array, init_capacity, init_size) {\
+    array = malloc(sizeof(*array)); \
+    array->data = malloc((init_capacity) * sizeof(*array->data)); \
+    assert(array->data != NULL); \
+    array->capacity = init_capacity; \
+    array->size = init_size; \
+}
+#define ARRAY_PUSH(array, item) {\
+    if (array->size == array->capacity) {  \
+        array->capacity *= 2;  \
+        array->data = realloc(array->data, array->capacity * sizeof(*array->data)); \
+        assert(array->data != NULL); \
+    }  \
+    array->data[array->size++] = item; \
+}
+
 #define STR_INT16_T_BUFLEN ((CHAR_BIT * sizeof(int16_t) - 1) / 3 + 2)
 
 enum js_var_type {JS_VAR_NULL, JS_VAR_UNDEFINED, JS_VAR_NAN, JS_VAR_BOOL, JS_VAR_INT16, JS_VAR_STRING, JS_VAR_ARRAY, JS_VAR_DICT};
@@ -24,6 +40,23 @@ struct array_js_var_t {
     int16_t size;
     int16_t capacity;
     struct js_var *data;
+};
+
+struct array_string_t {
+    int16_t size;
+    int16_t capacity;
+    const char ** data;
+};
+
+struct array_pointer_t {
+    int16_t size;
+    int16_t capacity;
+    void ** data;
+};
+
+struct dict_js_var_t {
+    struct array_string_t *index;
+    struct array_js_var_t *values;
 };
 
 struct js_var js_var_from_int16_t(int16_t n) {
@@ -111,21 +144,42 @@ const char * js_var_to_str(struct js_var v, uint8_t *need_dispose)
     return NULL;
 }
 
-void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
+struct array_pointer_t * js_var_log_circular;
+void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted, uint8_t is_recursive)
 {
     int16_t i;
     uint8_t need_dispose = 0;
     const char *tmp;
+
+    if (!is_recursive)
+        js_var_log_circular->size = 0;
+    if (v.type == JS_VAR_ARRAY || v.type == JS_VAR_DICT) {
+        for (i = 0; i < js_var_log_circular->size; i++) {
+            if (js_var_log_circular->data[i] == v.data) {
+                printf("(circular)");
+                return;
+            }
+        }
+        ARRAY_PUSH(js_var_log_circular, v.data);
+    }
+
     if (v.type == JS_VAR_ARRAY) {
         printf("%s[ ", prefix);
         for (i = 0; i < ((struct array_js_var_t *)v.data)->size; i++) {
             if (i != 0)
                 printf(", ");
-            printf("%s", tmp = js_var_to_str(((struct array_js_var_t *)v.data)->data[i], &need_dispose));
-            if (need_dispose)
-                free((void *)tmp);
+            js_var_log("", ((struct array_js_var_t *)v.data)->data[i], "", TRUE, TRUE);
         }
         printf(" ]%s", postfix);
+    } else if (v.type == JS_VAR_DICT) {
+        printf("%s{ ", prefix);
+        for (i = 0; i < ((struct dict_js_var_t *)v.data)->index->size; i++) {
+            if (i != 0)
+                printf(", ");
+            printf("\"%s\": ", ((struct dict_js_var_t *)v.data)->index->data[i]);
+            js_var_log("", ((struct dict_js_var_t *)v.data)->values->data[i], "", TRUE, TRUE);
+        }
+        printf(" }%s", postfix);
     } else {
         printf(is_quoted && v.type == JS_VAR_STRING ? "%s\"%s\"%s" : "%s%s%s", prefix, tmp = js_var_to_str(v, &need_dispose), postfix);
         if (need_dispose)
@@ -215,13 +269,15 @@ static struct js_var y;
 static struct js_var z;
 
 int main(void) {
+    ARRAY_CREATE(js_var_log_circular, 4, 0);
+
     a = 10;
     b = 5;
     x = str_to_int16_t("12test");
     y = str_to_int16_t("55");
     z = js_var_compute(js_var_from_int16_t(a), JS_VAR_ASTERISK, x);
-    js_var_log("", z, "\n", FALSE);
-    js_var_log("", js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(b)), "\n", FALSE);
+    js_var_log("", z, "\n", FALSE, FALSE);
+    js_var_log("", js_var_compute(y, JS_VAR_SLASH, js_var_from_int16_t(b)), "\n", FALSE, FALSE);
 
     return 0;
 }

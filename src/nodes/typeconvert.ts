@@ -41,7 +41,7 @@ export class CAsUniversalVar extends CTemplateBase {
         this.isNumber = type === NumberVarType;
         this.isBoolean = type === BooleanVarType;
         this.isArray = type instanceof ArrayType;
-        this.isDict = type instanceof StructType || type instanceof DictType;
+        this.isDict = type instanceof DictType;
 
         if (type === StringVarType)
             scope.root.headerFlags.js_var_from_str = true;
@@ -51,7 +51,7 @@ export class CAsUniversalVar extends CTemplateBase {
             scope.root.headerFlags.js_var_from_uint8_t = true;
         if (type instanceof ArrayType)
             scope.root.headerFlags.js_var_array = true;
-        if (type instanceof StructType || type instanceof DictType)
+        if (type instanceof DictType)
             scope.root.headerFlags.js_var_dict = true;
 
         scope.root.headerFlags.js_var = true;
@@ -152,6 +152,7 @@ export class CAsString extends CTemplateBase {
     public arraySize: CArraySize;
     public arrayStrLen: CAsString_Length;
     public arrayElementCat: CAsString_Concat;
+    public needDisposeVarName: string = '';
     constructor(scope: IScope, node: kataw.SyntaxNode) {
         super();
         const type = scope.root.typeHelper.getCType(node);
@@ -164,10 +165,16 @@ export class CAsString extends CTemplateBase {
         this.isArray = type instanceof ArrayType;
         if (this.isNumber || this.isArray || this.isUniversalVar) {
             this.tmpVarName = scope.root.memoryManager.getReservedTemporaryVarName(node);
+            if (this.tmpVarName === null)
+                this.tmpVarName = scope.root.symbolsHelper.addTemp(node, 'tmp_str');
             scope.variables.push(new CVariable(scope, this.tmpVarName, "char *"));
             this.gcVarName = scope.root.memoryManager.getGCVariableForNode(node);
             if (this.gcVarName)
                 scope.root.headerFlags.gc_iterator = true;
+        }
+        if (this.isUniversalVar) {
+            this.needDisposeVarName = scope.root.symbolsHelper.addTemp(node, 'need_dispose');
+            scope.variables.push(new CVariable(scope, this.needDisposeVarName, BooleanVarType));
         }
         if (this.isNumber)
             scope.root.headerFlags.str_int16_t_buflen = true;

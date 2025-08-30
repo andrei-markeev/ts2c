@@ -8,7 +8,7 @@
             "program": "${workspaceRoot}/bin/ts2c",
             //"program": "${workspaceRoot}/sputniktests/run_test",
             "stopOnEntry": false,
-            "args": ["tests/js_var/array6.ts"],
+            "args": ["tests/realworld/parseHtml.ts"],
             "cwd": "${workspaceRoot}",
             "sourceMaps": true
         }

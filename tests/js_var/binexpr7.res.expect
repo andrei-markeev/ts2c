@@ -1,13 +1,13 @@
 17
-[object Object]
+{ "hello": "world" }
 null
-[object Object]
-[object Object]
+{ "hello": "world" }
+{ "hello": "world" }
 17
 null
 17
 null
-[object Object]
+{ "hello": "world" }
 null
 17
 17

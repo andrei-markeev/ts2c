@@ -174,7 +174,7 @@ interface PrintfOptions {
     {INDENT}}
     {INDENT}printf(" ]{POSTFIX}");
 {#elseif isUniversalVar}
-    js_var_log("{PREFIX}", {accessor}, "{POSTFIX}", {trueIfQuotedOtherwiseFalse});
+    js_var_log("{PREFIX}", {accessor}, "{POSTFIX}", {trueIfQuotedOtherwiseFalse}, FALSE);
 {#else}
     printf(/* Unsupported printf expression */);
 {/if}`)

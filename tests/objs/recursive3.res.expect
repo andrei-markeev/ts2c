@@ -1,1 +1,1 @@
-{ test: true, parent: [object Object] }
+{ "parent": { "parent": null, "test": true }, "test": true }

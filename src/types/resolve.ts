@@ -152,6 +152,7 @@ export class TypeResolver {
                 : isNumericLiteral(n.expression) ? new ArrayType(elementType, 0, false)
                 : type == NumberVarType ? new ArrayType(elementType, 0, false)
                 : type == StringVarType ? new DictType(elementType)
+                : type == UniversalVarType ? new DictType(elementType)
                 : null
         }));
         addEquality(isFieldElementAccessNotMethodCall, n => n, type(n => {
@@ -236,7 +237,12 @@ export class TypeResolver {
             const decl = kataw.isIdentifier(call.expression) ? this.typeHelper.getDeclaration(call.expression) : null;
             if (decl && isFunctionDeclaration(decl.parent)) {
                 const param = decl.parent.formalParameterList.formalParameters[argIndex];
-                return this.typeHelper.getCType(param) instanceof FuncType ? param : null;
+                const paramType = this.typeHelper.getCType(param);
+                const argType = this.typeHelper.getCType(n);
+                if (paramType instanceof FuncType || paramType === UniversalVarType && argType instanceof StructType)
+                    return param;
+                else
+                    return null;
             } else
                 return null;
         });
