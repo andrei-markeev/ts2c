@@ -140,15 +140,34 @@ export class CSimpleElementAccess extends CTemplateBase {
 }
 
 @CodeTemplate(`
-{#if type.isDynamicArray}
-    {varAccess}->size
+{#if isUniversalVar}
+    ((struct array_js_var_t *){varAccess}.data)
+{#else}
+    {varAccess}
+{/if}`)
+export class CArrayAccess extends CTemplateBase {
+    public isUniversalVar: boolean;
+    public varAccess: CElementAccess;
+    constructor(scope: IScope, member: kataw.ExpressionNode) {
+        super();
+        this.varAccess = new CElementAccess(scope, member);
+        const type = scope.root.typeHelper.getCType(member);
+        this.isUniversalVar = type === UniversalVarType;
+    }
+}
+
+@CodeTemplate(`
+{#if isDynamicArray}
+    {arrayAccess}->size
 {#else}
     {arrayCapacity}
 {/if}`)
 export class CArraySize extends CTemplateBase {
-    public arrayCapacity: string;
-    constructor(scope: IScope, public varAccess: CExpression, public type: ArrayType) {
+    public isDynamicArray: boolean = false;
+    public arrayCapacity: string = "";
+    constructor(scope: IScope, public arrayAccess: CExpression, public type: CType) {
         super();
-        this.arrayCapacity = type.capacity+"";
+        this.isDynamicArray = type === UniversalVarType || type instanceof ArrayType && type.isDynamicArray;
+        this.arrayCapacity = type instanceof ArrayType ? type.capacity+"" : "/* cannot get size of non-array */";
     }
 }

@@ -51,8 +51,7 @@ import { CVariable } from "./variable";
 {/statements}
 {#if !topExpressionOfStatement}
     {tempVarName}
-{/if}
-`)
+{/if}`)
 export class CJsVarStandardCall extends CTemplateBase {
     jsvar: CExpression = '';
     varName: string = '';
