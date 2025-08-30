@@ -4,7 +4,7 @@ import { StandardCallResolver, IResolverMatchOptions, ITypeExtensionResolver } f
 import { ArrayType, CType, PointerVarType, UniversalVarType } from '../../types/ctypes';
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
-import { CElementAccess } from '../../nodes/elementaccess';
+import { CArrayAccess } from '../../nodes/elementaccess';
 import { TypeHelper } from '../../types/typehelper';
 
 @StandardCallResolver('shift')
@@ -41,13 +41,8 @@ class ArrayShiftResolver implements ITypeExtensionResolver {
 
 @CodeTemplate(`
 {#statements}
-    {#if isUniversalVar}
-        {tempVarName} = ((struct array_js_var_t *){varAccess}.data)->data[0];
-        ARRAY_REMOVE(((struct array_js_var_t *){varAccess}.data), 0, 1);
-    {#else}
-        {tempVarName} = {varAccess}->data[0];
-        ARRAY_REMOVE({varAccess}, 0, 1);
-    {/if}
+    {tempVarName} = {arrayAccess}->data[0];
+    ARRAY_REMOVE({arrayAccess}, 0, 1);
 {/statements}
 {#if !topExpressionOfStatement}
     {tempVarName}
@@ -55,12 +50,12 @@ class ArrayShiftResolver implements ITypeExtensionResolver {
 class CArrayShift extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
-    public varAccess: CElementAccess = null;
+    public arrayAccess: CArrayAccess = null;
     public isUniversalVar: boolean = false;
     constructor(scope: IScope, call: kataw.CallExpression) {
         super();
         let propAccess = <kataw.IndexExpression>call.expression;
-        this.varAccess = new CElementAccess(scope, propAccess.member);
+        this.arrayAccess = new CArrayAccess(scope, propAccess.member);
         this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "value");
         let type = scope.root.typeHelper.getCType(propAccess.member);
         this.isUniversalVar = type === UniversalVarType;

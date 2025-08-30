@@ -271,8 +271,7 @@ int main(void) {
             THROW(err_defs->size);
             break;
     }
-    lastEl = tmp
-     ;
+    lastEl = tmp;
     js_var_log("", arr, "\n", FALSE);
     tmp_obj = malloc(sizeof(*tmp_obj));
     assert(tmp_obj != NULL);

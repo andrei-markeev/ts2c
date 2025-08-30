@@ -253,8 +253,7 @@ int main(void) {
             THROW(err_defs->size);
             break;
     }
-    firstEl = tmp
-     ;
+    firstEl = tmp;
     tmp_obj = malloc(sizeof(*tmp_obj));
     assert(tmp_obj != NULL);
     tmp_obj->firstEl = firstEl;

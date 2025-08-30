@@ -16,7 +16,7 @@ class ArrayJoinResolver implements ITypeExtensionResolver {
         return memberType === UniversalVarType || memberType instanceof ArrayType;
     }
     public objectType(typeHelper: TypeHelper, call: kataw.CallExpression) {
-        return new ArrayType(PointerVarType, 0, true);
+        return new ArrayType(PointerVarType, 0, false);
     }
     public returnType(typeHelper: TypeHelper, call: kataw.CallExpression) {
         return StringVarType;
@@ -186,6 +186,7 @@ class CArrayElementStrLen {
     constructor(scope: IScope, type: ArrayType, arrayAccess: CArrayAccess, iteratorVarName: string) {
         this.elementAccess = new CSimpleElementAccess(scope, type, arrayAccess, iteratorVarName);
         this.isUniversalVar = type.elementType === UniversalVarType;
-        scope.root.headerFlags.js_var_as_str_len = true;
+        if (this.isUniversalVar)
+            scope.root.headerFlags.js_var_as_str_len = true;
     }
 }

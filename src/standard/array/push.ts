@@ -5,7 +5,7 @@ import { ArrayType, CType, NumberVarType, PointerVarType, UniversalVarType } fro
 import { IScope } from '../../program';
 import { CVariable } from '../../nodes/variable';
 import { CExpression } from '../../nodes/expressions';
-import { CElementAccess } from '../../nodes/elementaccess';
+import { CArrayAccess } from '../../nodes/elementaccess';
 import { CAsUniversalVar } from '../../nodes/typeconvert';
 import { TypeHelper } from '../../types/typehelper';
 import { MaybeStandardCall } from '../../types/utils';
@@ -42,12 +42,9 @@ class ArrayPushResolver implements ITypeExtensionResolver {
 
 @CodeTemplate(`
 {#statements}
-    {#if !topExpressionOfStatement && isUniversalVar}
+    {#if !topExpressionOfStatement}
         {pushValues}
-        {tempVarName} = ((struct array_js_var_t *){varAccess}.data)->size;
-    {#elseif !topExpressionOfStatement && !isUniversalVar}
-        {pushValues}
-        {tempVarName} = {varAccess}->size;
+        {tempVarName} = {arrayAccess}->size;
     {/if}
 {/statements}
 {#if topExpressionOfStatement}
@@ -58,7 +55,7 @@ class ArrayPushResolver implements ITypeExtensionResolver {
 class CArrayPush extends CTemplateBase {
     public topExpressionOfStatement: boolean;
     public tempVarName: string = '';
-    public varAccess: CElementAccess = null;
+    public arrayAccess: CArrayAccess = null;
     public pushValues: CPushValue[] = [];
     public isUniversalVar: boolean = false;
     constructor(scope: IScope, call: kataw.CallExpression) {
@@ -67,9 +64,9 @@ class CArrayPush extends CTemplateBase {
         const type = scope.root.typeHelper.getCType(propAccess.member);
         this.isUniversalVar = type === UniversalVarType;
         const argIsUniversalVar = type === UniversalVarType || type instanceof ArrayType && type.elementType === UniversalVarType;
-        this.varAccess = new CElementAccess(scope, propAccess.member);
+        this.arrayAccess = new CArrayAccess(scope, propAccess.member);
         const args = call.argumentList.elements.map(a => argIsUniversalVar ? new CAsUniversalVar(scope, a) : CodeTemplateFactory.createForNode(scope, a));
-        this.pushValues = args.map(a => new CPushValue(scope, this.varAccess, type === UniversalVarType, a));
+        this.pushValues = args.map(a => new CPushValue(scope, this.arrayAccess, type === UniversalVarType, a));
         this.topExpressionOfStatement = call.parent.kind === kataw.SyntaxKind.ExpressionStatement;
         if (!this.topExpressionOfStatement) {
             this.tempVarName = scope.root.symbolsHelper.addTemp(propAccess, "arr_size");
@@ -80,13 +77,7 @@ class CArrayPush extends CTemplateBase {
 
 }
 
-@CodeTemplate(`
-{#if isUniversalVar}
-    ARRAY_PUSH(((struct array_js_var_t *){varAccess}.data), {value});
-{#else}
-    ARRAY_PUSH({varAccess}, {value});
-{/if}
-`)
+@CodeTemplate(`ARRAY_PUSH({arrayAccess}, {value});\n`)
 class CPushValue {
-    constructor(scope: IScope, public varAccess: CElementAccess, public isUniversalVar: boolean, public value: CExpression) {}
+    constructor(scope: IScope, public arrayAccess: CArrayAccess, public isUniversalVar: boolean, public value: CExpression) {}
 }

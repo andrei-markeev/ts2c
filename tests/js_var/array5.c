@@ -251,8 +251,7 @@ int main(void) {
             THROW(err_defs->size);
             break;
     }
-    count = tmp
-     ;
+    count = tmp;
     tmp_obj = malloc(sizeof(*tmp_obj));
     assert(tmp_obj != NULL);
     tmp_obj->arr = arr;
