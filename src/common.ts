@@ -508,6 +508,44 @@ import { CodeTemplate } from "./template";
     }
 {/if}
 
+{#if headerFlags.js_var_as_str_len}
+    int16_t js_var_as_str_len(struct js_var v)
+    {
+        int16_t i;
+        int16_t len = 0;
+        uint8_t true_len = 4;
+        uint8_t false_len = 5;
+        uint8_t object_Object_len = 15;
+        uint8_t nan_len = 3;
+        uint8_t null_len = 4;
+        uint8_t undefined_len = 9;
+
+        if (v.type == JS_VAR_INT16) {
+            return STR_INT16_T_BUFLEN;
+        } else if (v.type == JS_VAR_BOOL)
+            return v.number ? true_len : false_len;
+        else if (v.type == JS_VAR_STRING)
+            return strlen((const char *)v.data);
+        else if (v.type == JS_VAR_ARRAY) {
+            struct array_js_var_t * arr = (struct array_js_var_t *)v.data;
+            for (i = 0; i < arr->size; i++) {
+                len += js_var_as_str_len(arr->data[i]);
+            }
+            return len;
+        }
+        else if (v.type == JS_VAR_DICT)
+            return object_Object_len;
+        else if (v.type == JS_VAR_NAN)
+            return nan_len;
+        else if (v.type == JS_VAR_NULL)
+            return null_len;
+        else if (v.type == JS_VAR_UNDEFINED)
+            return undefined_len;
+
+        return 0;
+    }
+{/if}
+
 {#if headerFlags.js_var_log}
     void js_var_log(const char *prefix, struct js_var v, const char *postfix, uint8_t is_quoted)
     {
