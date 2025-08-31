@@ -30,14 +30,12 @@ function parseHtml(html) {
 
     while (html.length) {
         chars = true;
-        console.log("1");
 
         // Make sure we're not in a script or style element
         if (!special[currentNode.tagName]) {
 
             // Comment
             if (html.indexOf("<!--") == 0) {
-                console.log("comment");
                 index = html.indexOf("-->");
 
                 if (index >= 0) {
@@ -47,7 +45,6 @@ function parseHtml(html) {
 
                 // end tag
             } else if (html.indexOf("</") == 0) {
-                console.log("end_tag");
                 match = html.match(endTagRegex);
 
                 if (match) {
@@ -59,11 +56,9 @@ function parseHtml(html) {
 
                 // start tag
             } else if (html.indexOf("<") == 0) {
-                console.log("start_tag");
                 match = html.match(startTagRegex);
 
                 if (match) {
-                    console.log("matched");
                     html = html.substring(match[0].length);
                     //var attrs = {};
                     //for (var i = 2;i<match.length-1; i++)
@@ -77,7 +72,6 @@ function parseHtml(html) {
             }
 
             if (chars) {
-                console.log("chars");
                 index = html.indexOf("<");
 
                 var text = index < 0 ? html : html.substring(0, index);
@@ -91,12 +85,10 @@ function parseHtml(html) {
             html = html.substring(html.indexOf("</" + currentNode.tagName + ">"));
         }
 
-        console.log("html==last...");
         if (html == last) {
             console.log("Parse Error: " + html);
             return rootNode;
         }
-        console.log("last=html");
         last = html+"";
     }
 

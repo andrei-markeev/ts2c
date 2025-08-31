@@ -503,9 +503,9 @@ static int16_t gc_i;
 static int16_t gc_j;
 
 static ARRAY(struct array_pointer_t *) gc_main_arrays;
+static ARRAY(ARRAY(struct array_pointer_t *)) gc_main_arrays_c;
 static ARRAY(DICT(void *)) gc_main_dicts;
 static struct array_pointer_t * gc_456;
-static ARRAY(ARRAY(struct array_pointer_t *)) gc_456_arrays_c;
 static struct js_var result;
 
 struct js_var newNode(const char * tagName, const char * attrs, struct js_var parent)
@@ -1000,7 +1000,6 @@ struct js_var parseHtml(const char * html)
     char * tmp_result = NULL;
 
     ARRAY_CREATE(gc_456, 2, 0);
-    ARRAY_CREATE(gc_456_arrays_c, 2, 0);
 
     startTagRegex = regex;
     endTagRegex = regex_2;
@@ -1015,7 +1014,6 @@ struct js_var parseHtml(const char * html)
         char * tmp_str;
         uint8_t need_dispose;
         chars = TRUE;
-        printf("1\n");
         tmp_str = js_var_to_str(js_var_get(currentNode, js_var_from_str("tagName")), &need_dispose);
         if (need_dispose)
             ARRAY_PUSH(gc_main, (void *)tmp_str);
@@ -1023,7 +1021,6 @@ struct js_var parseHtml(const char * html)
         {
             if (str_pos(html, "<!--") == 0)
             {
-                printf("comment\n");
                 index = str_pos(html, "-->");
                 if (index >= 0)
                 {
@@ -1034,9 +1031,8 @@ struct js_var parseHtml(const char * html)
             else
                 if (str_pos(html, "</") == 0)
             {
-                printf("end_tag\n");
                 match = regex_match(endTagRegex, html);
-                ARRAY_PUSH(gc_456_arrays_c, (void *)match);
+                ARRAY_PUSH(gc_main_arrays_c, (void *)match);
                 if (match)
                 {
                     html = str_substring(html, str_len(match->data[0]), str_len(html));
@@ -1048,12 +1044,10 @@ struct js_var parseHtml(const char * html)
             else
                 if (str_pos(html, "<") == 0)
             {
-                printf("start_tag\n");
                 match = regex_match(startTagRegex, html);
-                ARRAY_PUSH(gc_456_arrays_c, (void *)match);
+                ARRAY_PUSH(gc_main_arrays_c, (void *)match);
                 if (match)
                 {
-                    printf("matched\n");
                     html = str_substring(html, str_len(match->data[0]), str_len(html));
                     appendInnerHTML(currentNode, match->data[0]);
                     currentNode = appendChild(currentNode, match->data[1], "attrs");
@@ -1067,7 +1061,6 @@ struct js_var parseHtml(const char * html)
                 const char * text;
                 const char * substr;
                 const char * substr_2;
-                printf("chars\n");
                 index = str_pos(html, "<");
                 substr = str_substring(html, 0, index);
                 text = index < 0 ? html : substr;
@@ -1086,7 +1079,6 @@ struct js_var parseHtml(const char * html)
                 ARRAY_PUSH(gc_main, (void *)tmp_str_2);
             html = str_substring(html, str_pos(html, tmp_str_2), str_len(html));
         }
-        printf("html==last...\n");
         if (strcmp(html, last) == 0)
         {
             printf("Parse Error: %s\n", html);
@@ -1095,21 +1087,12 @@ struct js_var parseHtml(const char * html)
             free(special->values->data);
             free(special->values);
             free(special);
-            for (gc_i = 0; gc_i < gc_456_arrays_c->size; gc_i++) {
-                for (gc_j = 0; gc_j < (gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->size : 0); gc_j++)
-                    free((void*)gc_456_arrays_c->data[gc_i]->data[gc_j]);
-                free(gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->data : NULL);
-                free(gc_456_arrays_c->data[gc_i]);
-            }
-            free(gc_456_arrays_c->data);
-            free(gc_456_arrays_c);
             for (gc_i = 0; gc_i < gc_456->size; gc_i++)
                 free(gc_456->data[gc_i]);
             free(gc_456->data);
             free(gc_456);
             return rootNode;
         }
-        printf("last=html\n");
         tmp_result = malloc(strlen(html) + strlen("") + 1);
         assert(tmp_result != NULL);
         tmp_result[0] = '\0';
@@ -1123,14 +1106,6 @@ struct js_var parseHtml(const char * html)
     free(special->values->data);
     free(special->values);
     free(special);
-    for (gc_i = 0; gc_i < gc_456_arrays_c->size; gc_i++) {
-        for (gc_j = 0; gc_j < (gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->size : 0); gc_j++)
-            free((void*)gc_456_arrays_c->data[gc_i]->data[gc_j]);
-        free(gc_456_arrays_c->data[gc_i] ? gc_456_arrays_c->data[gc_i]->data : NULL);
-        free(gc_456_arrays_c->data[gc_i]);
-    }
-    free(gc_456_arrays_c->data);
-    free(gc_456_arrays_c);
     for (gc_i = 0; gc_i < gc_456->size; gc_i++)
         free(gc_456->data[gc_i]);
     free(gc_456->data);
@@ -1141,6 +1116,7 @@ struct js_var parseHtml(const char * html)
 int main(void) {
     ARRAY_CREATE(gc_main, 2, 0);
     ARRAY_CREATE(gc_main_arrays, 2, 0);
+    ARRAY_CREATE(gc_main_arrays_c, 2, 0);
     ARRAY_CREATE(gc_main_dicts, 2, 0);
     ARRAY_CREATE(err_defs, 2, 0);
 
@@ -1148,6 +1124,15 @@ int main(void) {
 
     result = parseHtml("<html><body></body></html>");
     js_var_log("", result, "\n", FALSE, FALSE);
+    for (gc_i = 0; gc_i < gc_main_arrays_c->size; gc_i++) {
+        for (gc_j = 0; gc_j < (gc_main_arrays_c->data[gc_i] ? gc_main_arrays_c->data[gc_i]->size : 0); gc_j++)
+            free((void*)gc_main_arrays_c->data[gc_i]->data[gc_j]);
+
+        free(gc_main_arrays_c->data[gc_i] ? gc_main_arrays_c->data[gc_i]->data : NULL);
+        free(gc_main_arrays_c->data[gc_i]);
+    }
+    free(gc_main_arrays_c->data);
+    free(gc_main_arrays_c);
     for (gc_i = 0; gc_i < gc_main_arrays->size; gc_i++) {
         free(gc_main_arrays->data[gc_i]->data);
         free(gc_main_arrays->data[gc_i]);

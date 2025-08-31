@@ -82,9 +82,13 @@ export class MemoryManager {
                     break;
                 case kataw.SyntaxKind.CallExpression:
                     {
-                        if (isMaybeStandardCall(node) && this.standardCallHelper.needsDisposal(node))
-                            this.scheduleNodeDisposal(node);
-                        else {
+                        if (isMaybeStandardCall(node) && this.standardCallHelper.needsDisposal(node)) {
+                            // special case: match also allocates strings for capture groups
+                            const arrayWithContents = node.expression.expression.text === 'match'
+                                && this.typeHelper.getCType(node.expression.member) === StringVarType;
+
+                            this.scheduleNodeDisposal(node, { arrayWithContents });
+                        } else {
                             const call = <kataw.CallExpression>node;
                             const symbol = this.symbolsHelper.getSymbolAtLocation(call.expression);
                             if (symbol && symbol.resolver && symbol.resolver.needsDisposal(this.typeHelper, call))
@@ -213,9 +217,9 @@ export class MemoryManager {
         return null;
     }
 
-    private scheduleNodeDisposal(heapNode: kataw.SyntaxNode, options?: { canReuse?: boolean, subtype?: string }) {
+    private scheduleNodeDisposal(heapNode: kataw.SyntaxNode, options?: { canReuse?: boolean, subtype?: string, arrayWithContents?: boolean }) {
 
-        options = { canReuse: true, subtype: null, ...options };
+        options = { canReuse: true, subtype: null, arrayWithContents: false, ...options };
 
         let isTemp = true;
         if (options.canReuse) {
@@ -282,6 +286,11 @@ export class MemoryManager {
                         console.log(heapNodeText + " -> Property of object " + getNodeText(ref.parent.member) + ".");
                         queue.push({ node: ref.parent, nodeFunc });
                     }
+                }
+
+                if (options.arrayWithContents && ref.parent && isFieldElementAccess(ref.parent) && ref.parent.member === ref) {
+                    console.log(heapNodeText + " -> Element (array with contents) " + getNodeText(ref.parent) + ".");
+                    queue.push({ node: ref.parent, nodeFunc });
                 }
 
                 if (ref.parent && isFieldElementAccess(ref.parent) && ref.parent.expression === ref) {
@@ -439,22 +448,14 @@ export class MemoryManager {
         } else
             varName = this.symbolsHelper.addTemp(heapNode, "tmp");
 
-        let vnode = heapNode;
-        let key = vnode.id;
-        let arrayWithContents = false;
-        if (this.originalNodes[key])
-            vnode = this.originalNodes[key];
-        if (isMaybeStandardCall(vnode) && vnode.expression.expression.text === 'match' && this.typeHelper.getCType(vnode.expression.member) === StringVarType)
-            arrayWithContents = true;
-
         let foundScopes = topScope == "main" ? [topScope] : Object.keys(scopeTree);
         var scopeInfo = {
             node: heapNode,
             simple: isSimple,
-            arrayWithContents: arrayWithContents,
-            array: !arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType && isArrayLiteral(heapNode),
+            arrayWithContents: options.arrayWithContents,
+            array: !options.arrayWithContents && type && type instanceof ArrayType && type.isDynamicArray || type === UniversalVarType && isArrayLiteral(heapNode),
             dict: type && type instanceof DictType || type === UniversalVarType && isObjectLiteral(heapNode),
-            varName: varName,
+            varName,
             scopeId: foundScopes.join("_"),
             used: !isTemp
         };
